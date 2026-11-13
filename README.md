@@ -49,20 +49,23 @@ node test/play.js
 - **Zufall mit Seed:** `HK.makeRng(seed)`. Jede Funktion, die Zahlen von 0 bis 1 liefert, kann sie ersetzen. Gleicher Seed ergibt dasselbe Match.
 - **Für die echte App:** Der Kommentar am Anfang von `src/engine.js` hält fest, welche Funktionen später auf den Server gehören.
 
-## Messwerte Etappe 1
+## Messwerte
 
 4000 Matches pro Halle und Spielweise, Seed 11. «Vernünftig» spielt mit dem Kader, den die App vorschlägt, und wählt Karte und Spielzug nach der höchsten Erwartung.
 
 | Messwert | Ziel | Köniz | Wiler | GC |
 | --- | --- | --- | --- | --- |
-| Tore pro Match | ca. 6 | 6.01 (3.28:2.73) | 6.00 (2.91:3.08) | 6.36 (3.51:2.85) |
-| Fouls pro Match | 3 bis 4 | 3.50 | 2.90 | 4.02 |
-| 2-Minuten-Strafen pro Match | 1 bis 2 | 1.60 | 1.29 | 1.87 |
-| Penalty im Match | jedes 4. bis 5. | jedes 4.4. | jedes 5.5. | jedes 3.7. |
-| Matches mit Penaltyschiessen | weniger als bisher | 15.7 % | 18.8 % | 17.2 % |
-| Siegquote vernünftig, mit Penaltys | ähnlich wie bisher | 60.1 % | 48.0 % | 60.9 % |
-| Siegquote zufällig | deutlich tiefer | 28.8 % | 22.3 % | 32.4 % |
-| Kader: Standard gegen 6 schwächste | mind. 15 Punkte | +2.8 | +0.3 | −2.4 |
-| Spielzug: vernünftig gegen zufällig | mind. 8 Punkte | +4.5 | +5.5 | +1.6 |
+| Tore pro Match | ca. 6 | 6.16 (3.19:2.97) | 5.95 (2.90:3.05) | 6.41 (3.53:2.88) |
+| Fouls pro Match | 3 bis 4 | 3.64 | 2.94 | 4.00 |
+| 2-Minuten-Strafen pro Match | 1 bis 2 | 1.70 | 1.29 | 1.87 |
+| Penalty im Match | jedes 4. bis 5. | jedes 4.2. | jedes 5.1. | jedes 3.9. |
+| Matches mit Penaltyschiessen | weniger als bisher | 17.1 % | 17.2 % | 16.8 % |
+| Siegquote vernünftig, mit Penaltys | ähnlich wie bisher | 52.9 % | 48.4 % | 60.6 % |
+| Siegquote zufällig | deutlich tiefer | 24.6 % | 23.2 % | 35.1 % |
+| Kader: Standard gegen 6 schwächste | mind. 15 Punkte | −1.6 | +0.5 | −2.5 |
+| Kader: Standard gegen alle Werte −8 | Zusatz | +31.8 | +31.5 | +29.9 |
+| Spielzug: vernünftig gegen zufällig | mind. 8 Punkte | +6.5 | +5.3 | +2.6 |
 
-Nicht erreicht sind der Anteil Penaltyschiessen, die Kader-Stärke und die Spielzugwahl. Mit den alten Regeln und denselben Spielweisen liegt die Siegquote gegen Köniz bei 46.3 %.
+Nicht erreicht sind der Anteil Penaltyschiessen, die Kader-Stärke mit den 6 schwächsten Karten und die Spielzugwahl. Mit den alten Regeln und denselben Spielweisen liegen die Siegquoten bei 46.3 % (Köniz), 42.4 % (Wiler) und 55.0 % (GC).
+
+Die Halle wählt ihren Angreifer zur Hälfte nach dem Abschluss statt nur nach dem besten Spielzug-Wert (`aiFinish` in `CFG`). Mit der alten Wahl gewinnt vernünftiges Spiel gegen Köniz 60.1 %.

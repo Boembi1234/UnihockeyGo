@@ -48,7 +48,7 @@
     twoMin: { block: 0.40, pass: 0.30, zwei: 0.55 }, penaltyShare: 0.12, boxDuels: 4,   // (Penalty 0.10)
     wall: 0.35, shortS2: 0.15, shortS3: 0.15,                            // (0.15, 0.05, 0.05)
     penGoalie: 0.006,
-    aiFinish: 0,           // 0: Angreiferwahl der Halle wie bisher. Vorschlag im Bericht: 0.5
+    aiFinish: 0.5,         // Gewicht des Abschlusses in der Angreiferwahl der Halle. 0 wäre die alte Wahl nur nach Spielzug-Wert.
     timeout: 30, recover: 7
   };
 
@@ -177,7 +177,9 @@
   }
   const keeperWeights = k => { const tot = k.l + k.m + k.r || 1; return { l: 1 + 1.5 * k.l / tot, m: 0.7 + 1.5 * k.m / tot, r: 1 + 1.5 * k.r / tot }; };
 
-  // --- KI der Halle, Wahl wie bisher ---
+  // --- KI der Halle ---
+  // Angreifer: bisher nur nach dem besten Spielzug-Wert. Neu zählt zur Hälfte, wie gut die Karte abschliesst (Stufe 2 und 3),
+  // sonst schickt die Halle Karten vor, die durchkommen, aber nicht treffen. Verteidiger, Spielzug und Abwehr wie bisher.
   const aiAttacker = (s, side, rng) => best(usable(s, side), c => { const w = s.cfg.aiFinish || 0; return (1 - w) * eff(bestMove(c).val(c), c) + w * 0.5 * (eff(0.5 * c.sco + 0.5 * c.frm, c) + eff(c.sco, c)) + clutch(c, s.duel, s.cfg) / 0.014 + (rng() * 6 - 3); });
   // Der Foul-Abzug bleibt bei (100 − Fairness) × 0.05 wie bisher, damit die Halle gleich aufstellt wie heute.
   const aiDefender = (s, side, rng) => best(usable(s, side), c => eff(defVal(c), c) - (100 - c.fai) * 0.05 + (rng() * 6 - 3));
