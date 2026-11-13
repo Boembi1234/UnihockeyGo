@@ -10,6 +10,17 @@ Alle vier Etappen sind umgesetzt: die Duell-Engine, die 2D-Animation jeder Stufe
 
 Live: <https://unihockeygo.netlify.app>
 
+## Testduell
+
+Unter <https://unihockeygo.netlify.app/lab/> liegt ein neues Duell zum Ausprobieren, unabhängig vom Prototyp. Es ändert, wie ein Duell aussieht und sich spielt:
+
+- **Kartenduell:** Beide Karten stehen sich gross gegenüber, beide Wahlen werden gleichzeitig aufgedeckt, ein Stempel zeigt GELESEN oder VORBEI.
+- **Tor von vorne:** Jeder Schuss läuft vor dem Tor ab. Der Schütze wählt die Ecke, der Goalie rät. In der Abwehr springst du selbst.
+- **Verlauf statt Prozente:** Bei der Wahl siehst du, was der Gegner zuletzt tat, und pro Spielzug einen einfachen Stärke-Balken.
+- **Kürzer:** 8 Duelle, kein Weiter-Knopf, Antippen spult vor. Fouls, Taktiken, Momentum und Captain fehlen hier absichtlich.
+
+Code in `src/lab/`, Simulation mit `node sim/lab.js`, Browser-Test mit `node test/lab.js`.
+
 ## Aufbau
 
 | Pfad | Inhalt |

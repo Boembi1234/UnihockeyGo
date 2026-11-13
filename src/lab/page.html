@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hallenkampf Duell</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{
+  /* Layout: one phone column. Scoreboard, the stage (card clash or front view of the goal), one short prompt, then the hand or the three choices. */
+  --ink:#050818;
+  --navy:#0e1b47;
+  --blue:#1a57ff;
+  --gold:#f7d774;
+  --ice:#e3ecff;
+  --mute:#9fb4e8;
+  --line:#24347a;
+  --good:#10b981;
+  --bad:#ef4444;
+  --post:#e2231a;
+  --wall:#0a1235;
+  --floor:#16409e;
+  --foil:linear-gradient(135deg,#7a4d0b 0%,#f2c14e 16%,#fff3c4 30%,#d19a2a 46%,#7a4d0b 58%,#f0c75a 76%,#fff0b3 88%,#9c6a14 100%);
+  --display:'Saira Condensed','Arial Narrow',ui-sans-serif,system-ui,sans-serif;
+  --body:'Inter',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;background:var(--ink);background-image:radial-gradient(120% 70% at 50% 0%,#16224f 0%,#0a1030 48%,#050818 100%);background-attachment:fixed;color:var(--ice);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+#app{max-width:460px;margin:0 auto;padding:12px 16px 28px}
+.screen{display:flex;flex-direction:column;gap:10px}
+[hidden]{display:none !important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:default}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+h1,h2,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{display:inline-flex;align-items:center;justify-content:center}
+.ic svg{fill:none;stroke:currentColor;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
+.ic svg .f{fill:currentColor;stroke:none}
+
+/* buttons */
+.cta{min-height:54px;border:0;border-radius:12px;background:var(--blue);color:#fff;font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:.1em;text-transform:uppercase}
+.cta:hover{background:#1249e0}
+.ghost{min-height:46px;border:1px solid var(--line);border-radius:10px;background:transparent;font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ice)}
+.ghost:hover{border-color:var(--mute)}
+.link{align-self:center;border:0;background:none;padding:6px 10px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);text-decoration:underline;text-underline-offset:3px}
+
+/* intro */
+.brandrow{display:flex;justify-content:space-between;align-items:baseline}
+.brand{font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.2em}
+.lab{font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#1a1203;background:var(--mute);padding:3px 7px 2px}
+.hero{font-family:var(--display);font-weight:800;font-size:64px;line-height:.85;letter-spacing:.02em;text-transform:uppercase;padding-top:14px}
+.hero span{color:var(--gold)}
+.lead{font-size:16px;color:var(--ice)}
+.steps{display:flex;flex-direction:column;gap:10px}
+.steps li{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;background:rgba(14,27,71,.72);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.steps .ic{width:52px;height:52px;border-radius:12px;background:#070b1f;color:var(--gold)}
+.steps .ic svg{width:34px;height:34px}
+.steps b{display:block;font-family:var(--display);font-weight:800;font-size:19px;letter-spacing:.06em;text-transform:uppercase;line-height:1.05}
+.steps p{font-size:14px;color:var(--mute);line-height:1.35}
+.note{font-size:13px;color:var(--mute)}
+
+/* scoreboard */
+.sb{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:#070b1f;border:1px solid var(--line);border-radius:12px;padding:4px 14px}
+.sb-side{display:flex;align-items:center;gap:10px;font-family:var(--display);text-transform:uppercase}
+.sb-side.right{justify-content:flex-end}
+.sb-lbl{font-weight:700;font-size:15px;letter-spacing:.14em;color:var(--mute)}
+.sb-num{display:inline-block;font-weight:800;font-size:40px;line-height:1;font-variant-numeric:tabular-nums}
+.sb-mid{display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--display);text-transform:uppercase}
+.sb-period{font-weight:700;font-size:14px;letter-spacing:.14em;color:var(--gold)}
+.dots{display:flex;gap:4px}
+.dot{width:10px;height:10px;border-radius:50%;background:#2a3970}
+.dot.you{box-shadow:inset 0 0 0 2px var(--blue)}
+.dot.home{box-shadow:inset 0 0 0 2px #6b5a20}
+.dot.g-you{background:var(--good);box-shadow:none}
+.dot.g-home{background:var(--bad);box-shadow:none}
+.dot.done{background:#4a5a96;box-shadow:none}
+.dot.now{background:var(--gold);box-shadow:none}
+
+/* stage */
+.stage{position:relative;height:332px;border-radius:22px;overflow:hidden;background:linear-gradient(180deg,#123aa8 0%,#0d2c86 100%);border:2px solid rgba(255,255,255,.8);touch-action:manipulation}
+.stage::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,rgba(255,255,255,0) 1px 26px);pointer-events:none}
+.stage::after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:rgba(255,255,255,.35);pointer-events:none}
+.stage.goalmode{background:linear-gradient(180deg,var(--wall) 0 52%,var(--floor) 52% 100%)}
+.stage.goalmode::before,.stage.goalmode::after{display:none}
+
+.arena{position:absolute;inset:0;display:grid;grid-template-columns:1fr 30px 1fr;align-items:center;justify-items:center;padding:8px 6px}
+.fighter{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.role{font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1;color:var(--ice)}
+.role.atk{color:var(--gold)}
+.vs{font-family:var(--display);font-weight:800;font-size:24px;color:var(--gold);letter-spacing:.04em;text-shadow:0 2px 0 rgba(0,0,0,.4)}
+.slot{width:140px;height:191px;filter:drop-shadow(0 12px 14px rgba(0,0,0,.5))}
+.slot .card{transform:scale(.9333);transform-origin:top left}
+.empty{width:140px;height:191px;border:2px dashed rgba(255,255,255,.55);background:rgba(5,8,24,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-family:var(--display);text-transform:uppercase;text-align:center;padding:0 8px}
+.empty b{font-weight:800;font-size:54px;line-height:.8;color:rgba(255,255,255,.75)}
+.empty span{font-weight:700;font-size:14px;letter-spacing:.12em}
+.pick{width:140px;height:46px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.08em;text-transform:uppercase;background:#070b1f;border:2px solid var(--line);transition:border-color .15s,box-shadow .15s}
+.pick .ic svg{width:26px;height:26px}
+.pick.face{color:var(--ice)}
+.pick.face .ic{color:var(--gold)}
+.pick.back{background:repeating-linear-gradient(45deg,#16245a 0 7px,#0b1437 7px 14px);border-color:#3a4c96;color:var(--mute);font-size:24px}
+.pick.blank{border-style:dashed;background:transparent;color:rgba(255,255,255,.5)}
+.arena.glow-good .pick.face{border-color:var(--good);box-shadow:0 0 0 3px rgba(16,185,129,.35)}
+.arena.glow-bad .pick.face{border-color:var(--bad);box-shadow:0 0 0 3px rgba(239,68,68,.4)}
+
+/* card, as in the prototype */
+.card{position:relative;width:150px;height:204px;background:var(--foil);clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+.card-in{position:absolute;inset:3px;clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);background:radial-gradient(95% 55% at 70% 22%,#3a74ff 0%,rgba(26,87,255,.62) 34%,rgba(14,27,71,0) 76%),linear-gradient(170deg,#0b1437 0%,#050818 100%);font-family:var(--display);text-transform:uppercase;color:#fff}
+.card.home .card-in{background:radial-gradient(95% 55% at 70% 22%,#b8862a 0%,rgba(150,104,24,.6) 34%,rgba(14,27,71,0) 76%),linear-gradient(170deg,#141006 0%,#050818 100%)}
+.c-rate{position:absolute;left:10px;top:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.c-rate b{font-weight:800;font-size:44px;line-height:.8;color:var(--gold);text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.c-rate span{font-weight:700;font-size:12px;letter-spacing:.1em}
+.jersey{position:absolute;right:-12px;top:5px;width:104px;height:auto;transform:rotate(-6deg)}
+.c-name{position:absolute;left:0;right:0;top:91px;padding:5px 10px 4px;display:flex;flex-direction:column;gap:1px;background:rgba(5,8,24,.78);border-top:1px solid rgba(247,215,116,.6);border-bottom:1px solid rgba(247,215,116,.6)}
+.c-name .f{display:flex;justify-content:space-between;gap:6px;font-weight:600;font-size:11px;letter-spacing:.12em;color:var(--gold);line-height:1;white-space:nowrap}
+.c-name .f span:last-child{color:#c9d8ff}
+.c-name .l{font-weight:800;font-size:23px;line-height:.95;letter-spacing:.02em;white-space:nowrap;text-align:center}
+.c-name .l.long{font-size:19px}
+.c-stats{position:absolute;left:10px;right:10px;bottom:9px;display:flex;flex-direction:column;gap:1px}
+.c-stats div{display:flex;justify-content:space-between;align-items:baseline;line-height:1}
+.c-stats span{font-weight:600;font-size:12px;letter-spacing:.12em;color:var(--gold)}
+.c-stats b{font-weight:800;font-size:16px}
+.c-tag{position:absolute;left:8px;top:70px;padding:2px 6px 1px;background:var(--gold);color:#1a1203;font-weight:800;font-size:11px;letter-spacing:.1em;line-height:1.1}
+
+/* front view of the goal */
+.goalview{position:absolute;left:50%;top:50%;width:min(126%,450px);aspect-ratio:360/260;transform:translate(-50%,-50%)}
+.goalview > svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.keeper{position:absolute;left:33.333%;top:56.154%;width:33.333%;z-index:2;transform-origin:50% 75%}
+.keeper svg{display:block;width:100%;height:auto}
+.ball{position:absolute;left:0;top:0;width:6.667%;aspect-ratio:1;z-index:3;pointer-events:none}
+.ball svg{display:block;width:100%;height:100%}
+.ripple{position:absolute;left:0;top:0;width:22%;aspect-ratio:1;border-radius:50%;z-index:1;pointer-events:none;border:2px solid rgba(255,255,255,.9);background:radial-gradient(circle,rgba(255,255,255,.28) 0,rgba(255,255,255,0) 70%)}
+.spark{position:absolute;left:0;top:0;width:12%;aspect-ratio:1;border-radius:50%;z-index:4;pointer-events:none;background:radial-gradient(circle,#fff 0,rgba(255,236,170,.9) 20%,rgba(226,35,26,0) 70%)}
+.zones{position:absolute;left:21.667%;top:33.846%;width:56.667%;height:56.923%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));z-index:5}
+.zone{position:relative;border:0;background:transparent;padding:0 0 8px;display:flex;align-items:flex-end;justify-content:center;font-family:var(--display);font-weight:800;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:#fff}
+.zone::before{content:"";position:absolute;inset:4px 3px;border:2px dashed rgba(247,215,116,.8);border-radius:6px;background:rgba(247,215,116,.08);transition:background .12s,opacity .2s}
+.zone span{position:relative;background:rgba(5,8,24,.8);padding:2px 6px 1px;border-radius:4px;line-height:1.2}
+.zones.armed .zone::before{animation:breathe 1.3s ease-in-out infinite}
+.zones.armed .zone:nth-child(2)::before{animation-delay:.15s}
+.zones.armed .zone:nth-child(3)::before{animation-delay:.3s}
+.zones.armed .zone:hover::before{background:rgba(247,215,116,.28)}
+.zones.off{pointer-events:none}
+.zones.off .zone::before,.zones.off .zone span{opacity:0}
+.zones.off .zone.sel::before{opacity:1;border-style:solid;background:rgba(247,215,116,.18);animation:none}
+@keyframes breathe{0%,100%{background:rgba(247,215,116,.06)}50%{background:rgba(247,215,116,.22)}}
+.shooter{position:absolute;left:10px;top:10px;z-index:6;display:flex;align-items:center;gap:8px;padding:5px 10px 4px 6px;border-radius:8px;background:rgba(5,8,24,.82);font-family:var(--display);text-transform:uppercase;line-height:1}
+.shooter b{font-weight:800;font-size:22px;color:var(--gold)}
+.shooter span{display:flex;flex-direction:column;gap:2px;font-weight:800;font-size:15px;letter-spacing:.05em}
+.shooter i{font-style:normal;font-weight:600;font-size:11px;letter-spacing:.12em;color:var(--mute)}
+
+/* stamp */
+.stamp{position:absolute;left:50%;top:50%;z-index:8;display:flex;flex-direction:column;align-items:center;gap:6px;width:max-content;max-width:94%;pointer-events:none;text-align:center;transform:translate(-50%,-50%)}
+.stamp b{display:block;padding:4px 18px 1px;font-family:var(--display);font-weight:800;font-size:48px;line-height:1;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;transform:skewX(-8deg);box-shadow:0 12px 26px rgba(0,0,0,.45)}
+.stamp span{display:block;max-width:290px;padding:5px 10px;border-radius:6px;background:rgba(5,8,24,.9);font-size:13.5px;font-weight:600;line-height:1.3}
+.stamp span:empty{display:none}
+.stamp.good b{background:var(--good);color:#03130c}
+.stamp.bad b{background:var(--bad);color:#fff}
+.stamp.warn b{background:var(--gold);color:#1a1203}
+.stamp.neutral b{background:var(--ice);color:var(--navy)}
+.stamp.top{top:24%}
+.stamp.low{top:auto;bottom:6%;transform:translate(-50%,0)}
+
+/* prompt and history */
+.prompt{display:flex;flex-direction:column;gap:6px;min-height:58px}
+.prompt .row{display:flex;align-items:center;gap:8px;min-height:24px}
+.tag{flex-shrink:0;padding:4px 8px 2px;font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1}
+.tag.you{background:var(--blue);color:#fff}
+.tag.home{background:var(--gold);color:#1a1203}
+.tag.warn{background:var(--bad);color:#fff}
+.say{font-size:16px;font-weight:600;line-height:1.3}
+.hist{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.hist:empty{display:none}
+.hist .chip{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 7px 0 5px;border:1px solid var(--line);border-radius:6px;color:var(--ice);font-size:13px;letter-spacing:.06em}
+.hist .chip .ic{color:var(--gold)}
+.hist .chip .ic svg{width:17px;height:17px;stroke-width:3}
+.hist .chip.last{border-color:var(--gold)}
+.hist em{font-style:normal;font-family:var(--body);font-weight:500;font-size:13px;letter-spacing:0;text-transform:none;color:var(--mute)}
+.hint{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--mute)}
+.hint .bar{flex:1;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.hint .bar i{display:block;height:100%;width:100%;background:var(--gold);transform-origin:left}
+
+/* hand */
+.hand{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mini{position:relative;height:100px;padding:0;border:0;background:var(--foil);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);text-align:left;transition:transform .12s}
+.mini-in{position:absolute;inset:2.5px;clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);background:linear-gradient(170deg,#12235c 0%,#070b1f 100%);padding:7px 9px 7px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--display);text-transform:uppercase;color:#fff}
+.mini:not(:disabled):hover{transform:translateY(-3px)}
+.mini:disabled{background:#33406e;opacity:.55}
+.hand.idle{opacity:.4;pointer-events:none}
+.hand.idle .mini:disabled{opacity:1}
+.m-top{display:flex;justify-content:space-between;align-items:flex-start;padding-left:4px}
+.m-top b{font-weight:800;font-size:28px;line-height:.8;color:var(--gold)}
+.m-top em{font-style:normal;font-weight:700;font-size:12px;letter-spacing:.1em;color:var(--mute)}
+.m-name{font-weight:800;font-size:16px;line-height:1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-name.long{font-size:13.5px}
+.m-info{display:flex;align-items:center;gap:5px;font-weight:700;font-size:13px;letter-spacing:.06em;color:#c9d8ff;line-height:1}
+.m-info .ic{color:var(--gold)}
+.m-info .ic svg{width:17px;height:17px;stroke-width:3}
+.m-info.tired{color:#ffb3b3}
+.stam{display:block;height:4px;background:rgba(5,8,24,.7)}
+.stam i{display:block;height:100%;background:var(--ice)}
+.stam.low i{background:var(--bad)}
+
+/* choices */
+.choices{display:flex;flex-direction:column;gap:8px}
+.opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.opt{min-height:132px;border:1px solid var(--gold);border-radius:12px;background:#101a45;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;padding:12px 6px 10px;font-family:var(--display);text-transform:uppercase;transition:transform .12s,background .12s}
+.opt:hover{background:#1b2a6b;transform:translateY(-2px)}
+.opt .ic{color:var(--gold)}
+.opt .ic svg{width:42px;height:42px}
+.opt b{font-weight:800;font-size:19px;letter-spacing:.05em;line-height:1}
+.opt .meter{display:flex;gap:3px}
+.opt .meter i{width:12px;height:6px;border-radius:1px;background:#26336b}
+.opt .meter i.on{background:var(--gold)}
+.opt small{display:flex;align-items:center;gap:3px;font-family:var(--body);font-weight:500;font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--mute);line-height:1.2;text-align:center}
+.opt small .ic svg{width:14px;height:14px;stroke-width:3}
+
+/* end */
+.res-title{font-family:var(--display);font-weight:800;font-size:52px;line-height:.9;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding-top:16px}
+.res-title.win{color:var(--good)}
+.res-title.loss{color:#ff8a8a}
+.res-score{font-family:var(--display);font-weight:800;font-size:92px;line-height:.9;text-align:center;font-variant-numeric:tabular-nums}
+.res-sub{text-align:center;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.panel{background:rgba(14,27,71,.72);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.group-label{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.stats li{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;background:#070b1f;border:1px solid var(--line)}
+.stats b{font-family:var(--display);font-weight:800;font-size:30px;line-height:1;color:var(--gold);font-variant-numeric:tabular-nums}
+.stats span{font-size:12.5px;color:var(--mute);line-height:1.3}
+.actions{display:flex;flex-direction:column;gap:8px}
+
+@media (max-width:370px){
+  .slot,.empty{width:128px;height:175px}
+  .slot .card{transform:scale(.853)}
+  .pick{width:128px}
+  .hero{font-size:56px}
+}
+@media (prefers-reduced-motion:reduce){
+  .zones.armed .zone::before{animation:none}
+  .mini,.opt{transition:none}
+}
+</style>
+</head>
+<body>
+<main id="app">
+
+<section id="screen-intro" class="screen">
+  <div class="brandrow"><span class="brand">PLAYMAKERZ</span><span class="lab">Testversion</span></div>
+  <h1 class="hero">Hallen<br><span>Duell</span></h1>
+  <p class="lead">8 Duelle gegen die Hallenwache von Köniz. Jedes Duell hat drei Momente, und in jedem entscheidest du.</p>
+  <ol class="steps" id="steps"></ol>
+  <button class="cta" id="btn-start" type="button">Anpfiff</button>
+  <p class="note">Nur das Duell, zum Ausprobieren. Fouls, Taktiken, Vereine und Freunde fehlen hier absichtlich. Bei Unentschieden gibt es Penaltys.</p>
+</section>
+
+<section id="screen-match" class="screen" hidden>
+  <div class="sb">
+    <div class="sb-side"><span class="sb-lbl">Du</span><span class="sb-num" id="sc-you">0</span></div>
+    <div class="sb-mid"><span class="sb-period" id="sc-period">Duell 1 von 8</span><span class="dots" id="dots" aria-hidden="true"></span></div>
+    <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club">Köniz</span></div>
+  </div>
+  <div class="stage" id="stage">
+    <div class="arena" id="arena">
+      <div class="fighter" id="f-you"><div class="role" id="r-you"></div><div id="c-you"></div><div class="pick blank" id="p-you"></div></div>
+      <div class="vs" aria-hidden="true">VS</div>
+      <div class="fighter" id="f-home"><div class="role" id="r-home"></div><div id="c-home"></div><div class="pick back" id="p-home">?</div></div>
+    </div>
+    <div class="goalview" id="goalview" hidden>
+      <svg viewBox="0 0 360 260" aria-hidden="true">
+        <defs>
+          <radialGradient id="spot" cx="50%" cy="85%" r="75%"><stop offset="0" stop-color="#22357a"/><stop offset="1" stop-color="#0a1235"/></radialGradient>
+          <linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#21499f"/><stop offset="1" stop-color="#16409e"/></linearGradient>
+          <pattern id="mesh" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 0 L10 10 M10 0 L0 10" stroke="#ffffff" stroke-opacity=".32" stroke-width="1"/></pattern>
+          <pattern id="meshb" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0 L8 8 M8 0 L0 8" stroke="#ffffff" stroke-opacity=".2" stroke-width=".8"/></pattern>
+        </defs>
+        <rect width="360" height="135" fill="url(#spot)"/>
+        <g opacity=".5" fill="#18244f"><circle cx="20" cy="40" r="7"/><circle cx="44" cy="34" r="7"/><circle cx="70" cy="42" r="7"/><circle cx="292" cy="38" r="7"/><circle cx="318" cy="44" r="7"/><circle cx="342" cy="36" r="7"/><circle cx="32" cy="62" r="8"/><circle cx="330" cy="64" r="8"/></g>
+        <rect x="0" y="135" width="360" height="125" fill="url(#fl)"/>
+        <rect x="0" y="118" width="360" height="22" fill="#e6ecfb"/>
+        <g fill="#1a57ff"><rect x="8" y="122" width="54" height="14"/><rect x="298" y="122" width="54" height="14"/></g>
+        <g fill="#0e1b47"><rect x="70" y="122" width="40" height="14"/><rect x="250" y="122" width="40" height="14"/></g>
+        <path d="M0 236 H360" stroke="#ffffff" stroke-opacity=".7" stroke-width="2"/>
+        <path d="M40 260 L64 236 M320 260 L296 236" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+        <g id="goal">
+          <polygon points="96,104 264,104 270,224 90,224" fill="#0b1640" fill-opacity=".55"/>
+          <polygon points="96,104 264,104 270,224 90,224" fill="url(#meshb)"/>
+          <polygon points="78,88 96,104 90,224 78,236" fill="url(#meshb)"/>
+          <polygon points="282,88 264,104 270,224 282,236" fill="url(#meshb)"/>
+          <polygon points="78,88 282,88 264,104 96,104" fill="url(#meshb)"/>
+          <rect x="78" y="88" width="204" height="148" fill="url(#mesh)"/>
+          <path d="M78 236 V88 H282 V236" fill="none" stroke="#e2231a" stroke-width="7" stroke-linejoin="round"/>
+          <path d="M80 236 V90 H280 V236" fill="none" stroke="#ff7b70" stroke-width="1.5" stroke-opacity=".7"/>
+        </g>
+      </svg>
+      <div class="ripple" id="ripple" hidden></div>
+      <div class="spark" id="spark" hidden></div>
+      <div class="keeper" id="keeper"></div>
+      <div class="ball" id="ball" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#c4cde6" stroke-width="1"/><g fill="#9aa6c6"><circle cx="12" cy="6" r="1.8"/><circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9" cy="15.5" r="1.8"/><circle cx="15" cy="15.5" r="1.8"/><circle cx="12" cy="11.5" r="1.5"/></g></svg></div>
+      <div class="zones off" id="zones">
+        <button class="zone" type="button" data-c="l"><span>Links</span></button>
+        <button class="zone" type="button" data-c="m"><span>Mitte</span></button>
+        <button class="zone" type="button" data-c="r"><span>Rechts</span></button>
+      </div>
+    </div>
+    <div class="shooter" id="shooter" hidden></div>
+    <div class="stamp" id="stamp" hidden><b></b><span></span></div>
+  </div>
+  <div class="prompt">
+    <div class="row"><span class="tag you" id="tag">Dein Angriff</span><p class="say" id="say" aria-live="polite"></p></div>
+    <p class="sr" id="live" aria-live="polite"></p>
+    <div class="hist" id="hist"></div>
+  </div>
+  <div class="hand" id="hand"></div>
+  <div class="choices" id="choices" hidden><div class="opts" id="opts"></div><button class="link" id="btn-recard" type="button">Andere Karte</button></div>
+  <div class="hint" id="hint" hidden><span id="hint-text">Tippe aufs Feld, um vorzuspulen</span><span class="bar"><i id="hint-bar"></i></span></div>
+</section>
+
+<section id="screen-end" class="screen" hidden>
+  <div class="brandrow"><span class="brand">PLAYMAKERZ</span><span class="lab">Testversion</span></div>
+  <h2 class="res-title" id="res-title"></h2>
+  <div class="res-score" id="res-score"></div>
+  <p class="res-sub" id="res-sub"></p>
+  <div class="panel">
+    <p class="group-label">So lief es</p>
+    <ul class="stats" id="stats"></ul>
+  </div>
+  <div class="actions">
+    <button class="cta" id="btn-again" type="button">Nochmals spielen</button>
+    <a class="ghost" href="../">Zum ganzen Prototyp</a>
+  </div>
+</section>
+
+</main>
+<script id="hk-engine">
+/*__ENGINE__*/
+</script>
+<script id="hk-world">
+/*__WORLD__*/
+</script>
+<script id="hk-duel">
+/*__DUEL__*/
+</script>
+<script id="hk-lab">
+/*__LAB__*/
+</script>
+</body>
+</html>
