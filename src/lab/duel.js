@@ -14,8 +14,10 @@
     duels: 8, goalie: 88,
     open: 0.92, openSlope: 0.01, openMin: 0.80, openMax: 0.98,      // nicht gelesen: kommt fast immer vorbei
     read: 0.30, readSlope: 0.025, readMin: 0.10, readMax: 0.55,     // gelesen: kommt selten vorbei, starke Karten öfter
-    miss: 0.22, missSlope: 0.009, missMin: 0.04, missMax: 0.25,     // Ecke verfehlt, je nach Abschluss. Die Mitte geht immer aufs Tor
-    beat: 0.18, beatMid: 0.06, beatSlope: 0.012, beatMin: 0.04, beatMax: 0.40,   // Goalie in der richtigen Ecke, trotzdem Tor
+    // Schuss: Der Abschluss des Schützen zählt in allen drei Fällen, gemessen am Goalie (88).
+    miss: 0.22, missSlope: 0.012, missMin: 0.03, missMax: 0.30,     // Ecke verfehlt. Die Mitte geht immer aufs Tor
+    wrong: 0.82, wrongSlope: 0.015, wrongMin: 0.55, wrongMax: 0.97, // Goalie in der falschen Ecke: Tor, ausser der Schuss ist zu schwach
+    beat: 0.25, beatMid: 0.12, beatSlope: 0.025, beatMin: 0.05, beatMax: 0.60,   // Goalie in der richtigen Ecke, trotzdem Tor
     counter: { block: 0.15, pass: 0.40, zwei: 0.65 }, counterBonus: 0.10,
     cost: 30, costSolo: 36, costDef: 26, counterCost: 6, recover: 8, minStam: 20,
     aiCard: 0.6, aiHabit: 0.8, aiFloor: 0.15,    // so liest die Halle deinen Zug: Stärke deiner Karte und deine letzten vier Züge
@@ -39,6 +41,10 @@
     return read ? clamp(c.read + diff * c.readSlope, c.readMin, c.readMax) : clamp(c.open + diff * c.openSlope, c.openMin, c.openMax);
   }
   function missChance(s, X, target) { const c = s.cfg; return target === 'm' ? 0 : clamp(c.miss - (E.eff(X.sco, X) - 75) * c.missSlope, c.missMin, c.missMax); }
+  function wrongChance(s, side, X, ctx) {
+    const c = s.cfg, d = E.eff(X.sco, X) - s.teams[other(side)].goalie.val;
+    return Math.min(0.99, clamp(c.wrong + d * c.wrongSlope, c.wrongMin, c.wrongMax) + (ctx === 'counter' ? c.counterBonus : 0));
+  }
   function beatChance(s, side, X, target, ctx) {
     const c = s.cfg, d = E.eff(X.sco, X) - s.teams[other(side)].goalie.val;
     let p = clamp((target === 'm' ? c.beatMid : c.beat) + d * c.beatSlope, c.beatMin, c.beatMax);
@@ -48,7 +54,11 @@
   function resolveShot(s, rng, side, X, target, guess, ctx) {
     const miss = missChance(s, X, target);
     if (rng() < miss) return { result: 'miss', miss: ['wide', 'post', 'high'][Math.floor(rng() * 3)], right: target === guess, p: 0 };
-    if (target !== guess) return { result: 'goal', right: false, p: 1 - miss };
+    if (target !== guess) {
+      const w = wrongChance(s, side, X, ctx);
+      // Goalie falsch, aber der Schuss ist zu schwach: Er kommt noch hin.
+      return rng() < w ? { result: 'goal', right: false, p: (1 - miss) * w } : { result: 'save', right: false, late: true, p: (1 - miss) * w };
+    }
     const beat = beatChance(s, side, X, target, ctx);
     if (rng() < beat) return { result: 'goal', right: true, p: (1 - miss) * beat };
     return { result: rng() < 0.4 ? 'catch' : 'save', right: true, p: (1 - miss) * beat };
@@ -192,5 +202,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKDuel = { CFG, CORNERS, newMatch, act, card, usable, through, missChance, beatChance, readWeights, keeperWeights, shotWeights, favCorner, penOver, other };
+  root.HKDuel = { CFG, CORNERS, newMatch, act, card, usable, through, missChance, wrongChance, beatChance, readWeights, keeperWeights, shotWeights, favCorner, penOver, other };
 })(typeof window !== 'undefined' ? window : globalThis);

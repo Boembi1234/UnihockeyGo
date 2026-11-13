@@ -142,8 +142,8 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     const att = G.cur.side === 'you', ok = D.usable(G, 'you');
     $('hand').innerHTML = G.teams.you.cards.map(c => {
       const can = ok.indexOf(c) !== -1, m = E.bestMove(c), def = Math.round(E.eff(E.defVal(c), c));
-      const info = !can ? '<span class="m-info tired">Müde, setzt aus</span>' : att ? `<span class="m-info">${ic(m.id)}${MOVE[m.id]}</span>` : `<span class="m-info">${ic('shield')}Abwehr ${def}</span>`;
-      const label = `${c.first} ${c.last}, ${c.pos}, Gesamtwert ${c.ovr}, ${can ? (att ? 'stark im ' + m.name : 'Abwehr ' + def) : 'müde'}, Ausdauer ${Math.round(c.stam)}`;
+      const info = !can ? '<span class="m-info tired">Müde, setzt aus</span>' : att ? `<span class="m-info">${ic(m.id)}Schuss ${Math.round(E.eff(c.sco, c))}</span>` : `<span class="m-info">${ic('shield')}Abwehr ${def}</span>`;
+      const label = `${c.first} ${c.last}, ${c.pos}, Gesamtwert ${c.ovr}, ${can ? (att ? 'stark im ' + m.name + ', Schuss ' + Math.round(E.eff(c.sco, c)) : 'Abwehr ' + def) : 'müde'}, Ausdauer ${Math.round(c.stam)}`;
       return `<button type="button" class="mini" data-id="${c.id}" aria-label="${esc(label)}"${can ? '' : ' disabled'}><span class="mini-in"><span class="m-top"><b>${c.ovr}</b><em>${c.pos}</em></span><span class="m-name${c.last.length > 9 ? ' long' : ''}">${esc(c.last)}</span>${info}<span class="stam${c.stam < 40 ? ' low' : ''}"><i style="width:${Math.round(c.stam)}%"></i></span></span></button>`;
     }).join('');
   }
@@ -354,11 +354,12 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     kp.innerHTML = keeperSvg(mine ? 'home' : 'you'); kp.style.transform = '';
     ball.hidden = false; ball.style.opacity = '1'; ball.style.transform = ballTf(START, 2.1);
     $('ripple').hidden = true; $('spark').hidden = true;
-    $('shooter').innerHTML = `<b>${X.ovr}</b><span>${esc(X.last)}<i>${mine ? 'dein Schütze' : HOME + ' schiesst'}</i></span>`;
+    const sco = Math.round(E.eff(X.sco, X));
+    $('shooter').innerHTML = `<b>${sco}</b><span>${esc(X.last)}<i>Schuss ${shotLabel(sco)}</i></span>`;
     $('shooter').hidden = false;
     setTag(sh.ctx === 'so' ? 'Penalty' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Dein Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
     say(mine ? `Wohin schiesst ${X.last}? Tippe auf eine Ecke.` : `${X.last} zieht ab. Wohin springst du?`);
-    $('hist').innerHTML = mine ? aimHistory() : shotHistory(X);
+    $('hist').innerHTML = (mine ? aimHistory() : shotHistory(X)) + `<em>${shotHint(sco, mine)}</em>`;
     const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Sprung nach ') + b.textContent); });
     z.className = 'zones armed'; $('hint').hidden = true; idleHand();
     phase = 'aim';
@@ -368,7 +369,7 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     const corner = { l: hi ? [102, 114] : [104, 214], r: hi ? [258, 114] : [256, 214], m: hi ? [180, 116] : [180, 222] };
     let end, out = null, fadeOut = false;
     if (e.result === 'goal') end = e.right ? { l: [96, 102], r: [264, 102], m: [180, 102] }[e.target] : corner[e.target];
-    else if (e.result === 'save') { end = SAVE[e.guess]; out = AWAY[e.guess]; }
+    else if (e.result === 'save') { end = SAVE[e.late ? e.target : e.guess]; out = AWAY[e.late ? e.target : e.guess]; }
     else if (e.result === 'catch') end = SAVE[e.guess];
     else if (e.miss === 'wide') { end = e.target === 'l' ? [52, 166] : [308, 166]; out = e.target === 'l' ? [14, 176] : [346, 176]; fadeOut = true; }
     else if (e.miss === 'post') { end = e.target === 'l' ? [80, 150] : [280, 150]; out = e.target === 'l' ? [34, 252] : [326, 252]; }
@@ -381,7 +382,9 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(pre, 2.25) }], { duration: 130, easing: 'ease-out' });
     const fly = anim(ball, [{ transform: ballTf(pre, 2.25) }, { transform: ballTf(mid, 1.45), offset: 0.5 }, { transform: ballTf(end, 0.95) }], { duration: 440, easing: 'cubic-bezier(.3,.6,.4,1)' });
     await wait(70);
-    anim(kp, [{ transform: 'none' }, { transform: poseTf(POSE[e.guess]) }], { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    const pose = POSE[e.late ? e.target : e.guess];
+    if (e.late) await wait(120);
+    anim(kp, [{ transform: 'none' }, { transform: poseTf(pose) }], { duration: e.late ? 260 : 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
     await fly;
     if (e.result === 'goal') {
       anim(ball, [{ transform: ballTf(end, 0.95) }, { transform: ballTf([end[0], end[1] + 6], 0.78) }], { duration: 160 });
@@ -411,6 +414,7 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     const mine = e.side === 'you', goal = e.result === 'goal', X = card(e.side, e.x);
     let main, sub;
     if (goal) { main = 'Tor'; sub = mine ? (e.right ? 'Der Goalie ahnte die Ecke, aber der Schuss sitzt.' : 'Goalie in der falschen Ecke.') : (e.right ? `Richtig gesprungen, aber ${X.last} trifft trotzdem.` : 'Du bist in die falsche Ecke gesprungen.'); }
+    else if (e.result === 'save' && e.late) { main = 'Parade'; sub = mine ? `Goalie falsch, aber der Schuss von ${X.last} war zu schwach.` : `Falsch gesprungen, aber ${X.last} schiesst zu schwach.`; }
     else if (e.result === 'save') { main = 'Parade'; sub = mine ? 'Der Goalie ahnte die Ecke.' : 'Richtig gesprungen.'; }
     else if (e.result === 'catch') { main = 'Gefangen'; sub = mine ? 'Der Goalie ahnte die Ecke.' : 'Richtig gesprungen.'; }
     else {
@@ -418,6 +422,15 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
       sub = mine ? (e.right ? 'Der Goalie stand ohnehin richtig.' : 'Der Goalie war geschlagen, knapp vorbei.') : (e.right ? 'Und du warst in der richtigen Ecke.' : 'Glück gehabt, du warst in der falschen Ecke.');
     }
     stamp(main, sub, mine === goal ? 'good' : 'bad', 'top');
+  }
+
+  // Schussstärke in Worten, damit man sie ohne Zahlenkenntnis einordnen kann
+  const shotLabel = v => v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach';
+  function shotHint(v, mine) {
+    if (v >= 95) return mine ? 'Trifft oft auch, wenn der Goalie richtig rät.' : 'Auch richtig gesprungen hältst du ihn nur selten.';
+    if (v >= 88) return mine ? 'Rät der Goalie falsch, sitzt der Schuss fast immer.' : 'Richtig springen ist hier wichtig.';
+    if (v >= 80) return mine ? 'Der Goalie kommt manchmal noch hin.' : 'Selbst falsch gesprungen kommst du manchmal noch hin.';
+    return mine ? 'Schwacher Schütze: Die Mitte ist sicherer, die Ecke geht oft daneben.' : 'Schwacher Schütze: gute Chance auf eine Parade.';
   }
 
   // --- Resultat ---

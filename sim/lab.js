@@ -57,3 +57,14 @@ run('vernünftig, schwach', reasonable, SQ.weak, 12);
 run('vernünftig, Werte -8', reasonable, shift(SQ.standard, -8), 15);
 run('zufälliger Zug+Ecke', randomMove, SQ.standard, 13);
 run('ganz zufällig', random, SQ.standard, 14);
+// Torquote pro Schuss nach Schussstärke, Ecke zufällig, Goalie rät zufällig
+{
+  const s = D.newMatch({ homeName: 'K', cfg, you: { goalie: { val: 88 }, cards: SQ.standard }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), 'koeniz') } }, E.makeRng(1));
+  const r = E.makeRng(99), line = [];
+  [72, 80, 88, 95, 99].forEach(v => { let g = 0; const X = Object.assign({}, SQ.standard[0], { sco: v, stam: 100, cap: false, home: false });
+    for (let i = 0; i < 20000; i++) { const t = pick(['l', 'm', 'r'], r), gu = pick(['l', 'm', 'r'], r);
+      const miss = D.missChance(s, X, t); if (r() < miss) continue;
+      if (t !== gu ? r() < D.wrongChance(s, 'you', X, 'attack') : r() < D.beatChance(s, 'you', X, t, 'attack')) g++; }
+    line.push('Abschluss ' + v + ': ' + (g / 200).toFixed(0) + '%'); });
+  console.log('Torquote pro Schuss: ' + line.join(', '));
+}
