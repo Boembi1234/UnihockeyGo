@@ -9,16 +9,19 @@
   'use strict';
   const E = root.HK, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), other = s => (s === 'you' ? 'home' : 'you');
   const CORNERS = ['l', 'm', 'r'];
+  const ZONES = ['tl', 'tm', 'tr', 'bl', 'bm', 'br'];
 
   const CFG = {
     duels: 8, goalie: 88,
     // Stufe 1 hängt vom Matchup ab: Wert des Angreifers im gewählten Zug gegen den Wert des Verteidigers in der Abwehr, die diesen Zug stoppt.
     open: 0.88, openSlope: 0.02, openMin: 0.60, openMax: 0.98,      // nicht gelesen: kommt meist vorbei, gegen einen Spezialisten seltener
     read: 0.28, readSlope: 0.03, readMin: 0.08, readMax: 0.60,      // gelesen: kommt selten vorbei, mit klarem Vorteil öfter
-    // Schuss: Der Abschluss des Schützen zählt in allen drei Fällen, gemessen am Goalie (88).
-    miss: 0.22, missSlope: 0.012, missMin: 0.03, missMax: 0.30,     // Ecke verfehlt. Die Mitte geht immer aufs Tor
-    wrong: 0.82, wrongSlope: 0.015, wrongMin: 0.55, wrongMax: 0.97, // Goalie in der falschen Ecke: Tor, ausser der Schuss ist zu schwach
-    beat: 0.25, beatMid: 0.12, beatSlope: 0.025, beatMin: 0.05, beatMax: 0.60,   // Goalie in der richtigen Ecke, trotzdem Tor
+    /* Schuss: Zielpunkt im Tor (x -1 bis 1 zwischen den Pfosten, y 0 bis 1 vom Boden zur Latte) und Härte 0 bis 1.
+       Der Schuss streut, je schwächer der Abschluss und je härter geschossen wird. Der Goalie springt in eine von sechs Zonen. */
+    sdBase: 0.05, sdSkill: 0.17, sdPow: 0.11,                       // Streuung: Grundwert, schwacher Abschluss, Härte
+    post: 0.07,                                                      // so knapp neben dem Pfosten oder über der Latte gilt als Pfosten
+    saveSame: 0.92, saveAdj: 0.50, savePow: 0.35, saveSco: 0.012, saveEdge: 0.15, saveBody: 0.45,   // Goalie in der richtigen oder Nachbarzone
+    tellTrue: 0.65,                                                  // so oft verrät der Blick des Schützen die richtige Seite
     counter: { block: 0.15, pass: 0.40, zwei: 0.65 }, counterBonus: 0.10,
     cost: 30, costSolo: 36, costDef: 26, counterCost: 6, recover: 8, minStam: 20,
     aiCard: 0.6, aiHabit: 0.8, aiFloor: 0.15, aiOwn: 0.015,   // so liest die Halle deinen Zug: Stärke deiner Karte, deine letzten vier Züge, ihre Lieblingsabwehr
@@ -51,28 +54,34 @@
     const c = s.cfg, diff = matchup(A, mv.id, D);
     return read ? clamp(c.read + diff * c.readSlope, c.readMin, c.readMax) : clamp(c.open + diff * c.openSlope, c.openMin, c.openMax);
   }
-  function missChance(s, X, target) { const c = s.cfg; return target === 'm' ? 0 : clamp(c.miss - (E.eff(X.sco, X) - 75) * c.missSlope, c.missMin, c.missMax); }
-  function wrongChance(s, side, X, ctx) {
-    const c = s.cfg, d = E.eff(X.sco, X) - s.teams[other(side)].goalie.val;
-    return Math.min(0.99, clamp(c.wrong + d * c.wrongSlope, c.wrongMin, c.wrongMax) + (ctx === 'counter' ? c.counterBonus : 0));
+  const zoneOf = (x, y) => (y >= 0.5 ? 't' : 'b') + (x < -0.34 ? 'l' : x > 0.34 ? 'r' : 'm');
+  const ZC = { tl: [-0.62, 0.72], tm: [0, 0.75], tr: [0.62, 0.72], bl: [-0.62, 0.25], bm: [0, 0.2], br: [0.62, 0.25] };
+  const COL = { l: 0, m: 1, r: 2 };
+  function adjacent(a, b) { const dc = Math.abs(COL[a[1]] - COL[b[1]]); return (a[1] === b[1] && a[0] !== b[0]) || (a[0] === b[0] && dc === 1); }
+  function gauss(rng) { let u = 0; while (!u) u = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng()); }
+  // Streuung in Torbreiten: Abschluss 99 und weich geschossen trifft fast genau, Abschluss 72 und hart streut weit.
+  function spread(s, X, power) { const c = s.cfg; return c.sdBase + c.sdSkill * clamp((99 - E.eff(X.sco, X)) / 27, 0, 1) + c.sdPow * power; }
+  // Wahrscheinlichkeit, dass der Goalie einen Ball hält, der in der Zone lz ankommt, wenn er in gz gesprungen ist.
+  function saveChance(s, side, X, land, lz, gz, power, ctx) {
+    const c = s.cfg, d = E.eff(X.sco, X) - s.teams[other(side)].goalie.val, edge = Math.abs(land[0]) > 0.8 || land[1] > 0.85 ? c.saveEdge : 0;
+    let p = lz === gz ? c.saveSame - power * c.savePow - d * c.saveSco - edge : adjacent(lz, gz) ? c.saveAdj - power * 0.3 - d * 0.01 - edge : 0;
+    // Mitten auf den Körper: Der Goalie hält oft, auch wenn er in eine andere Zone wollte
+    if (Math.abs(land[0]) < 0.3 && land[1] < 0.6) p = Math.max(p, c.saveBody - power * 0.2 - d * 0.01);
+    if (ctx === 'counter') p -= c.counterBonus;
+    return clamp(p, 0, 0.95);
   }
-  function beatChance(s, side, X, target, ctx) {
-    const c = s.cfg, d = E.eff(X.sco, X) - s.teams[other(side)].goalie.val;
-    let p = clamp((target === 'm' ? c.beatMid : c.beat) + d * c.beatSlope, c.beatMin, c.beatMax);
-    if (ctx === 'counter') p += c.counterBonus;
-    return p;
-  }
-  function resolveShot(s, rng, side, X, target, guess, ctx) {
-    const miss = missChance(s, X, target);
-    if (rng() < miss) return { result: 'miss', miss: ['wide', 'post', 'high'][Math.floor(rng() * 3)], right: target === guess, p: 0 };
-    if (target !== guess) {
-      const w = wrongChance(s, side, X, ctx);
-      // Goalie falsch, aber der Schuss ist zu schwach: Er kommt noch hin.
-      return rng() < w ? { result: 'goal', right: false, p: (1 - miss) * w } : { result: 'save', right: false, late: true, p: (1 - miss) * w };
+  function resolveShot(s, rng, side, X, target, power, guess, ctx) {
+    const c = s.cfg, sd = spread(s, X, power);
+    const land = [target[0] + gauss(rng) * sd, Math.max(0.03, target[1] + gauss(rng) * sd * 0.8)];
+    const ax = Math.abs(land[0]), lz = zoneOf(Math.max(-0.99, Math.min(0.99, land[0])), Math.min(0.99, land[1]));
+    const base = { land, zone: lz, guess, right: lz === guess, near: adjacent(lz, guess), power, sd };
+    if (ax >= 1 || land[1] >= 1) {
+      const post = (ax >= 1 && ax < 1 + c.post && land[1] < 1 + c.post) || (land[1] >= 1 && land[1] < 1 + c.post && ax < 1 + c.post);
+      return Object.assign(base, { result: 'miss', miss: post ? 'post' : land[1] >= 1 ? 'high' : 'wide', p: 0 });
     }
-    const beat = beatChance(s, side, X, target, ctx);
-    if (rng() < beat) return { result: 'goal', right: true, p: (1 - miss) * beat };
-    return { result: rng() < 0.4 ? 'catch' : 'save', right: true, p: (1 - miss) * beat };
+    const ps = saveChance(s, side, X, land, lz, guess, power, ctx);
+    if (rng() < ps) return Object.assign(base, { result: power < 0.5 && lz === guess ? 'catch' : 'save', p: 1 - ps });
+    return Object.assign(base, { result: 'goal', p: 1 - ps });
   }
 
   // --- KI der Halle ---
@@ -82,15 +91,15 @@
     E.MOVES.forEach(m => { w[m.id] = c.aiCard * t[m.id] + c.aiHabit * last.filter(x => x === m.id).length / n + c.aiFloor + c.aiOwn * Math.max(0, stanceVal(D, STOPPER[m.id]) - 80); });
     return w;
   }
-  // Goalie der Halle: springt eher dorthin, wo du zuletzt hingeschossen hast.
+  // Goalie der Halle: springt eher in die Zonen, in die du zuletzt gezielt hast. Unten und seitlich ist er ohnehin oft.
   function keeperWeights(s) {
-    const last = s.hist.aims.slice(-s.cfg.keeperMemory), n = last.length || 1, w = {};
-    CORNERS.forEach(k => { w[k] = 1 + 1.5 * last.filter(x => x === k).length / n; });
+    const last = s.hist.aims.slice(-s.cfg.keeperMemory), n = last.length || 1, w = { tl: 0.9, tm: 0.5, tr: 0.9, bl: 1, bm: 0.7, br: 1 };
+    ZONES.forEach(z => { w[z] += 2 * last.filter(x => x === z).length / n; });
     return w;
   }
-  // Jeder Schütze der Halle hat eine Lieblingsecke, die er in der Hälfte der Schüsse wählt.
-  function favCorner(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['l', 'r', 'l', 'r', 'm'][h % 5]; }
-  function shotWeights(id) { const w = { l: 0.25, m: 0.25, r: 0.25 }; w[favCorner(id)] = 0.5; return w; }
+  // Jeder Schütze der Halle hat eine Lieblingszone, die er in knapp der Hälfte der Schüsse wählt.
+  function favZone(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['tl', 'br', 'tr', 'bl', 'bm'][h % 5]; }
+  function shotWeights(id) { const w = {}; ZONES.forEach(z => { w[z] = 0.11; }); w[favZone(id)] = 0.45; return w; }
   const aiAttacker = (s, rng) => best(usable(s, 'home'), c => 0.5 * E.eff(E.bestMove(c).val(c), c) + 0.5 * E.eff(c.sco, c) + rng() * 6 - 3);
   const aiDefender = (s, rng) => best(usable(s, 'home'), c => E.eff((stanceVal(c, 'block') + stanceVal(c, 'pass') + stanceVal(c, 'zwei')) / 3, c) + rng() * 6 - 3);
 
@@ -115,8 +124,17 @@
     s.phase = 'pick';
   }
   // Die verdeckte Wahl der KI steht fest, bevor du tippst: Ecke ihres Schützen oder Ahnung ihres Goalies.
+  /* Die verdeckte Wahl der KI steht fest, bevor du wischst. Schiesst die Halle, verrät ihr Schütze mit seinem Blick die Seite,
+     aber nur in tellTrue der Fälle richtig. */
   function setShot(s, rng, side, x, ctx) {
-    s.cur.shot = { side, x, ctx, ai: side === 'home' ? sample(shotWeights(x), rng) : sample(keeperWeights(s), rng) };
+    const sh = { side, x, ctx };
+    if (side === 'home') {
+      const z = sample(shotWeights(x), rng), c = ZC[z];
+      sh.ai = { target: [c[0] + (rng() - 0.5) * 0.24, c[1] + (rng() - 0.5) * 0.2], power: 0.45 + rng() * 0.5 };
+      const truth = z[1], others = ['l', 'm', 'r'].filter(k => k !== truth);
+      sh.tell = rng() < s.cfg.tellTrue ? truth : others[Math.floor(rng() * 2)];
+    } else sh.ai = { guess: sample(keeperWeights(s), rng) };
+    s.cur.shot = sh;
     s.phase = 'aim';
   }
   function play(s, rng, ev, cardId, opt) {
@@ -144,18 +162,26 @@
     endDuel(s);
     return true;
   }
-  function shoot(s, rng, ev, corner) {
-    if (CORNERS.indexOf(corner) === -1) return false;
+  // Eigener Schuss: a.target [x, y] und a.power. Fremder Schuss: a.zone, in die dein Goalie springt.
+  function shoot(s, rng, ev, a) {
     const sh = s.cur.shot, side = sh.side, X = card(s, side, sh.x), st = s.stats;
-    const target = side === 'you' ? corner : sh.ai, guess = side === 'you' ? sh.ai : corner;
-    if (side === 'you') s.hist.aims.push(corner); else (s.hist.homeShots[X.id] = s.hist.homeShots[X.id] || []).push(target);
-    const r = resolveShot(s, rng, side, X, target, guess, sh.ctx), goal = r.result === 'goal';
+    let target, power, guess;
+    if (side === 'you') {
+      if (!a.target || !isFinite(a.target[0]) || !isFinite(a.target[1])) return false;
+      target = [clamp(+a.target[0], -1.5, 1.5), clamp(+a.target[1], 0, 1.5)]; power = clamp(+a.power || 0, 0, 1); guess = sh.ai.guess;
+      s.hist.aims.push(zoneOf(clamp(target[0], -0.99, 0.99), clamp(target[1], 0, 0.99)));
+    } else {
+      if (ZONES.indexOf(a.zone) === -1) return false;
+      target = sh.ai.target; power = sh.ai.power; guess = a.zone;
+    }
+    const r = resolveShot(s, rng, side, X, target, power, guess, sh.ctx), goal = r.result === 'goal';
+    if (side !== 'you') (s.hist.homeShots[X.id] = s.hist.homeShots[X.id] || []).push(r.zone);
     if (side === 'you') { st.shots++; if (goal) st.goals++; } else { st.faced++; if (!goal) st.saved++; if (r.right) st.diveRight++; }
-    ev.push(Object.assign({ t: 'shot', side, x: X.id, ctx: sh.ctx, target, guess }, r));
+    ev.push(Object.assign({ t: 'shot', side, x: X.id, ctx: sh.ctx, target, tell: sh.tell || null }, r));
     s.cur.shot = null;
     if (sh.ctx === 'so') {
       const P = s.pen; if (goal) P[side]++; P.shots[side]++; P.results.push({ side, goal });
-      s.log.push({ so: true, side, x: X.id, target, guess, result: r.result });
+      s.log.push({ so: true, side, x: X.id, zone: r.zone, guess, result: r.result });
       s.phase = 'done';
       return true;
     }
@@ -202,16 +228,17 @@
 
   /* Einziger Einstieg für Eingaben. Gibt einen neuen Zustand und die Ereignisse zurück, der alte bleibt unverändert.
      { type: 'play', card, option }   Karte und Spielzug oder Abwehr
-     { type: 'aim', corner }          Ecke 'l', 'm' oder 'r': beim eigenen Schuss das Ziel, beim fremden der Sprung deines Goalies
+     { type: 'aim', target, power }   eigener Schuss: Zielpunkt [x, y] im Tor und Härte 0 bis 1
+     { type: 'aim', zone }            fremder Schuss: Zone 'tl', 'tm', 'tr', 'bl', 'bm' oder 'br', in die dein Goalie springt
      { type: 'next' }                 nächstes Duell, nächster Penalty oder Schluss */
   function act(state, a, rng) {
     const s = copy(state), ev = [];
     let ok = false;
     if (a.type === 'play' && s.phase === 'pick') ok = play(s, rng, ev, a.card, a.option);
-    else if (a.type === 'aim' && s.phase === 'aim') ok = shoot(s, rng, ev, a.corner);
+    else if (a.type === 'aim' && s.phase === 'aim') ok = shoot(s, rng, ev, a);
     else if (a.type === 'next' && s.phase === 'done') { next(s, rng); ok = true; }
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKDuel = { STOPPER, stanceVal, matchup, CFG, CORNERS, newMatch, act, card, usable, through, missChance, wrongChance, beatChance, readWeights, keeperWeights, shotWeights, favCorner, penOver, other };
+  root.HKDuel = { STOPPER, stanceVal, matchup, CFG, CORNERS, ZONES, ZC, zoneOf, adjacent, spread, saveChance, newMatch, act, card, usable, through, readWeights, keeperWeights, shotWeights, favZone, penOver, other };
 })(typeof window !== 'undefined' ? window : globalThis);

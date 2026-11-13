@@ -29,16 +29,24 @@ const reasonable = (s, r) => {
     const st = D.STOPPER[mv], Dc = cand.slice().sort((a, b) => E.eff(D.stanceVal(b, st), b) - E.eff(D.stanceVal(a, st), a))[0];
     return { type: 'play', card: Dc.id, option: E.STANCES.filter(x => x.stops === mv)[0].id };
   }
-  if (s.phase === 'aim' && cur.shot.side === 'you') return { type: 'aim', corner: minKey(D.keeperWeights(s), r) };
-  if (s.phase === 'aim') { const seen = s.hist.homeShots[cur.shot.x] || []; if (!seen.length) return { type: 'aim', corner: pick(['l', 'r'], r) }; const c = { l: 0, m: 0, r: 0 }; seen.forEach(x => c[x]++); return { type: 'aim', corner: maxKey(c, r) }; }
+  if (s.phase === 'aim' && cur.shot.side === 'you') {
+    // zielt in die am wenigsten erwartete Zone, etwas nach innen, je schwächer der Schütze; mittlere Härte
+    const X = D.card(s, 'you', cur.shot.x), z = minKey(D.keeperWeights(s), r), c = D.ZC[z], weak = Math.max(0, (95 - E.eff(X.sco, X)) / 30);
+    return { type: 'aim', target: [c[0] * (1 - 0.35 * weak), c[1] * (1 - 0.25 * weak)], power: 0.55 };
+  }
+  if (s.phase === 'aim') {
+    const seen = s.hist.homeShots[cur.shot.x] || [], col = cur.shot.tell;
+    if (seen.length >= 2) { const c = {}; seen.forEach(x => { c[x] = (c[x] || 0) + 1; }); return { type: 'aim', zone: maxKey(c, r) }; }
+    return { type: 'aim', zone: (r() < 0.5 ? 't' : 'b') + col };
+  }
   return { type: 'next' };
 };
 const random = (s, r) => {
   if (s.phase === 'pick') return { type: 'play', card: pick(D.usable(s, 'you'), r).id, option: pick(s.cur.side === 'you' ? E.MOVES : E.STANCES, r).id };
-  if (s.phase === 'aim') return { type: 'aim', corner: pick(['l', 'm', 'r'], r) };
+  if (s.phase === 'aim') return s.cur.shot.side === 'you' ? { type: 'aim', target: [r() * 2 - 1, r()], power: r() } : { type: 'aim', zone: pick(D.ZONES, r) };
   return { type: 'next' };
 };
-const randomMove = (s, r) => { const a = reasonable(s, r); if (a.type === 'play' && s.cur.side === 'you') a.option = pick(E.MOVES, r).id; if (a.type === 'aim' && s.cur.shot.side === 'you') a.corner = pick(['l', 'm', 'r'], r); return a; };
+const randomMove = (s, r) => { const a = reasonable(s, r); if (a.type === 'play' && s.cur.side === 'you') a.option = pick(E.MOVES, r).id; if (a.type === 'aim' && s.cur.shot.side === 'you') { a.target = [r() * 2 - 1, r()]; a.power = r(); } return a; };
 function run(name, pol, squad, seed) {
   const r = E.makeRng(seed), m = { win: 0, gf: 0, ga: 0, so: 0, readYou: 0, att: 0, readThem: 0, def: 0, shots: 0, goals: 0, faced: 0, saved: 0, counters: 0, taps: 0 };
   for (let i = 0; i < n; i++) {
@@ -57,14 +65,16 @@ run('vernünftig, schwach', reasonable, SQ.weak, 12);
 run('vernünftig, Werte -8', reasonable, shift(SQ.standard, -8), 15);
 run('zufälliger Zug+Ecke', randomMove, SQ.standard, 13);
 run('ganz zufällig', random, SQ.standard, 14);
-// Torquote pro Schuss nach Schussstärke, Ecke zufällig, Goalie rät zufällig
+// Torquote pro Schuss nach Schussstärke: Ziel in eine Ecke, Goalie springt zufällig, drei Härten
 {
   const s = D.newMatch({ homeName: 'K', cfg, you: { goalie: { val: 88 }, cards: SQ.standard }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), 'koeniz') } }, E.makeRng(1));
-  const r = E.makeRng(99), line = [];
-  [72, 80, 88, 95, 99].forEach(v => { let g = 0; const X = Object.assign({}, SQ.standard[0], { sco: v, stam: 100, cap: false, home: false });
-    for (let i = 0; i < 20000; i++) { const t = pick(['l', 'm', 'r'], r), gu = pick(['l', 'm', 'r'], r);
-      const miss = D.missChance(s, X, t); if (r() < miss) continue;
-      if (t !== gu ? r() < D.wrongChance(s, 'you', X, 'attack') : r() < D.beatChance(s, 'you', X, t, 'attack')) g++; }
-    line.push('Abschluss ' + v + ': ' + (g / 200).toFixed(0) + '%'); });
-  console.log('Torquote pro Schuss: ' + line.join(', '));
+  s.phase = 'aim'; const r = E.makeRng(99);
+  [0.2, 0.55, 0.9].forEach(pw => { const line = [];
+    [72, 80, 88, 95, 99].forEach(v => { let g = 0; const X = Object.assign({}, SQ.standard[0], { sco: v, stam: 100, cap: false, home: false });
+      s.teams.you.cards[0] = X;
+      for (let i = 0; i < 6000; i++) { s.pen = { you: 0, home: 0, shots: { you: 0, home: 0 }, results: [] }; s.cur = { side: 'you', shot: { side: 'you', x: X.id, ctx: 'so', ai: { guess: pick(D.ZONES, r) } } }; s.phase = 'aim';
+        const z = pick(['tl', 'tr', 'bl', 'br'], r), c = D.ZC[z], x = D.act(s, { type: 'aim', target: [c[0] * 1.15, c[1] * 1.1], power: pw }, r);
+        if (x.events[0].result === 'goal') g++; }
+      line.push(v + ': ' + (g / 60).toFixed(0) + '%'); });
+    console.log('Torquote Ecke, Härte ' + pw + ' nach Abschluss: ' + line.join(', ')); });
 }

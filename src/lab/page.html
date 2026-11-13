@@ -146,18 +146,21 @@ ul,ol{padding:0;list-style:none}
 .ball svg{display:block;width:100%;height:100%}
 .ripple{position:absolute;left:0;top:0;width:22%;aspect-ratio:1;border-radius:50%;z-index:1;pointer-events:none;border:2px solid rgba(255,255,255,.9);background:radial-gradient(circle,rgba(255,255,255,.28) 0,rgba(255,255,255,0) 70%)}
 .spark{position:absolute;left:0;top:0;width:12%;aspect-ratio:1;border-radius:50%;z-index:4;pointer-events:none;background:radial-gradient(circle,#fff 0,rgba(255,236,170,.9) 20%,rgba(226,35,26,0) 70%)}
-.zones{position:absolute;left:21.667%;top:33.846%;width:56.667%;height:56.923%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));z-index:5}
-.zone{position:relative;border:0;background:transparent;padding:0 0 8px;display:flex;align-items:flex-end;justify-content:center;font-family:var(--display);font-weight:800;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:#fff}
-.zone::before{content:"";position:absolute;inset:4px 3px;border:2px dashed rgba(247,215,116,.8);border-radius:6px;background:rgba(247,215,116,.08);transition:background .12s,opacity .2s}
-.zone span{position:relative;background:rgba(5,8,24,.8);padding:2px 6px 1px;border-radius:4px;line-height:1.2}
-.zones.armed .zone::before{animation:breathe 1.3s ease-in-out infinite}
-.zones.armed .zone:nth-child(2)::before{animation-delay:.15s}
-.zones.armed .zone:nth-child(3)::before{animation-delay:.3s}
-.zones.armed .zone:hover::before{background:rgba(247,215,116,.28)}
+.goalview,.stage.goalmode{touch-action:none}
+.zones{position:absolute;left:21.667%;top:33.846%;width:56.667%;height:56.923%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));z-index:5}
+.zone{position:relative;border:0;background:transparent;padding:0}
+.zone::before{content:"";position:absolute;inset:3px;border:1.5px dashed rgba(247,215,116,.55);border-radius:5px;background:rgba(247,215,116,.05);transition:background .12s,opacity .2s}
+.zones.armed .zone::before{animation:breathe 1.6s ease-in-out infinite}
+.zones.armed .zone:hover::before,.zone:focus-visible::before{background:rgba(247,215,116,.22)}
 .zones.off{pointer-events:none}
-.zones.off .zone::before,.zones.off .zone span{opacity:0}
-.zones.off .zone.sel::before{opacity:1;border-style:solid;background:rgba(247,215,116,.18);animation:none}
-@keyframes breathe{0%,100%{background:rgba(247,215,116,.06)}50%{background:rgba(247,215,116,.22)}}
+.zones.off .zone::before{opacity:0}
+.zones.off .zone.sel::before{opacity:1;border-style:solid;background:rgba(247,215,116,.2);animation:none}
+@keyframes breathe{0%,100%{background:rgba(247,215,116,.03)}50%{background:rgba(247,215,116,.14)}}
+.aim{position:absolute;inset:0;width:100%;height:100%;z-index:6;pointer-events:none;overflow:visible}
+.tell{position:absolute;right:10px;top:10px;z-index:6;padding:6px 10px 5px;border-radius:8px;background:var(--gold);color:#1a1203;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.power{position:absolute;right:10px;top:10px;z-index:7;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:rgba(5,8,24,.85);font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.power b{display:block;width:80px;height:8px;border-radius:4px;background:#26336b;overflow:hidden}
+.power i{display:block;height:100%;width:0;background:linear-gradient(90deg,#10b981,#f7d774 60%,#ef4444)}
 .shooter{position:absolute;left:10px;top:10px;z-index:6;display:flex;align-items:center;gap:8px;padding:5px 10px 4px 6px;border-radius:8px;background:rgba(5,8,24,.82);font-family:var(--display);text-transform:uppercase;line-height:1}
 .shooter b{font-weight:800;font-size:22px;color:var(--gold)}
 .shooter span{display:flex;flex-direction:column;gap:2px;font-weight:800;font-size:15px;letter-spacing:.05em}
@@ -332,12 +335,18 @@ ul,ol{padding:0;list-style:none}
       <div class="keeper" id="keeper"></div>
       <div class="ball" id="ball" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#c4cde6" stroke-width="1"/><g fill="#9aa6c6"><circle cx="12" cy="6" r="1.8"/><circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9" cy="15.5" r="1.8"/><circle cx="15" cy="15.5" r="1.8"/><circle cx="12" cy="11.5" r="1.5"/></g></svg></div>
       <div class="zones off" id="zones">
-        <button class="zone" type="button" data-c="l"><span>Links</span></button>
-        <button class="zone" type="button" data-c="m"><span>Mitte</span></button>
-        <button class="zone" type="button" data-c="r"><span>Rechts</span></button>
+        <button class="zone" type="button" data-z="tl"></button><button class="zone" type="button" data-z="tm"></button><button class="zone" type="button" data-z="tr"></button>
+        <button class="zone" type="button" data-z="bl"></button><button class="zone" type="button" data-z="bm"></button><button class="zone" type="button" data-z="br"></button>
       </div>
+      <svg class="aim" id="aim" viewBox="0 0 360 260" aria-hidden="true" hidden>
+        <line id="aim-line" x1="180" y1="270" x2="180" y2="160" stroke="#f7d774" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round"/>
+        <circle id="aim-spread" cx="180" cy="160" r="20" fill="rgba(247,215,116,.16)" stroke="#f7d774" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <circle id="aim-dot" cx="180" cy="160" r="5" fill="#f7d774" stroke="#1a1203" stroke-width="1.5"/>
+      </svg>
     </div>
     <div class="shooter" id="shooter" hidden></div>
+    <div class="tell" id="tell" hidden></div>
+    <div class="power" id="power" hidden><span>Härte</span><b><i id="power-bar"></i></b></div>
     <div class="stamp" id="stamp" hidden><b></b><span></span></div>
   </div>
   <div class="prompt">

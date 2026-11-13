@@ -21,14 +21,15 @@
     pass: '<svg viewBox="0 0 40 40"><path d="M5 31 L35 9" stroke-dasharray="3.5 4.5"/><path d="M13.5 13.5 L26.5 26.5 M26.5 13.5 L13.5 26.5"/></svg>',
     zwei: '<svg viewBox="0 0 40 40"><path d="M4 20 H16 M11 14.5 L16.5 20 L11 25.5 M36 20 H24 M29 14.5 L23.5 20 L29 25.5 M20 9 V13 M20 27 V31"/></svg>',
     shield: '<svg viewBox="0 0 40 40"><path d="M20 5 L33 10 V19 C33 27 27 32 20 35 C13 32 7 27 7 19 V10 Z"/></svg>',
-    goal: c => `<svg viewBox="0 0 30 22"><path d="M3 20 V3 H27 V20"/><circle class="f" cx="${{ l: 9, m: 15, r: 21 }[c]}" cy="11" r="3.4"/></svg>`
+    goal: z => `<svg viewBox="0 0 30 22"><path d="M3 20 V3 H27 V20"/><circle class="f" cx="${{ l: 9, m: 15, r: 21 }[z.length === 2 ? z[1] : z]}" cy="${z.length === 2 ? (z[0] === 't' ? 8 : 15) : 11}" r="3.2"/></svg>`
   };
   const ic = (k, arg) => `<span class="ic">${typeof ICON[k] === 'function' ? ICON[k](arg) : ICON[k]}</span>`;
   const MOVE = { direkt: 'Direkt', kombi: 'Kombi', solo: 'Solo' };
   const MOVE_ART = { direkt: 'den Direktschuss', kombi: 'die Kombination', solo: 'das Solo' };
   const STOP = { direkt: 'Geblockt', kombi: 'Abgefangen', solo: 'Gestohlen' };
   const STANCE = { block: 'Block', pass: 'Passweg', zwei: 'Zweikampf' };
-  const CORNER = { l: 'Links', m: 'Mitte', r: 'Rechts' };
+  const ZNAME = { tl: 'oben links', tm: 'oben Mitte', tr: 'oben rechts', bl: 'unten links', bm: 'unten Mitte', br: 'unten rechts' };
+  const SIDE = { l: 'nach links', m: 'in die Mitte', r: 'nach rechts' };
 
   // --- Zeit: Bewegung (T) springt beim Vorspulen und bei reduzierter Bewegung ans Ende, Haltezeiten (hold) nur beim Vorspulen ---
   const T = t => (reduce || fast ? 0 : t);
@@ -195,11 +196,11 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   }
   function aimHistory() {
     const l = G.hist.aims;
-    return '<span>Deine Schüsse</span>' + (l.length ? chips(l, x => ic('goal', x), x => CORNER[x]) + '<em>Der Goalie merkt sich deine Ecken.</em>' : '<em>Der Goalie kennt dich noch nicht.</em>');
+    return '<span>Deine Schüsse</span>' + (l.length ? chips(l, x => ic('goal', x), x => ZNAME[x]) + '<em>Der Goalie merkt sich deine Zonen.</em>' : '<em>Der Goalie kennt dich noch nicht.</em>');
   }
   function shotHistory(X) {
     const l = G.hist.homeShots[X.id] || [];
-    return `<span>${esc(X.last)} zuletzt</span>` + (l.length ? chips(l, x => ic('goal', x), x => CORNER[x]) : '<em>schiesst zum ersten Mal.</em>');
+    return `<span>${esc(X.last)} zuletzt</span>` + (l.length ? chips(l, x => ic('goal', x), x => ZNAME[x]) : '<em>schiesst zum ersten Mal.</em>');
   }
 
   // --- Ablauf eines Duells ---
@@ -263,12 +264,15 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     G = r.state;
     await after();
   }
-  async function aimAt(corner) {
+  // input: eigener Schuss { target, power }, fremder Schuss { zone }
+  async function aimAt(input) {
     if (phase !== 'aim') return;
-    const r = D.act(G, { type: 'aim', corner }, rng);
+    const r = D.act(G, Object.assign({ type: 'aim' }, input), rng);
     if (!r.ok) return;
     phase = 'play'; fast = false;
-    const z = $('zones'); z.className = 'zones off'; z.querySelector(`[data-c="${corner}"]`).classList.add('sel');
+    const z = $('zones'), sz = input.zone || D.zoneOf(Math.max(-0.99, Math.min(0.99, input.target[0])), Math.max(0, Math.min(0.99, input.target[1])));
+    z.className = 'zones off'; z.querySelector(`[data-z="${sz}"]`).classList.add('sel');
+    $('tell').hidden = true; $('aim').toggleAttribute('hidden', true); $('power').hidden = true;
     $('hist').innerHTML = ''; showHint('Tippe aufs Feld, um vorzuspulen');
     await playEvents(r.events);
     G = r.state;
@@ -348,9 +352,10 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   // --- Tor von vorne: Schütze wählt die Ecke, Goalie rät ---
   // Punkte in Koordinaten der Grafik (360 x 260). Das Tor reicht von x 78 bis 282 und von y 88 bis 236.
   const START = [180, 290];
-  const POSE = { l: [-62, -22, -34, 1], r: [62, -22, 34, 1], m: [0, -6, 0, 1.12] };
-  const SAVE = { l: [108, 184], r: [252, 184], m: [180, 182] };
-  const AWAY = { l: [34, 70], r: [326, 70], m: [212, 40] };
+  // Goalie-Haltung pro Zone: Verschiebung, Drehung, Grösse
+  const POSE = { tl: [-56, -44, -40, 1], tr: [56, -44, 40, 1], bl: [-64, -4, -66, 1], br: [64, -4, 66, 1], tm: [0, -34, 0, 1.04], bm: [0, 4, 0, 1.14] };
+  const toScene = g => [180 + g[0] * 102, 236 - g[1] * 148];
+  const toGoalXY = p => [(p[0] - 180) / 102, (236 - p[1]) / 148];
   const K = () => $('goalview').clientWidth / 360;
   const ballTf = (p, s) => { const k = K(); return `translate(${((p[0] - 12) * k).toFixed(1)}px,${((p[1] - 12) * k).toFixed(1)}px) scale(${s})`; };
   const poseTf = (p, squash) => { const k = K(); return `translate(${(p[0] * k).toFixed(1)}px,${(p[1] * k).toFixed(1)}px) rotate(${p[2]}deg) scale(${p[3] * (squash || 1)})`; };
@@ -375,33 +380,32 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     $('shooter').innerHTML = `<b>${sco}</b><span>${esc(X.last)}<i>Schuss ${shotLabel(sco)}</i></span>`;
     $('shooter').hidden = false;
     setTag(sh.ctx === 'so' ? 'Penalty' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Dein Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
-    say(mine ? `Wohin schiesst ${X.last}? Tippe auf eine Ecke.` : `${X.last} zieht ab. Wohin springst du?`);
+    say(mine ? `Wische vom Ball dorthin, wo ${X.last} hinschiessen soll. Schnell wischen heisst hart.` : `${X.last} zieht ab. Wische in die Ecke, in die du springst.`);
     $('hist').innerHTML = (mine ? aimHistory() : shotHistory(X)) + `<em>${shotHint(sco, mine)}</em>`;
-    const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Sprung nach ') + b.textContent); });
+    const tell = $('tell'); tell.hidden = mine; if (!mine) tell.textContent = `${X.last} schaut ${SIDE[sh.tell]}`;
+    $('aim').toggleAttribute('hidden', true); $('power').hidden = true;
+    const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Sprung nach ') + ZNAME[b.getAttribute('data-z')]); });
     z.className = 'zones armed'; $('hint').hidden = true; idleHand();
     phase = 'aim';
   }
   async function shotSeq(e) {
-    const mine = e.side === 'you', ball = $('ball'), kp = $('keeper'), hi = Math.random() < 0.6;
-    const corner = { l: hi ? [102, 114] : [104, 214], r: hi ? [258, 114] : [256, 214], m: hi ? [180, 116] : [180, 222] };
-    let end, out = null, fadeOut = false;
-    if (e.result === 'goal') end = e.right ? { l: [96, 102], r: [264, 102], m: [180, 102] }[e.target] : corner[e.target];
-    else if (e.result === 'save') { end = SAVE[e.late ? e.target : e.guess]; out = AWAY[e.late ? e.target : e.guess]; }
-    else if (e.result === 'catch') end = SAVE[e.guess];
-    else if (e.miss === 'wide') { end = e.target === 'l' ? [52, 166] : [308, 166]; out = e.target === 'l' ? [14, 176] : [346, 176]; fadeOut = true; }
-    else if (e.miss === 'post') { end = e.target === 'l' ? [80, 150] : [280, 150]; out = e.target === 'l' ? [34, 252] : [326, 252]; }
-    else { end = [e.target === 'l' ? 138 : 222, 70]; out = [end[0], 34]; fadeOut = true; }
+    const mine = e.side === 'you', ball = $('ball'), kp = $('keeper'), land = toScene(e.land), gz = toScene(D.ZC[e.guess]);
+    let end = land, out = null, fadeOut = false;
+    if (e.result === 'save' || e.result === 'catch') {
+      end = e.right ? land : [(land[0] + gz[0]) / 2, (land[1] + gz[1]) / 2];       // er bekommt noch eine Hand an den Ball
+      if (e.result === 'save') out = [end[0] + (end[0] < 180 ? -95 : 95), Math.max(30, end[1] - 110)];
+    } else if (e.result === 'miss' && e.miss === 'post') {
+      end = Math.abs(e.land[0]) >= 1 ? [e.land[0] > 0 ? 282 : 78, Math.max(92, Math.min(232, land[1]))] : [Math.max(82, Math.min(278, land[0])), 88];
+      out = [end[0] + (end[0] < 180 ? -60 : 60), 252];
+    } else if (e.result === 'miss') { out = [land[0] + (land[0] - 180) * 0.35, land[1] - 30]; fadeOut = true; }
     $('shooter').hidden = true;
-    const where = { l: 'nach links', m: 'in die Mitte', r: 'nach rechts' };
-    say(mine ? `${card(e.side, e.x).last} schiesst ${where[e.target]}.` : `Du springst ${where[e.guess]}.`);
-    // Ausholen, Flug mit leichtem Bogen, der Goalie springt kurz nach dem Schuss
+    say(mine ? `${card(e.side, e.x).last} schiesst ${ZNAME[D.zoneOf(Math.max(-0.99, Math.min(0.99, e.target[0])), Math.max(0, Math.min(0.99, e.target[1])))]}${e.power > 0.7 ? ', hart' : e.power < 0.35 ? ', platziert' : ''}.` : `Du springst ${ZNAME[e.guess]}.`);
     const pre = [START[0], START[1] + 6], mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24];
+    const flight = Math.round(520 - 200 * e.power);      // harte Schüsse fliegen schneller
     await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(pre, 2.25) }], { duration: 130, easing: 'ease-out' });
-    const fly = anim(ball, [{ transform: ballTf(pre, 2.25) }, { transform: ballTf(mid, 1.45), offset: 0.5 }, { transform: ballTf(end, 0.95) }], { duration: 440, easing: 'cubic-bezier(.3,.6,.4,1)' });
-    await wait(70);
-    const pose = POSE[e.late ? e.target : e.guess];
-    if (e.late) await wait(120);
-    anim(kp, [{ transform: 'none' }, { transform: poseTf(pose) }], { duration: e.late ? 260 : 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    const fly = anim(ball, [{ transform: ballTf(pre, 2.25) }, { transform: ballTf(mid, 1.45), offset: 0.5 }, { transform: ballTf(end, 0.95) }], { duration: flight, easing: 'cubic-bezier(.3,.6,.4,1)' });
+    await wait(60);
+    anim(kp, [{ transform: 'none' }, { transform: poseTf(POSE[e.guess]) }], { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
     await fly;
     if (e.result === 'goal') {
       anim(ball, [{ transform: ballTf(end, 0.95) }, { transform: ballTf([end[0], end[1] + 6], 0.78) }], { duration: 160 });
@@ -428,27 +432,77 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     anim(el, [{ transform: 'scale(1.7)', color: side === 'you' ? '#10b981' : '#ef4444' }, { transform: 'scale(1)', color: '#e3ecff' }], { duration: 600 });
   }
   function shotStamp(e) {
-    const mine = e.side === 'you', goal = e.result === 'goal', X = card(e.side, e.x);
+    const mine = e.side === 'you', goal = e.result === 'goal', X = card(e.side, e.x), body = Math.abs(e.land[0]) < 0.3 && e.land[1] < 0.6;
     let main, sub;
-    if (goal) { main = 'Tor'; sub = mine ? (e.right ? 'Der Goalie ahnte die Ecke, aber der Schuss sitzt.' : 'Goalie in der falschen Ecke.') : (e.right ? `Richtig gesprungen, aber ${X.last} trifft trotzdem.` : 'Du bist in die falsche Ecke gesprungen.'); }
-    else if (e.result === 'save' && e.late) { main = 'Parade'; sub = mine ? `Goalie falsch, aber der Schuss von ${X.last} war zu schwach.` : `Falsch gesprungen, aber ${X.last} schiesst zu schwach.`; }
-    else if (e.result === 'save') { main = 'Parade'; sub = mine ? 'Der Goalie ahnte die Ecke.' : 'Richtig gesprungen.'; }
-    else if (e.result === 'catch') { main = 'Gefangen'; sub = mine ? 'Der Goalie ahnte die Ecke.' : 'Richtig gesprungen.'; }
-    else {
+    if (goal) { main = 'Tor'; sub = mine ? (e.right ? 'Der Goalie war dort, aber der Schuss war zu hart.' : e.near ? 'Knapp am Goalie vorbei.' : 'Goalie in der falschen Ecke.') : (e.right ? `Richtig gesprungen, aber ${X.last} schiesst zu hart.` : e.near ? 'Knapp vorbei, du warst nah dran.' : 'Du bist in die falsche Ecke gesprungen.'); }
+    else if (e.result === 'save' || e.result === 'catch') {
+      main = e.result === 'catch' ? 'Gefangen' : 'Parade';
+      sub = mine ? (e.right ? 'Der Goalie ahnte die Zone.' : body ? 'Direkt auf den Goalie.' : 'Der Goalie streckt sich und kommt noch hin.') : (e.right ? 'Richtig gesprungen.' : body ? 'Direkt auf dich.' : 'Gestreckt und noch hingekommen.');
+    } else {
+      const inside = Math.abs(e.target[0]) < 1 && e.target[1] < 1;
       main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss];
-      sub = mine ? (e.right ? 'Der Goalie stand ohnehin richtig.' : 'Der Goalie war geschlagen, knapp vorbei.') : (e.right ? 'Und du warst in der richtigen Ecke.' : 'Glück gehabt, du warst in der falschen Ecke.');
+      sub = mine ? (inside ? (e.power > 0.6 ? 'Zu hart geschossen, der Ball streute.' : 'Der Schuss streute zu stark.') : 'Zu weit nach aussen gezielt.') : 'Glück gehabt.';
     }
     stamp(main, sub, mine === goal ? 'good' : 'bad', 'top');
   }
 
-  // Schussstärke in Worten, damit man sie ohne Zahlenkenntnis einordnen kann
+  // Schussstärke in Worten. Die Streuung siehst du beim Wischen als Kreis um das Ziel.
   const shotLabel = v => v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach';
   function shotHint(v, mine) {
-    if (v >= 95) return mine ? 'Trifft oft auch, wenn der Goalie richtig rät.' : 'Auch richtig gesprungen hältst du ihn nur selten.';
-    if (v >= 88) return mine ? 'Rät der Goalie falsch, sitzt der Schuss fast immer.' : 'Richtig springen ist hier wichtig.';
-    if (v >= 80) return mine ? 'Der Goalie kommt manchmal noch hin.' : 'Selbst falsch gesprungen kommst du manchmal noch hin.';
-    return mine ? 'Schwacher Schütze: Die Mitte ist sicherer, die Ecke geht oft daneben.' : 'Schwacher Schütze: gute Chance auf eine Parade.';
+    if (v >= 95) return mine ? 'Streut kaum: hart in die Ecke ist stark.' : 'Trifft genau. Lies seinen Blick.';
+    if (v >= 88) return mine ? 'Streut wenig, hart schiessen geht noch.' : 'Präziser Schütze.';
+    if (v >= 80) return mine ? 'Streut mittel: ziele etwas nach innen.' : 'Streut mittel, er verfehlt ab und zu.';
+    return mine ? 'Streut stark: ziele nach innen und schiess weich.' : 'Ungenau: Er verfehlt oft.';
   }
+
+  // --- Wischen: Richtung = Ziel, Tempo = Härte. Antippen einer Zone geht auch, dann mit mittlerer Härte. ---
+  let drag = null, lastSwipe = 0;
+  const scenePt = ev => { const r = $('goalview').getBoundingClientRect(); return [(ev.clientX - r.left) / r.width * 360, (ev.clientY - r.top) / r.height * 260]; };
+  const speedToPower = v => Math.max(0, Math.min(1, (v - 0.25) / 1.2));
+  function aimPreview(p, power) {
+    const sh = G.cur.shot, mine = sh.side === 'you', X = card(sh.side, sh.x), from = mine ? [180, 270] : [180, 192];
+    $('aim').toggleAttribute('hidden', false);
+    ['x1', 'y1'].forEach((k, i) => $('aim-line').setAttribute(k, from[i]));
+    $('aim-line').setAttribute('x2', p[0].toFixed(1)); $('aim-line').setAttribute('y2', p[1].toFixed(1));
+    $('aim-dot').setAttribute('cx', p[0].toFixed(1)); $('aim-dot').setAttribute('cy', p[1].toFixed(1));
+    const sp = $('aim-spread'); sp.setAttribute('cx', p[0].toFixed(1)); sp.setAttribute('cy', p[1].toFixed(1));
+    sp.setAttribute('r', mine ? (D.spread(G, X, power) * 102 * 1.4).toFixed(1) : 0);
+    $('power').hidden = !mine; $('tell').hidden = true;
+    if (mine) $('power-bar').style.width = Math.round(power * 100) + '%';
+  }
+  $('stage').addEventListener('pointerdown', ev => {
+    if (phase !== 'aim') return;
+    ev.preventDefault();
+    const p = scenePt(ev); drag = { p0: p, x0: ev.clientX, y0: ev.clientY, t0: performance.now(), lx: ev.clientX, ly: ev.clientY, lt: performance.now(), v: 0 };
+    try { $('stage').setPointerCapture(ev.pointerId); } catch (e) { /* ohne Capture geht es auch */ }
+    aimPreview(p, 0);
+  });
+  $('stage').addEventListener('pointermove', ev => {
+    if (!drag || phase !== 'aim') return;
+    const now = performance.now(), dt = Math.max(1, now - drag.lt), v = Math.hypot(ev.clientX - drag.lx, ev.clientY - drag.ly) / dt;
+    drag.v = 0.7 * drag.v + 0.3 * v; drag.lx = ev.clientX; drag.ly = ev.clientY; drag.lt = now;
+    aimPreview(scenePt(ev), speedToPower(drag.v));
+  });
+  $('stage').addEventListener('pointerup', ev => {
+    if (!drag || phase !== 'aim') return;
+    const d = drag; drag = null; lastSwipe = Date.now();
+    const p = scenePt(ev), dist = Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0), avg = dist / Math.max(1, performance.now() - d.t0);
+    const mine = G.cur.shot.side === 'you', g = toGoalXY(p);
+    if (dist < 14) {                                     // nur getippt
+      const z = D.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1])));
+      aimAt(mine ? { target: D.ZC[z], power: 0.5 } : { zone: z });
+      return;
+    }
+    if (mine) aimAt({ target: g, power: speedToPower(Math.max(avg, d.v)) });
+    else aimAt({ zone: D.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1]))) });
+  });
+  $('stage').addEventListener('pointercancel', () => { drag = null; $('aim').toggleAttribute('hidden', true); $('power').hidden = true; });
+  // Tastatur und Screenreader: Zone antippen
+  $('zones').addEventListener('click', e => {
+    const b = e.target.closest('.zone'); if (!b || phase !== 'aim' || Date.now() - lastSwipe < 500) return;
+    const z = b.getAttribute('data-z');
+    aimAt(G.cur.shot.side === 'you' ? { target: D.ZC[z], power: 0.5 } : { zone: z });
+  });
 
   // --- Resultat ---
   function finish() {
@@ -472,7 +526,7 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   $('steps').innerHTML = [
     ['kombi', 'Karte und Zug', 'Wähle eine Karte, dann Direktschuss, Kombination oder Solo. In der Abwehr: Block, Passweg oder Zweikampf.'],
     ['zwei', 'Gelesen oder vorbei', 'Beide Wahlen werden gleichzeitig aufgedeckt. Liest der Verteidiger deinen Zug, ist der Angriff meist vorbei.'],
-    ['goal', 'Schuss', 'Du wählst die Ecke, der Goalie rät. In der Abwehr springst du selbst mit deinem Goalie.']
+    ['goal', 'Schuss', 'Wische vom Ball ins Tor: Richtung ist das Ziel, Tempo die Härte. Schwache Schützen streuen mehr. In der Abwehr wischst du den Sprung deines Goalies.']
   ].map(s => `<li>${ic(s[0], 'r')}<div><b>${s[1]}</b><p>${s[2]}</p></div></li>`).join('');
   $('btn-start').addEventListener('click', start);
   $('btn-again').addEventListener('click', start);
@@ -480,8 +534,7 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   $('opts').addEventListener('click', e => { const b = e.target.closest('button[data-opt]'); if (b) chooseOption(b.getAttribute('data-opt')); });
   $('btn-recard').addEventListener('click', recard);
   $('stage').addEventListener('click', e => {
-    const z = e.target.closest('.zone');
-    if (z) { if (phase === 'aim') aimAt(z.getAttribute('data-c')); return; }
+    if (e.target.closest('.zone') || phase === 'aim') return;
     if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake();
   });
   $('hint').addEventListener('click', () => { if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake(); });

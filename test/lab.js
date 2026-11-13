@@ -22,9 +22,16 @@ const OUT = path.join(__dirname, 'shots', 'lab'); fs.mkdirSync(OUT, { recursive:
       for (let guard = 0; guard < 600; guard++) {
         if (await vis('#screen-end')) { await snap('09-resultat', true); await over('Resultat'); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score')); break; }
         if (await p.evaluate(() => !document.querySelector('#zones').classList.contains('off'))) {
-          const mine = await p.evaluate(() => /Dein Schuss|Konter|Penalty/.test(document.getElementById('tag').textContent) && /schiesst/.test(document.getElementById('say').textContent));
+          const mine = await p.evaluate(() => /Wische vom Ball/.test(document.getElementById('say').textContent));
           await snap(mine ? '06-schuss-wahl' : '06-goalie-wahl'); await over('Tor');
-          await click('#zones .zone');
+          if (Math.random() < 0.7) {
+            // echte Wischgeste mit der Maus: vom Ball (oder Goalie) in eine zufällige Zone, mal schnell, mal langsam
+            const b = await p.locator('#goalview').boundingBox(), k = b.width / 360;
+            const from = mine ? [180, 262] : [180, 192], to = [100 + Math.random() * 160, 95 + Math.random() * 130], steps = Math.random() < 0.5 ? 4 : 18;
+            await p.mouse.move(b.x + from[0] * k, b.y + from[1] * k); await p.mouse.down();
+            for (let i = 1; i <= steps; i++) { await p.mouse.move(b.x + (from[0] + (to[0] - from[0]) * i / steps) * k, b.y + (from[1] + (to[1] - from[1]) * i / steps) * k); if (i === steps - 1) await snap(mine ? '06b-wischen' : '06b-wischen-goalie'); }
+            await p.mouse.up();
+          } else await click('#zones .zone');
           if (!run.reduce) { await p.waitForTimeout(330); await snap(mine ? '07-schuss-flug' : '07-goalie-flug'); await p.waitForTimeout(420); await snap('08-schuss-ende-' + (mine ? 'du' : 'halle')); }
           continue;
         }
