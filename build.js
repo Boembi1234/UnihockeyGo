@@ -13,3 +13,10 @@ const labOut = lab('page.html').replace('/*__ENGINE__*/', () => r('engine.js').t
 fs.mkdirSync(path.join(__dirname, 'dist', 'lab'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'lab', 'index.html'), labOut);
 console.log('dist/lab/index.html', labOut.length, 'Zeichen');
+// Match mit Schlüsselszenen unter /lab/match/: nutzt die Styles des Testduells
+const labCss = lab('page.html').match(/<style>([\s\S]*?)<\/style>/)[1];
+const matchOut = lab('match.html').replace('/*__LABCSS__*/', () => labCss).replace('/*__ENGINE__*/', () => r('engine.js').trim()).replace('/*__WORLD__*/', () => r('world.js').trim())
+  .replace('/*__MATCH__*/', () => lab('match.js').trim()).replace('/*__MUI__*/', () => lab('match-ui.js').trim());
+fs.mkdirSync(path.join(__dirname, 'dist', 'lab', 'match'), { recursive: true });
+fs.writeFileSync(path.join(__dirname, 'dist', 'lab', 'match', 'index.html'), matchOut);
+console.log('dist/lab/match/index.html', matchOut.length, 'Zeichen');

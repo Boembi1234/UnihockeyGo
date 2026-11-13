@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hallenkampf Match</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+/*__LABCSS__*/
+/* Match: Feld von oben mit allen zehn Spielern, darunter die Entscheidung und der Ticker. */
+.stage.match{height:auto;aspect-ratio:360/400;max-height:440px}
+.stage.match::before,.stage.match::after{display:none}
+.stage.match{background:#1440a6}
+#pitch{position:absolute;inset:0;width:100%;height:100%;display:block}
+#pitch .pl{cursor:default}
+#pitch .pl.pick{cursor:pointer}
+#pitch .pl.pick circle.body{stroke:#f7d774;stroke-width:3.5}
+#pitch .lab{font-family:'Saira Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;fill:#fff;text-transform:uppercase;paint-order:stroke;stroke:#050818;stroke-width:3px}
+#pitch .num{font-family:'Saira Condensed','Arial Narrow',sans-serif;font-weight:800;font-size:15px}
+.carrier-ring{animation:ring 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes ring{0%,100%{opacity:.95}50%{opacity:.35}}
+.time{font-weight:600;font-size:13px;letter-spacing:.1em;color:var(--mute)}
+.actions2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.act{min-height:76px;border:1px solid var(--gold);border-radius:12px;background:#101a45;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;padding:10px 12px;text-align:left;font-family:var(--display);text-transform:uppercase}
+.act:hover{background:#1b2a6b}
+.act:disabled{border-color:var(--line);opacity:.5}
+.act b{display:flex;align-items:center;gap:8px;font-weight:800;font-size:20px;letter-spacing:.05em;line-height:1}
+.act b .ic{color:var(--gold)}
+.act b .ic svg{width:24px;height:24px}
+.act small{font-family:var(--body);font-weight:500;font-size:12.5px;letter-spacing:0;text-transform:none;color:var(--mute);line-height:1.25}
+.act small em{font-style:normal;font-weight:700}
+.passes-head{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.passes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.pass{min-height:46px;border:1px solid var(--line);border-radius:10px;background:#070b1f;display:flex;align-items:center;gap:8px;padding:6px 10px;text-align:left;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.04em;text-transform:uppercase}
+.pass:hover{border-color:var(--mute)}
+.pass i{flex-shrink:0;width:10px;height:10px;border-radius:50%}
+.pass span{display:flex;flex-direction:column;gap:1px;line-height:1;min-width:0}
+.pass span small{font-family:var(--body);font-weight:500;font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--mute)}
+.r-low{background:#34d399}.r-mid{background:#f7d774}.r-high{background:#ef4444}
+.t-good{color:#34d399}.t-mid{color:#f7d774}.t-bad{color:#ff8a8a}
+.ticker{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute)}
+.ticker li{display:grid;grid-template-columns:34px 1fr;gap:6px;padding:4px 0;border-bottom:1px solid rgba(36,52,122,.7)}
+.ticker li b{font-family:var(--display);font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+.ticker li.goal span{color:var(--ice);font-weight:600}
+.opp{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;min-height:64px;border:1px solid var(--line);border-radius:12px;background:#101a45;padding:10px 12px;text-align:left}
+.opp.on{border-color:var(--gold);background:#1a1606}
+.opp b{font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.opp span{font-size:12.5px;color:var(--mute);grid-column:1}
+.opp i{grid-row:1 / span 2;grid-column:2;font-style:normal;font-family:var(--display);font-weight:800;font-size:28px;color:var(--gold)}
+.lineup{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.lineup li{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:10px;background:#070b1f;border:1px solid var(--line);font-family:var(--display);text-transform:uppercase;text-align:center}
+.lineup li b{font-weight:800;font-size:22px;color:var(--gold);line-height:1}
+.lineup li span{font-weight:800;font-size:12.5px;letter-spacing:.02em;line-height:1.05;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lineup li i{font-style:normal;font-weight:700;font-size:11px;letter-spacing:.1em;color:var(--mute)}
+.stage.match .goalview{width:min(126%,450px)}
+</style>
+</head>
+<body>
+<main id="app">
+
+<section id="screen-intro" class="screen">
+  <div class="brandrow"><span class="brand">PLAYMAKERZ</span><span class="lab">Testversion</span></div>
+  <h1 class="hero">Hallen<br><span>Match</span></h1>
+  <p class="lead">Ein ganzes Match mit deinen 5 Feldspielern. Das Spiel läuft, und in 12 Schlüsselszenen entscheidest du: schiessen, passen, dribbeln, und in der Abwehr, wie du stehst.</p>
+  <div class="panel">
+    <p class="group-label">Deine Linie</p>
+    <ul class="lineup" id="lineup"></ul>
+  </div>
+  <div class="panel">
+    <p class="group-label">Gegner wählen</p>
+    <div class="screen" id="opps"></div>
+    <p class="note">Je stärker der Gegner, desto mehr Szenen musst du verteidigen.</p>
+  </div>
+  <button class="cta" id="btn-start" type="button">Anpfiff</button>
+  <p class="note">Nur zum Ausprobieren: Standort, Vereine, Fouls und Taktiken fehlen hier. Bei Unentschieden gibt es Penaltys. Das <a class="link" href="../">Testduell</a> gibt es weiterhin.</p>
+</section>
+
+<section id="screen-match" class="screen" hidden>
+  <div class="sb">
+    <div class="sb-side"><span class="sb-lbl">Du</span><span class="sb-num" id="sc-you">0</span></div>
+    <div class="sb-mid"><span class="sb-period" id="sc-period">1. Drittel</span><span class="time" id="sc-time"></span><span class="dots" id="dots" aria-hidden="true"></span></div>
+    <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club"></span></div>
+  </div>
+  <div class="stage match" id="stage">
+    <svg id="pitch" viewBox="0 0 360 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <rect x="-200" y="-50" width="760" height="500" fill="#1440a6"/>
+      <path d="M0 14 H360" stroke="#ffffff" stroke-opacity=".85" stroke-width="4"/>
+      <rect x="132" y="22" width="96" height="84" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+      <rect x="157" y="40" width="46" height="18" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+      <path d="M100 40 H260" stroke="#ffffff" stroke-opacity=".22" stroke-width="1.5"/>
+      <path d="M165 40 V28 H195 V40" fill="rgba(255,255,255,.12)" stroke="#e2231a" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M0 398 H360" stroke="#ffffff" stroke-opacity=".4" stroke-width="2"/>
+      <circle cx="180" cy="398" r="40" fill="none" stroke="#ffffff" stroke-opacity=".3" stroke-width="2"/>
+      <circle cx="70" cy="150" r="3" fill="#ffffff" fill-opacity=".4"/><circle cx="290" cy="150" r="3" fill="#ffffff" fill-opacity=".4"/>
+      <g id="lanes"></g>
+      <circle id="gk" cx="180" cy="52" r="12" stroke-width="2.5"/>
+      <g id="pls"></g>
+      <circle id="mball" r="6" fill="#ffffff" stroke="#c4cde6" stroke-width="1.5"/>
+    </svg>
+    <div class="vignette" id="vignette"></div>
+    <div class="goalview" id="goalview" hidden>
+      <svg viewBox="0 0 360 260" aria-hidden="true">
+        <defs>
+          <radialGradient id="spot" cx="50%" cy="85%" r="75%"><stop offset="0" stop-color="#22357a"/><stop offset="1" stop-color="#0a1235"/></radialGradient>
+          <linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#21499f"/><stop offset="1" stop-color="#16409e"/></linearGradient>
+          <pattern id="mesh" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 0 L10 10 M10 0 L0 10" stroke="#ffffff" stroke-opacity=".32" stroke-width="1"/></pattern>
+          <pattern id="meshb" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0 L8 8 M8 0 L0 8" stroke="#ffffff" stroke-opacity=".2" stroke-width=".8"/></pattern>
+        </defs>
+        <rect width="360" height="135" fill="url(#spot)"/>
+        <rect x="0" y="135" width="360" height="125" fill="url(#fl)"/>
+        <rect x="0" y="118" width="360" height="22" fill="#e6ecfb"/>
+        <g fill="#1a57ff"><rect x="8" y="122" width="54" height="14"/><rect x="298" y="122" width="54" height="14"/></g>
+        <g fill="#0e1b47"><rect x="70" y="122" width="40" height="14"/><rect x="250" y="122" width="40" height="14"/></g>
+        <path d="M0 236 H360" stroke="#ffffff" stroke-opacity=".7" stroke-width="2"/>
+        <path d="M40 260 L64 236 M320 260 L296 236" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+        <polygon points="96,104 264,104 270,224 90,224" fill="#0b1640" fill-opacity=".55"/>
+        <polygon points="96,104 264,104 270,224 90,224" fill="url(#meshb)"/>
+        <polygon points="78,88 96,104 90,224 78,236" fill="url(#meshb)"/>
+        <polygon points="282,88 264,104 270,224 282,236" fill="url(#meshb)"/>
+        <polygon points="78,88 282,88 264,104 96,104" fill="url(#meshb)"/>
+        <rect x="78" y="88" width="204" height="148" fill="url(#mesh)"/>
+        <path d="M78 236 V88 H282 V236" fill="none" stroke="#e2231a" stroke-width="7" stroke-linejoin="round"/>
+      </svg>
+      <div class="ripple" id="ripple" hidden></div>
+      <div class="spark" id="spark" hidden></div>
+      <div class="keeper" id="keeper"></div>
+      <div class="ball" id="ball" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#c4cde6" stroke-width="1"/><g fill="#9aa6c6"><circle cx="12" cy="6" r="1.8"/><circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9" cy="15.5" r="1.8"/><circle cx="15" cy="15.5" r="1.8"/><circle cx="12" cy="11.5" r="1.5"/></g></svg></div>
+      <div class="zones off" id="zones">
+        <button class="zone" type="button" data-z="tl"></button><button class="zone" type="button" data-z="tm"></button><button class="zone" type="button" data-z="tr"></button>
+        <button class="zone" type="button" data-z="bl"></button><button class="zone" type="button" data-z="bm"></button><button class="zone" type="button" data-z="br"></button>
+      </div>
+      <svg class="aim" id="aim" viewBox="0 0 360 260" aria-hidden="true" hidden>
+        <line id="aim-line" x1="180" y1="270" x2="180" y2="160" stroke="#f7d774" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round"/>
+        <circle id="aim-spread" cx="180" cy="160" r="20" fill="rgba(247,215,116,.16)" stroke="#f7d774" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <circle id="aim-dot" cx="180" cy="160" r="5" fill="#f7d774" stroke="#1a1203" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div class="shooter" id="shooter" hidden></div>
+    <div class="tell" id="tell" hidden></div>
+    <div class="power" id="power" hidden><span>Härte</span><b><i id="power-bar"></i></b></div>
+    <div class="stamp" id="stamp" hidden><b></b><span></span></div>
+  </div>
+  <div class="prompt">
+    <div class="row"><span class="tag you" id="tag">Angriff</span><p class="say" id="say"></p></div>
+    <p class="sr" id="live" aria-live="polite"></p>
+    <div class="hist" id="hist"></div>
+  </div>
+  <div class="choices" id="panel"></div>
+  <div class="hint" id="hint" hidden><span id="hint-text">Tippe aufs Feld, um vorzuspulen</span><span class="bar"><i id="hint-bar"></i></span></div>
+  <div class="panel"><p class="group-label">Ticker</p><ul class="ticker" id="ticker"></ul></div>
+</section>
+
+<section id="screen-end" class="screen" hidden>
+  <div class="brandrow"><span class="brand">PLAYMAKERZ</span><span class="lab">Testversion</span></div>
+  <h2 class="res-title" id="res-title"></h2>
+  <div class="res-score" id="res-score"></div>
+  <p class="res-sub" id="res-sub"></p>
+  <div class="panel">
+    <p class="group-label">So lief es</p>
+    <ul class="stats" id="stats"></ul>
+  </div>
+  <div class="actions">
+    <button class="cta" id="btn-again" type="button">Nochmals spielen</button>
+    <button class="ghost" id="btn-other" type="button">Anderen Gegner wählen</button>
+    <a class="ghost" href="../">Zum Testduell</a>
+  </div>
+  <div class="panel"><p class="group-label">Ticker</p><ul class="ticker" id="ticker-end"></ul></div>
+</section>
+
+</main>
+<script id="hk-engine">
+/*__ENGINE__*/
+</script>
+<script id="hk-world">
+/*__WORLD__*/
+</script>
+<script id="hk-match">
+/*__MATCH__*/
+</script>
+<script id="hk-mui">
+/*__MUI__*/
+</script>
+</body>
+</html>
