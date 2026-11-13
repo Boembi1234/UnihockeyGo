@@ -6,18 +6,21 @@ Der Prototyp ist eine einzelne HTML-Datei ohne Server. Standort, Check-in und al
 
 ## Stand
 
-Etappe 1 von 4 ist umgesetzt: die Duell-Engine. Es folgen die 2D-Animation, Vereine mit Hallenverteidigung und das Spiel gegen Freunde mit Elo.
+Etappe 2 von 4 ist umgesetzt: die Duell-Engine und die 2D-Animation jeder Stufe. Es folgen Vereine mit Hallenverteidigung und das Spiel gegen Freunde mit Elo.
+
+Live: <https://unihockeygo.netlify.app>
 
 ## Aufbau
 
 | Pfad | Inhalt |
 | --- | --- |
 | `src/engine.js` | Spiel-Engine: Regeln, Zufall und KI der Halle als reine Funktionen. Alle Stellschrauben stehen in `CFG`. |
+| `src/scene.js` | 2D-Szenen von oben: eine kurze Szene pro Ereignis der Engine, nur HTML und CSS, keine Bilder |
 | `src/ui.js` | Oberfläche. Rechnet nichts selbst aus, sondern zeigt, was die Engine zurückgibt. |
 | `src/page.html` | Markup und Styles |
 | `build.js` | Setzt daraus `dist/index.html` zusammen |
 | `sim/` | Simulation zum Kalibrieren. Lädt die Engine aus `dist/index.html`, also denselben Code wie das Spiel. |
-| `test/` | Regelprüfungen der Engine und automatisches Durchspielen im Browser |
+| `test/` | Regelprüfungen der Engine, automatisches Durchspielen im Browser, Standbilder und Dauer der Szenen |
 
 ## Befehle
 
@@ -41,7 +44,22 @@ node test/engine.test.js
 node test/play.js
 ```
 
+```bash
+node test/scenes.js
+```
+
+```bash
+node test/timing.js
+```
+
 `--legacy` rechnet die alten Regeln (ein Wurf pro Duell) mit denselben Spielweisen, als Vergleich. Einzelne Werte lassen sich mit `--set` übersteuern, zum Beispiel `--set s3Base=0.66`. Die Browser-Tests brauchen Playwright mit Chromium.
+
+## Animation
+
+- **Dauer:** Ein normales Duell läuft 1.8 Sekunden, mit Konter 2.4, mit Freischlag bis 2.7. Längere Ketten werden auf 3.4 Sekunden gestaucht.
+- **Überspringen:** Ein Tipp aufs Feld springt zum Endbild der Sequenz.
+- **Reduzierte Bewegung:** Jede Stufe zeigt nur Start- und Endbild.
+- **Lesen:** Die Bewegung des Verteidigers zeigt, ob er den Zug gelesen hat: früh an der richtigen Stelle oder sichtbar in die falsche Richtung.
 
 ## Engine
 

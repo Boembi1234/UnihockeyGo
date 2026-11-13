@@ -126,9 +126,9 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 .r-goal{position:absolute;left:43%;width:14%;height:6px;background:#fff}
 .r-goal.top{top:0}
 .r-goal.bot{bottom:0}
-.keeper{position:absolute;left:50%;width:24px;height:24px;margin-left:-12px;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;line-height:1;z-index:1}
-.keeper.top{top:9px;background:#1b2033;border-color:var(--gold);color:var(--gold)}
-.keeper.bot{bottom:9px;background:var(--blue);color:#fff}
+.keeper{position:absolute;left:50%;width:24px;height:24px;border-radius:50%;border:2px solid #fff;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;line-height:1;z-index:1}
+.keeper.top{top:5.6%;background:#1b2033;border-color:var(--gold);color:var(--gold)}
+.keeper.bot{top:94.4%;background:var(--blue);color:#fff}
 .keeper.off{background:transparent;border-style:dashed;color:rgba(255,255,255,.6)}
 .rink.hit-top-you .r-crease.top{background:rgba(16,185,129,.55)}
 .rink.hit-bot-home .r-crease.bot{background:rgba(239,68,68,.55)}
@@ -161,8 +161,17 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 .empty{width:150px;height:204px;border:2px dashed rgba(255,255,255,.55);background:rgba(5,8,24,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-family:var(--display);text-transform:uppercase;text-align:center}
 .empty b{font-weight:800;font-size:54px;line-height:.8;color:rgba(255,255,255,.75)}
 .empty span{font-weight:700;font-size:14px;letter-spacing:.12em;color:#fff}
-.ball{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,#fff 45%,#cfd8ee 100%);box-shadow:0 3px 6px rgba(0,0,0,.5),inset -2px -2px 0 rgba(0,0,0,.12);z-index:3}
-.ball::after{content:"";position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle,#5c6b96 0 1.3px,rgba(0,0,0,0) 1.6px);background-size:5px 5px}
+.ball{position:absolute;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 35% 30%,#fff 0%,#fff 50%,#cfd8ee 100%);box-shadow:0 2px 4px rgba(0,0,0,.55);z-index:3}
+/* 2D-Szene: Figuren als Kreise in Trikotfarbe mit Rückennummer. Während einer Sequenz weichen die Karten dem Feld. */
+.scene{position:absolute;inset:0;z-index:2;pointer-events:none}
+.slot{transition:opacity .15s}
+.rink.play .slot{opacity:0;visibility:hidden}
+.fig{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid #fff;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:15px;line-height:1;text-transform:uppercase;box-shadow:0 3px 6px rgba(0,0,0,.45)}
+.fig.you{background:var(--blue);color:#fff}
+.fig.home{background:#1b2033;border-color:var(--gold);color:var(--gold)}
+.fig span{position:absolute;left:50%;top:100%;margin-top:3px;transform:translateX(-50%);font-weight:700;font-size:10px;letter-spacing:.08em;color:#fff;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.fig.faint{width:24px;height:24px;border-style:dashed;opacity:.5;box-shadow:none}
+.fig.bench span{color:var(--gold)}
 .flash{position:absolute;left:50%;top:50%;z-index:4;transform:translate(-50%,-50%) skewX(-8deg);padding:4px 20px 2px;font-family:var(--display);font-weight:800;font-size:52px;line-height:1;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;animation:pop .28s cubic-bezier(.2,1.4,.4,1)}
 .flash.you{background:var(--goal);color:#03130c}
 .flash.home{background:var(--against);color:#fff}
@@ -170,7 +179,7 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 .flash.warn{background:var(--gold);color:#1a1203;font-size:38px}
 @keyframes pop{from{transform:translate(-50%,-50%) skewX(-8deg) scale(.6);opacity:0}to{transform:translate(-50%,-50%) skewX(-8deg) scale(1);opacity:1}}
 
-.dialog{min-height:78px;background:#070b1f;border:2px solid var(--ice);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dialog{min-height:90px;background:#070b1f;border:2px solid var(--ice);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .dialog p{flex:1;font-size:15px;font-weight:500;line-height:1.4}
 .next{flex-shrink:0;height:44px;padding:0 18px;border:0;border-radius:8px;background:var(--gold);color:#1a1203;font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.1em;text-transform:uppercase}
 .next:hover{background:#ffe9a0}
@@ -320,6 +329,7 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
     <div class="keeper top" id="keeper-home" aria-hidden="true">G</div><div class="keeper bot" id="keeper-you" aria-hidden="true">G</div>
     <div class="slot home" id="slot-home"></div>
     <div class="slot you" id="slot-you"></div>
+    <div class="scene" id="scene" hidden></div>
     <div class="ball" id="ball" hidden></div>
     <div class="flash" id="flash" hidden></div>
   </div>
@@ -333,7 +343,7 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
   <div class="hand" id="hand"></div>
   <div class="opts" id="opts" hidden></div>
   <button class="ghost" id="btn-recard" type="button" hidden>Andere Karte wählen</button>
-  <p class="hint">Der Balken zeigt die Ausdauer. Müde Karten spielen schwächer, unter 20 setzen sie aus. Tippe aufs Feld, um eine laufende Sequenz zu überspringen.</p>
+  <p class="hint">Der Balken zeigt die Ausdauer. Müde Karten spielen schwächer, unter 20 setzen sie aus. Tippe aufs Feld, um zum Ende einer laufenden Sequenz zu springen.</p>
 </section>
 
 <section id="screen-result" class="screen" hidden>
@@ -369,6 +379,9 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 </main>
 <script id="hk-engine">
 /*__ENGINE__*/
+</script>
+<script id="hk-scene">
+/*__SCENE__*/
 </script>
 <script id="hk-ui">
 /*__UI__*/

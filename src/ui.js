@@ -1,10 +1,9 @@
 /* Oberfläche. Rechnet nichts selbst aus: Jede Eingabe geht an HK.act, angezeigt wird, was die Engine zurückgibt. */
 (function () {
   'use strict';
-  const E = window.HK;
+  const E = window.HK, Scene = window.HKScene;
   const $ = id => document.getElementById(id);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
   const pct = p => Math.round(p * 100);
@@ -19,13 +18,7 @@
   const S = { hall: null, squad: [], capId: null, g: null, phase: 'idle', pick: null, shown: null, penView: false, skip: false, token: 0,
     rng: E.makeRng((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0) };
 
-  let wake = null;
-  const sleep = ms => new Promise(r => {
-    if (reduce || S.skip) { setTimeout(r, reduce ? Math.min(ms, 30) : 0); return; }
-    const t = setTimeout(() => { wake = null; r(); }, ms);
-    wake = () => { clearTimeout(t); wake = null; r(); };
-  });
-  function skip() { if (S.phase === 'resolving' || S.phase === 'pen-resolving') { S.skip = true; if (wake) wake(); } }
+  function skip() { if (S.phase === 'resolving' || S.phase === 'pen-resolving') { S.skip = true; Scene.skip(); } }
 
   const eff = E.eff, defVal = E.defVal, bestMove = E.bestMove, tendency = E.tendency, period = E.period;
   const card = (side, id) => E.card(S.g, side, id);
@@ -253,21 +246,15 @@ ${hpBlock(h)}
     });
   }
 
-  // --- Ball und Einblendung. Etappe 2 ersetzt das durch die 2D-Szenen. ---
-  const place = (ball, p) => { ball.style.left = p[0] + '%'; ball.style.top = p[1] + '%'; };
-  async function shot(side, goal) {
-    const ball = $('ball');
-    const from = side === 'home' ? [72, 36] : [28, 64], goalPos = side === 'home' ? [50, 98] : [50, 2];
-    const block = side === 'home' ? [30, 58] : [70, 42], out = side === 'home' ? [6, 40] : [94, 60];
-    ball.style.transition = 'none'; ball.style.opacity = '1'; place(ball, from); ball.hidden = false;
-    if (reduce || S.skip) { place(ball, goal ? goalPos : block); return; }
-    await frame();
-    ball.style.transition = 'left .5s cubic-bezier(.4,0,.6,1), top .5s cubic-bezier(.4,0,.6,1)';
-    place(ball, goal ? goalPos : block);
-    await sleep(520);
-    if (!goal && !S.skip) { ball.style.transition = 'left .35s ease-out, top .35s ease-out, opacity .35s'; place(ball, out); ball.style.opacity = '0'; await sleep(360); }
+  // Während einer Sequenz wechselt der Text sofort, getippt wird nur bei Fragen an den User.
+  function tell(text) { S.token++; $('say').textContent = text; $('say-sr').textContent = text; }
+
+  // --- Einblendung und Spielstand ---
+  // Die Einblendung steht in der Feldhälfte, in der gerade nichts passiert.
+  function flash(text, cls, where) {
+    const f = $('flash'), low = where ? where === 'unten' : Scene.ballY() < 50;
+    f.className = 'flash ' + cls; f.textContent = text; f.style.top = (low ? 81 : 19) + '%'; f.hidden = false;
   }
-  function flash(text, cls) { const f = $('flash'); f.className = 'flash ' + cls; f.textContent = text; f.hidden = false; }
   function scored(side) {
     S.shown[side]++;
     $('sc-you').textContent = S.shown.you; $('sc-home').textContent = S.shown.home;
@@ -282,8 +269,6 @@ ${hpBlock(h)}
 
   // --- Texte zu den Ereignissen der Engine ---
   const WITH = { direkt: 'einem Direktschuss', kombi: 'einer Kombination', solo: 'einem Solo' };
-  const STOP = { direkt: 'Geblockt', kombi: 'Abgefangen', solo: 'Gestohlen' };
-  const MISS = { wide: 'Daneben', high: 'Drüber', post: 'Pfosten' };
   const team = side => side === 'you' ? 'dich' : S.hall.short;
   function line(e) {
     const o = E.other;
@@ -319,30 +304,35 @@ ${hpBlock(h)}
     if (e.t === 'ppend') return 'Tor in Überzahl. Die Strafe gegen ' + last(e.side, e.x) + ' ist vorbei.';
     return '';
   }
+  function penLine(e) {
+    const name = byId(CORNERS, e.corner).name.toLowerCase(), high = !e.ok && !e.right && e.corner === 'm';
+    return last(e.side, e.x) + ' schiesst ' + (e.corner === 'm' ? 'in die Mitte' : 'nach ' + name) + '. ' + (e.side === 'home' ? 'Dein Goalie' : 'Der Goalie')
+      + (e.right ? ' ist in der richtigen Ecke. ' : ' springt falsch. ') + (e.ok ? 'Tor für ' + team(e.side) + '.' : e.right ? 'Gehalten.' : high ? 'Drüber.' : 'Daneben.');
+  }
+  // Spielt die Ereignisse als Szenen ab. Jede Szene meldet, wann ihr Satz, ihre Einblendung und ein Tor sichtbar werden.
   async function playEvents(events) {
+    const beats = [];
+    Scene.plan(events);
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       if (e.t === 'box') continue;
       $('flash').hidden = true;
-      if (e.t === 'pen') {
-        const name = byId(CORNERS, e.corner).name.toLowerCase();
-        await say(last(e.side, e.x) + ' schiesst ' + (e.corner === 'm' ? 'in die Mitte' : 'nach ' + name) + '. ' + (e.side === 'home' ? 'Dein Goalie' : 'Der Goalie') + (e.right ? ' ist in der richtigen Ecke.' : ' springt falsch.'));
-        await sleep(450);
-        await shot(e.side, e.ok);
-        if (e.ok) { if (e.so) flash('Tor', e.side); else scored(e.side); } else flash('Gehalten', 'save');
-        await say(e.ok ? 'Tor für ' + team(e.side) + '.' : 'Gehalten.');
-        await sleep(350);
+      if (e.t === 'reveal') {
+        const t = line(e); beats.push(t); tell(t);
+        await Scene.start({ side: e.side, a: card(e.side, e.a), d: card(E.other(e.side), e.d) });
         continue;
       }
-      await say(line(e));
-      if (e.t === 'reveal') { await sleep(520); continue; }
-      if (e.t === 'foul') flash(e.kind === 'penalty' ? 'Penalty' : e.kind === 'twomin' ? '2 Minuten' : 'Foul', 'warn');
-      else if (e.t === 'counter') flash('Konter', 'warn');
-      else if (e.t === 's1' && !e.ok) { await shot(e.side, false); flash(STOP[e.move], 'save'); }
-      else if (e.t === 's2' && !e.ok) { await shot(e.side, false); flash(MISS[e.miss], 'save'); }
-      else if (e.t === 's3') { await shot(e.side, e.ok); if (e.ok) scored(e.side); else flash('Parade', 'save'); }
-      await sleep(e.t === 's2' && e.ok ? 380 : 680);
+      const text = e.t === 'pen' ? penLine(e) : line(e);
+      if (e.t === 'pen') tell(last(e.side, e.x) + ' läuft an.');
+      await Scene.play(e, {
+        text: () => { if (text) { beats.push(text); tell(text); } },
+        label: flash,
+        goal: side => { if (e.so) flash('Tor', side); else scored(side); }
+      });
     }
+    // Am Schluss bleiben die zwei letzten Sätze stehen, damit man nachlesen kann, was eben schnell ablief.
+    const keep = beats.filter(b => b !== 'Der Schuss kommt aufs Tor.');
+    if (keep.length) tell(keep.slice(-2).join(' '));
   }
 
   // --- match flow ---
@@ -352,12 +342,12 @@ ${hpBlock(h)}
       you: { goalie: USER.goalie, cards: S.squad.map(id => byId(COLLECTION, id)) },
       home: { goalie: S.hall.goalie, cards: S.hall.guard.map(c => Object.assign({}, c, { stam: 100, box: 0, home: true })) } }, S.rng);
     S.pick = null; S.shown = null; S.penView = false; S.skip = false; S.phase = 'idle';
-    $('btn-next').hidden = true; $('flash').hidden = true; $('ball').hidden = true;
+    $('btn-next').hidden = true;
     show('match'); announceDuel();
   }
   function announceDuel() {
     const g = S.g, cur = g.cur;
-    $('flash').hidden = true; $('ball').hidden = true; $('rink').className = 'rink';
+    $('flash').hidden = true; $('rink').className = 'rink'; Scene.clear();
     S.pick = null; S.penView = false; S.skip = false; S.phase = 'card'; refresh();
     const pre = g.duel === 0 ? 'Anpfiff. ' : (g.duel % 4 === 0 ? period(g.duel) + '. Drittel. ' : '');
     if (cur.side === 'home') { const a = card('home', cur.attacker); say(pre + a.first + ' ' + a.last + ' greift an. Mit wem verteidigst du?'); }
@@ -386,17 +376,20 @@ ${hpBlock(h)}
   async function run(action) {
     const r = E.act(S.g, action, S.rng);
     if (!r.ok) return;
-    const so = !!S.g.cur.so;
+    const cur = S.g.cur, so = !!cur.so;
     S.phase = so || S.penView ? 'pen-resolving' : 'resolving';
     S.shown = { you: S.g.score.you, home: S.g.score.home };
-    if (action.type === 'play') { const cur = S.g.cur; if (cur.side === 'home') S.pick = action.card; }
+    if (action.type === 'play' && cur.side === 'home') S.pick = action.card;
     refresh();
+    if (so) { Scene.penSetup(cur.side, card(cur.side, cur.side === 'home' ? cur.attacker : action.card)); await Scene.wait(reduce ? 0 : 220); }
     await playEvents(r.events);
     S.g = r.state; S.shown = null;
     const g = S.g;
     if (g.phase === 'penalty') {
       const A = card(g.cur.side, g.cur.pen.shooter);
-      S.penView = true; S.skip = false; S.phase = g.cur.side === 'home' ? 'pen-guess' : 'pen-corner'; $('flash').hidden = true; $('ball').hidden = true; refresh();
+      await Scene.wait(reduce ? 0 : 550);
+      S.penView = true; S.skip = false; S.phase = g.cur.side === 'home' ? 'pen-guess' : 'pen-corner'; $('flash').hidden = true;
+      Scene.penSetup(g.cur.side, A); refresh();
       say(g.cur.side === 'home' ? A.first + ' ' + A.last + ' läuft zum Penalty an. In welche Ecke springt dein Goalie?' : 'Penalty für dich. ' + A.last + ' läuft an. Wohin schiesst du?');
       return;
     }
@@ -423,7 +416,7 @@ ${hpBlock(h)}
   // --- penalty shootout ---
   function announceShot(first) {
     const g = S.g, cur = g.cur;
-    $('flash').hidden = true; $('ball').hidden = true; $('rink').className = 'rink';
+    $('flash').hidden = true; $('rink').className = 'rink'; Scene.clear();
     S.pick = null; S.penView = false; S.skip = false;
     if (cur.side === 'home') {
       const a = card('home', cur.attacker);
@@ -447,7 +440,7 @@ ${hpBlock(h)}
     return g.log.map(l => {
       if (l.so) {
         const e = l.steps[0];
-        return `<li><span>Penalty ${who(l.side)}: <b>${esc(last(l.side, l.a))}</b>, ${corner(e.corner)}, Goalie ${e.right ? 'richtig' : 'falsch'}</span><span>${pct(e.p)}% · ${e.ok ? res(l.side, 'Tor') : 'gehalten'}</span></li>`;
+        return `<li><span>Penalty ${who(l.side)}: <b>${esc(last(l.side, l.a))}</b>, ${corner(e.corner)}, Goalie ${e.right ? 'richtig' : 'falsch'}</span><span>${pct(e.p)}% · ${e.ok ? res(l.side, 'Tor') : (e.right ? 'gehalten' : 'daneben')}</span></li>`;
       }
       n++;
       const head = `<li><span>${n}. ${who(l.side)}: <b>${esc(last(l.side, l.a))}</b> gegen <b>${esc(last(o(l.side), l.d))}</b>, ${E.move(l.move).short}${l.read ? ', gelesen' : ''}</span><span></span></li>`;
@@ -462,7 +455,7 @@ ${hpBlock(h)}
         else if (e.t === 'free') { a = 'Freischlag ' + who(e.side) + ': ' + esc(last(e.side, e.x)) + (e.short ? ', kurz gespielt' : ', direkt'); }
         else if (e.t === 's2') { a = 'Stufe 2: ' + (e.ok ? 'aufs Tor' : { wide: 'daneben', high: 'drüber', post: 'Pfosten' }[e.miss]); b = pct(e.p) + '% aufs Tor'; }
         else if (e.t === 's3') { a = 'Stufe 3: ' + (e.ok ? res(e.side, e.empty ? 'Tor ins leere Tor' : 'Tor') : 'Parade'); b = e.empty ? 'kein Goalie' : pct(e.p) + '% Tor'; }
-        else if (e.t === 'pen') { a = 'Penalty ' + who(e.side) + ': ' + corner(e.corner) + ', Goalie ' + (e.right ? 'richtig' : 'falsch') + ', ' + (e.ok ? res(e.side, 'Tor') : 'gehalten'); b = pct(e.p) + '% Tor'; }
+        else if (e.t === 'pen') { a = 'Penalty ' + who(e.side) + ': ' + corner(e.corner) + ', Goalie ' + (e.right ? 'richtig' : 'falsch') + ', ' + (e.ok ? res(e.side, 'Tor') : (e.right ? 'gehalten' : 'daneben')); b = pct(e.p) + '% Tor'; }
         else if (e.t === 'ppend') { a = 'Tor in Überzahl: Strafe gegen ' + esc(last(e.side, e.x)) + ' beendet'; }
         return `<li class="sub"><span>${a}</span><span>${b}</span></li>`;
       }).join('');
@@ -496,7 +489,7 @@ ${hpBlock(h)}
     $('rw-dmg-val').textContent = '−' + Math.round(15 * factor);
     $('btn-again').hidden = h.mine;
     $('log').innerHTML = logHtml();
-    S.phase = 'idle';
+    S.phase = 'idle'; Scene.clear(); $('flash').hidden = true;
     setHp(h, before); show('result');
   }
   function takeReward(kind) {
