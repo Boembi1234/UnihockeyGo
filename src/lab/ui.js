@@ -2,7 +2,7 @@
    Bewegung: Web Animations. Antippen des Felds spult die laufende Sequenz vor, reduzierte Bewegung zeigt nur Start- und Endbild. */
 (function () {
   'use strict';
-  const E = window.HK, W = window.HKWorld, D = window.HKDuel;
+  const E = window.HK, W = window.HKWorld, D = window.HKDuel, F = window.HKField;
   const $ = id => document.getElementById(id);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
@@ -50,6 +50,7 @@
     fast = true;
     document.getAnimations().forEach(a => { try { if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch (e) { /* läuft nicht */ } });
     if (wake) wake();
+    F.skip();
   }
 
   // --- Karte wie im Prototyp ---
@@ -138,13 +139,29 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   }
 
   // --- Hand und Wahl ---
+  // Matchup in Pfeilen: positiv heisst Vorteil für dich
+  function edge(d) {
+    const t = d >= 6 ? ['▲▲', 'Vorteil', 'up'] : d >= 2 ? ['▲', 'Vorteil', 'up'] : d > -2 ? ['=', 'Gleich', 'even'] : d > -6 ? ['▼', 'Nachteil', 'down'] : ['▼▼', 'Nachteil', 'down'];
+    return { arrows: t[0], text: t[1], cls: t[2] };
+  }
+  // Vorteil deiner Karte c im aktuellen Duell: im Angriff mit ihrem besten Zug gegen diesen Verteidiger, in der Abwehr gegen den Lieblingszug des Angreifers.
+  function bestEdge(c) {
+    if (G.cur.pen || !(G.cur.side === 'you' ? G.cur.defender : G.cur.attacker)) return null;   // Penaltyschiessen: kein Gegenspieler
+    if (G.cur.side === 'you') {
+      const Dc = card('home', G.cur.defender), m = E.MOVES.map(x => [x.id, D.matchup(c, x.id, Dc)]).sort((a, b) => b[1] - a[1])[0];
+      return { move: m[0], d: m[1] };
+    }
+    const A = card('home', G.cur.attacker), fav = E.bestMove(A).id;
+    return { move: fav, d: -D.matchup(A, fav, c) };
+  }
   function renderHand() {
     const att = G.cur.side === 'you', ok = D.usable(G, 'you');
     $('hand').innerHTML = G.teams.you.cards.map(c => {
-      const can = ok.indexOf(c) !== -1, m = E.bestMove(c), def = Math.round(E.eff(E.defVal(c), c));
-      const info = !can ? '<span class="m-info tired">Müde, setzt aus</span>' : att ? `<span class="m-info">${ic(m.id)}Schuss ${Math.round(E.eff(c.sco, c))}</span>` : `<span class="m-info">${ic('shield')}Abwehr ${def}</span>`;
-      const label = `${c.first} ${c.last}, ${c.pos}, Gesamtwert ${c.ovr}, ${can ? (att ? 'stark im ' + m.name + ', Schuss ' + Math.round(E.eff(c.sco, c)) : 'Abwehr ' + def) : 'müde'}, Ausdauer ${Math.round(c.stam)}`;
-      return `<button type="button" class="mini" data-id="${c.id}" aria-label="${esc(label)}"${can ? '' : ' disabled'}><span class="mini-in"><span class="m-top"><b>${c.ovr}</b><em>${c.pos}</em></span><span class="m-name${c.last.length > 9 ? ' long' : ''}">${esc(c.last)}</span>${info}<span class="stam${c.stam < 40 ? ' low' : ''}"><i style="width:${Math.round(c.stam)}%"></i></span></span></button>`;
+      const can = ok.indexOf(c) !== -1, b = bestEdge(c) || { move: E.bestMove(c).id, d: 0 }, x = edge(b.d);
+      const info = !can ? '<span class="m-info tired">Müde, setzt aus</span>'
+        : `<span class="m-info">${att ? '' : 'vs '}${ic(b.move)}${MOVE[b.move]} <b class="edge ${x.cls}">${x.arrows}</b></span>`;
+      const label = `${c.first} ${c.last}, Gesamtwert ${c.ovr}, ${can ? (att ? 'bester Zug ' + E.move(b.move).name : 'gegen ' + E.move(b.move).name) + ', ' + x.text : 'müde'}, Ausdauer ${Math.round(c.stam)}`;
+      return `<button type="button" class="mini" data-id="${c.id}" aria-label="${esc(label)}"${can ? '' : ' disabled'}><span class="mini-in"><span class="m-top"><b>${c.ovr}</b><em>${c.pos} · S ${Math.round(E.eff(c.sco, c))}</em></span><span class="m-name${c.last.length > 9 ? ' long' : ''}">${esc(c.last)}</span>${info}<span class="stam${c.stam < 40 ? ' low' : ''}"><i style="width:${Math.round(c.stam)}%"></i></span></span></button>`;
     }).join('');
   }
   // Während einer Sequenz bleibt die Hand sichtbar, aber gedimmt, mit der Ausdauer nach dem Duell.
@@ -152,20 +169,25 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   function meter(n) { return '<span class="meter" aria-hidden="true">' + [1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('') + '</span>'; }
   function renderOptions(c) {
     if (G.cur.side === 'you') {
+      const Dc = card('home', G.cur.defender);
       $('opts').innerHTML = E.MOVES.map(m => {
-        const st = E.STANCES.filter(x => x.stops === m.id)[0], v = E.eff(m.val(c), c), n = Math.max(1, Math.min(5, Math.round((v - 70) / 6)));
-        return `<button type="button" class="opt" data-opt="${m.id}" aria-label="${m.name}, Stärke ${n} von 5, ${st.name} stoppt es">${ic(m.id)}<b>${MOVE[m.id]}</b>${meter(n)}<small>${ic(st.id)}${STANCE[st.id]} stoppt es</small></button>`;
+        const st = D.STOPPER[m.id], x = edge(D.matchup(c, m.id, Dc));
+        return `<button type="button" class="opt" data-opt="${m.id}" aria-label="${m.name}, ${x.text} gegen ${Dc.last}, ${E.stance(st).name} stoppt es">${ic(m.id)}<b>${MOVE[m.id]}</b><span class="edge big ${x.cls}">${x.arrows} ${x.text}</span><small>${ic(st)}${STANCE[st]} stoppt es</small></button>`;
       }).join('');
     } else {
-      const cnt = { block: 1, pass: 3, zwei: 4 };
-      $('opts').innerHTML = E.STANCES.map(s => `<button type="button" class="opt" data-opt="${s.id}" aria-label="${s.name}, stoppt ${E.move(s.stops).name}, Konterchance ${cnt[s.id]} von 5">${ic(s.id)}<b>${STANCE[s.id]}</b><small>stoppt ${ic(s.stops)}${MOVE[s.stops]}</small>${meter(cnt[s.id])}<small>Konterchance</small></button>`).join('');
+      const A = card('home', G.cur.attacker), cnt = { block: 'wenig', pass: 'mittel', zwei: 'viel' };
+      $('opts').innerHTML = E.STANCES.map(s => {
+        const x = edge(-D.matchup(A, s.stops, c));
+        return `<button type="button" class="opt" data-opt="${s.id}" aria-label="${s.name}, stoppt ${E.move(s.stops).name}, ${x.text}, Konter ${cnt[s.id]}">${ic(s.id)}<b>${STANCE[s.id]}</b><span class="edge big ${x.cls}">${x.arrows} ${x.text}</span><small>stoppt ${ic(s.stops)}${MOVE[s.stops]}</small><small>Konter: ${cnt[s.id]}</small></button>`;
+      }).join('');
     }
   }
   // Verlauf statt Prozente: was der Gegner zuletzt tat, damit du Muster lesen kannst
   function chips(list, html, name) { const l = list.slice(-4); return l.map((x, i) => `<span class="chip${i === l.length - 1 ? ' last' : ''}">${html(x)}${name(x)}</span>`).join(''); }
   function stanceHistory() {
     const l = G.hist.stances;
-    return `<span>${HOME} stand zuletzt</span>` + (l.length ? chips(l, x => ic(x), x => STANCE[x]) : '<em>noch nichts gesehen.</em>') + `<em>${HOME} rechnet mit dem, was du oft spielst.</em>`;
+    const Dc = card('home', G.cur.defender), fav = ['block', 'pass', 'zwei'].sort((a, b) => D.stanceVal(Dc, b) - D.stanceVal(Dc, a))[0];
+    return `<span>${HOME} stand zuletzt</span>` + (l.length ? chips(l, x => ic(x), x => STANCE[x]) : '<em>noch nichts gesehen.</em>') + `<em>${esc(Dc.last)} ist am stärksten im ${STANCE[fav]} und rechnet mit dem, was du oft spielst.</em>`;
   }
   function moveHistory(A) {
     const l = G.hist.homeMoves[A.id] || [];
@@ -191,7 +213,7 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
   function toArena() {
     const ar = $('arena'), gv = $('goalview');
     [ar, gv, $('keeper'), $('ball')].forEach(fresh);
-    ar.hidden = false; gv.hidden = true; $('stage').classList.remove('goalmode'); $('shooter').hidden = true;
+    ar.hidden = false; gv.hidden = true; F.hide(); $('stage').classList.remove('goalmode', 'fieldmode'); $('shooter').hidden = true;
     $('zones').className = 'zones off'; $('ball').hidden = true;
   }
   function beginDuel() {
@@ -294,37 +316,32 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
       else if (e.t === 'shot') await shotSeq(e);
     }
   }
+  // Deine Wahl erscheint kurz unter deiner Karte, dann wechselt die Bühne zur Duellszene.
   async function revealSeq(e) {
     const att = e.side === 'you', me = card('you', att ? e.a : e.d), them = card('home', att ? e.d : e.a);
     setPick('you', att ? 'move' : 'stance', att ? e.move : e.stance);
     say(`${me.last} gegen ${them.last}`);
-    const fy = $('f-you'), fh = $('f-home'), ph = $('p-home');
-    [fy, fh, ph].forEach(fresh);
-    anim(fy, [{ transform: 'none' }, { transform: 'translateX(12px) scale(1.04)', offset: 0.45 }, { transform: 'none' }], { duration: 440 });
-    anim(fh, [{ transform: 'none' }, { transform: 'translateX(-12px) scale(1.04)', offset: 0.45 }, { transform: 'none' }], { duration: 440 });
-    await wait(180);
-    await anim(ph, [{ transform: 'perspective(400px) rotateY(0deg)' }, { transform: 'perspective(400px) rotateY(90deg)' }], { duration: 140, easing: 'ease-in' });
-    setPick('home', att ? 'stance' : 'move', att ? e.stance : e.move);
-    await anim(ph, [{ transform: 'perspective(400px) rotateY(-90deg)' }, { transform: 'perspective(400px) rotateY(0deg)' }], { duration: 170, easing: 'ease-out' });
-    $('arena').className = 'arena ' + ((att ? !e.read : e.read) ? 'glow-good' : 'glow-bad');
-    await hold(300);
+    await hold(350);
+    const ar = $('arena'); fresh(ar);
+    await anim(ar, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(1.08)' }], { duration: 200 });
+    ar.hidden = true; $('stage').classList.add('fieldmode');
   }
   async function s1Seq(e) {
     const att = e.side === 'you', A = card(e.side, e.a), Dc = card(other(e.side), e.d), good = att ? e.ok : !e.ok;
+    await F.play(e, { att: A, def: Dc, attSide: e.side, readGood: !att, fast: () => fast,
+      onCommit: () => live(`${Dc.last} wählt ${STANCE[e.stance]}.`) });
     let main, sub;
     if (e.ok && !e.read) { main = 'Vorbei'; sub = `${Dc.last} rechnete mit ${E.stance(e.stance).expects}.`; }
     else if (e.ok) { main = 'Durch'; sub = `${Dc.last} las ${MOVE_ART[e.move]}, ${A.last} kommt trotzdem durch.`; }
     else if (e.read) { main = STOP[e.move]; sub = `${Dc.last} las ${MOVE_ART[e.move]}.`; }
     else { main = 'Gestoppt'; sub = `${Dc.last} war stärker als ${A.last}.`; }
-    stamp(main, sub, good ? 'good' : 'bad');
+    stamp(main, sub, good ? 'good' : 'bad', e.ok ? 'low' : 'top');
     if (!good) shake($('stage'));
-    if (!e.ok) anim($(att ? 'f-you' : 'f-home'), [{ filter: 'none' }, { filter: 'grayscale(.75) brightness(.65)' }], { duration: 320 });
-    await hold(e.ok ? 1100 : 1300);
+    await hold(e.ok ? 1000 : 1200);
   }
   async function counterSeq(e) {
     const X = card(e.side, e.x), mine = e.side === 'you';
-    stamp('Konter', mine ? `${X.last} läuft allein aufs Tor.` : `${X.last} läuft allein auf dein Tor.`, 'warn');
-    anim($(mine ? 'f-you' : 'f-home'), [{ transform: 'none', filter: 'none' }, { transform: 'scale(1.06)', filter: 'none', offset: 0.5 }, { transform: 'none', filter: 'none' }], { duration: 420 });
+    stamp('Konter', mine ? `${X.last} läuft allein aufs Tor.` : `${X.last} läuft allein auf dein Tor.`, 'warn', 'top');
     await hold(1000);
   }
 
@@ -345,7 +362,7 @@ ${c.home ? '<div class="c-tag">Heimvorteil</div>' : ''}
     if (gv.hidden) {
       const ar = $('arena'); fresh(ar);
       await anim(ar, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 180 });
-      ar.hidden = true; $('stage').classList.add('goalmode'); gv.hidden = false;
+      ar.hidden = true; F.hide(); $('stage').classList.remove('fieldmode'); $('stage').classList.add('goalmode'); gv.hidden = false;
       fresh(gv);
       anim(gv, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.1)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }], { duration: 280 });
     }

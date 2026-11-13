@@ -32,7 +32,7 @@ const OUT = path.join(__dirname, 'shots', 'lab'); fs.mkdirSync(OUT, { recursive:
           const att = await p.evaluate(() => document.getElementById('tag').textContent === 'Dein Angriff');
           await snap(att ? '03-zug-wahl' : '03-abwehr-wahl'); await over('Wahl');
           await click('#opts .opt');
-          if (!run.reduce) { await p.waitForTimeout(260); await snap('04-aufdecken'); await p.waitForTimeout(500); await snap('05-stempel-' + (att ? 'angriff' : 'abwehr')); }
+          if (!run.reduce) { await p.waitForTimeout(950); await snap('04a-szene-' + (att ? 'angriff' : 'abwehr')); await p.waitForTimeout(650); await snap('04b-zeitlupe-' + (att ? 'angriff' : 'abwehr')); await p.waitForTimeout(1300); await snap('05-stempel-' + (att ? 'angriff' : 'abwehr')); }
           continue;
         }
         if (await vis('#hand') && await p.evaluate(() => document.querySelectorAll('#hand:not(.idle) .mini:not(:disabled)').length)) {

@@ -18,7 +18,7 @@ const reasonable = (s, r) => {
   if (s.phase === 'pick' && cur.side === 'you') {
     const Dc = D.card(s, 'home', cur.defender); let bestV = -1, out = null;
     const atts = D.usable(s, 'you').filter(c => c.pos === 'ATT'), cand = atts.length ? atts : D.usable(s, 'you');
-    cand.forEach(A => { const w = D.readWeights(s, A), tot = w.direkt + w.kombi + w.solo;
+    cand.forEach(A => { const w = D.readWeights(s, A, Dc), tot = w.direkt + w.kombi + w.solo;
       E.MOVES.forEach(m => { const pr = w[m.id] / tot, th = (1 - pr) * D.through(s, A, m, Dc, false) + pr * D.through(s, A, m, Dc, true); if (th > bestV) { bestV = th; out = { type: 'play', card: A.id, option: m.id }; } }); });
     return out;
   }
@@ -26,7 +26,7 @@ const reasonable = (s, r) => {
     const A = D.card(s, 'home', cur.attacker), seen = s.hist.homeMoves[A.id] || [], w = E.tendency(A);
     seen.forEach(m => { w[m] += 0.25; });
     const mv = maxKey(w, r), defs = D.usable(s, 'you').filter(c => c.pos === 'DEF'), cand = defs.length ? defs : D.usable(s, 'you');
-    const Dc = cand.slice().sort((a, b) => E.eff(E.defVal(b), b) - E.eff(E.defVal(a), a))[0];
+    const st = D.STOPPER[mv], Dc = cand.slice().sort((a, b) => E.eff(D.stanceVal(b, st), b) - E.eff(D.stanceVal(a, st), a))[0];
     return { type: 'play', card: Dc.id, option: E.STANCES.filter(x => x.stops === mv)[0].id };
   }
   if (s.phase === 'aim' && cur.shot.side === 'you') return { type: 'aim', corner: minKey(D.keeperWeights(s), r) };

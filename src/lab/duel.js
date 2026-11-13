@@ -12,15 +12,16 @@
 
   const CFG = {
     duels: 8, goalie: 88,
-    open: 0.92, openSlope: 0.01, openMin: 0.80, openMax: 0.98,      // nicht gelesen: kommt fast immer vorbei
-    read: 0.30, readSlope: 0.025, readMin: 0.10, readMax: 0.55,     // gelesen: kommt selten vorbei, starke Karten öfter
+    // Stufe 1 hängt vom Matchup ab: Wert des Angreifers im gewählten Zug gegen den Wert des Verteidigers in der Abwehr, die diesen Zug stoppt.
+    open: 0.88, openSlope: 0.02, openMin: 0.60, openMax: 0.98,      // nicht gelesen: kommt meist vorbei, gegen einen Spezialisten seltener
+    read: 0.28, readSlope: 0.03, readMin: 0.08, readMax: 0.60,      // gelesen: kommt selten vorbei, mit klarem Vorteil öfter
     // Schuss: Der Abschluss des Schützen zählt in allen drei Fällen, gemessen am Goalie (88).
     miss: 0.22, missSlope: 0.012, missMin: 0.03, missMax: 0.30,     // Ecke verfehlt. Die Mitte geht immer aufs Tor
     wrong: 0.82, wrongSlope: 0.015, wrongMin: 0.55, wrongMax: 0.97, // Goalie in der falschen Ecke: Tor, ausser der Schuss ist zu schwach
     beat: 0.25, beatMid: 0.12, beatSlope: 0.025, beatMin: 0.05, beatMax: 0.60,   // Goalie in der richtigen Ecke, trotzdem Tor
     counter: { block: 0.15, pass: 0.40, zwei: 0.65 }, counterBonus: 0.10,
     cost: 30, costSolo: 36, costDef: 26, counterCost: 6, recover: 8, minStam: 20,
-    aiCard: 0.6, aiHabit: 0.8, aiFloor: 0.15,    // so liest die Halle deinen Zug: Stärke deiner Karte und deine letzten vier Züge
+    aiCard: 0.6, aiHabit: 0.8, aiFloor: 0.15, aiOwn: 0.015,   // so liest die Halle deinen Zug: Stärke deiner Karte, deine letzten vier Züge, ihre Lieblingsabwehr
     keeperMemory: 6                              // so viele deiner Schüsse merkt sich der Goalie der Halle
   };
 
@@ -35,9 +36,19 @@
   function best(list, fn) { let top = null, sc = -Infinity; list.forEach(c => { const v = fn(c); if (v > sc) { sc = v; top = c; } }); return top; }
   const copy = s => JSON.parse(JSON.stringify(s));
 
+  // --- Matchup ---
+  const STOPPER = { direkt: 'block', kombi: 'pass', solo: 'zwei' };
+  // Abwehrwert pro Abwehr: Block aus Erfahrung und Clutch, Passweg aus Spielverständnis (Vorlagen) und Erfahrung, Zweikampf aus Form und Fairness.
+  function stanceVal(c, st) {
+    const v = st === 'block' ? 0.6 * c.exp + 0.4 * c.clu : st === 'pass' ? 0.6 * c.ply + 0.4 * c.exp : 0.7 * c.frm + 0.3 * c.fai;
+    return v + (c.pos === 'DEF' ? 5 : 0);
+  }
+  // Positiv: Vorteil für den Angreifer in diesem Zug gegen diesen Verteidiger.
+  const matchup = (A, mvId, D) => E.eff(E.move(mvId).val(A), A) - E.eff(stanceVal(D, STOPPER[mvId]), D);
+
   // --- Wahrscheinlichkeiten ---
   function through(s, A, mv, D, read) {
-    const c = s.cfg, diff = E.eff(mv.val(A), A) - E.eff(E.defVal(D), D);
+    const c = s.cfg, diff = matchup(A, mv.id, D);
     return read ? clamp(c.read + diff * c.readSlope, c.readMin, c.readMax) : clamp(c.open + diff * c.openSlope, c.openMin, c.openMax);
   }
   function missChance(s, X, target) { const c = s.cfg; return target === 'm' ? 0 : clamp(c.miss - (E.eff(X.sco, X) - 75) * c.missSlope, c.missMin, c.missMax); }
@@ -66,9 +77,9 @@
 
   // --- KI der Halle ---
   // Liest deinen Zug: was deine Karte gut kann und was du zuletzt oft gespielt hast.
-  function readWeights(s, A) {
+  function readWeights(s, A, D) {
     const c = s.cfg, t = E.tendency(A), last = s.hist.moves.slice(-4), n = last.length || 1, w = {};
-    E.MOVES.forEach(m => { w[m.id] = c.aiCard * t[m.id] + c.aiHabit * last.filter(x => x === m.id).length / n + c.aiFloor; });
+    E.MOVES.forEach(m => { w[m.id] = c.aiCard * t[m.id] + c.aiHabit * last.filter(x => x === m.id).length / n + c.aiFloor + c.aiOwn * Math.max(0, stanceVal(D, STOPPER[m.id]) - 80); });
     return w;
   }
   // Goalie der Halle: springt eher dorthin, wo du zuletzt hingeschossen hast.
@@ -81,7 +92,7 @@
   function favCorner(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['l', 'r', 'l', 'r', 'm'][h % 5]; }
   function shotWeights(id) { const w = { l: 0.25, m: 0.25, r: 0.25 }; w[favCorner(id)] = 0.5; return w; }
   const aiAttacker = (s, rng) => best(usable(s, 'home'), c => 0.5 * E.eff(E.bestMove(c).val(c), c) + 0.5 * E.eff(c.sco, c) + rng() * 6 - 3);
-  const aiDefender = (s, rng) => best(usable(s, 'home'), c => E.eff(E.defVal(c), c) + rng() * 6 - 3);
+  const aiDefender = (s, rng) => best(usable(s, 'home'), c => E.eff((stanceVal(c, 'block') + stanceVal(c, 'pass') + stanceVal(c, 'zwei')) / 3, c) + rng() * 6 - 3);
 
   // --- Ablauf ---
   /* setup: { homeName, cfg, you: { goalie, cards }, home: { goalie, cards } }. Karten werden kopiert und starten mit 100 Ausdauer. */
@@ -114,7 +125,7 @@
     if (side === 'you') {
       A = card(s, 'you', cardId); mv = E.move(opt); D = card(s, 'home', cur.defender);
       if (!A || !mv || usable(s, 'you').indexOf(A) === -1) return false;
-      const guess = sample(readWeights(s, A), rng);
+      const guess = sample(readWeights(s, A, D), rng);
       st = E.STANCES.filter(x => x.stops === guess)[0];
       s.hist.moves.push(mv.id); s.hist.stances.push(st.id);
     } else {
@@ -202,5 +213,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKDuel = { CFG, CORNERS, newMatch, act, card, usable, through, missChance, wrongChance, beatChance, readWeights, keeperWeights, shotWeights, favCorner, penOver, other };
+  root.HKDuel = { STOPPER, stanceVal, matchup, CFG, CORNERS, newMatch, act, card, usable, through, missChance, wrongChance, beatChance, readWeights, keeperWeights, shotWeights, favCorner, penOver, other };
 })(typeof window !== 'undefined' ? window : globalThis);
