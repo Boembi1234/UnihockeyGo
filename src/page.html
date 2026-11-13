@@ -54,6 +54,17 @@ ul{padding:0;list-style:none}
 .tag{flex-shrink:0;padding:4px 9px 3px;font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.12em;text-transform:uppercase;line-height:1;background:var(--gold);color:#1a1203}
 .tag.far{background:transparent;color:var(--mute);border:1px solid var(--line)}
 .tag.mine{background:var(--blue);color:#fff}
+.tag.day{background:var(--goal);color:#03130c}
+.tags{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.clubbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.clubbar b{font-weight:800;font-size:18px;letter-spacing:.04em;color:var(--gold);text-align:right}
+.nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.nav .ghost{min-height:44px;font-size:15px}
+.ghost:disabled{color:#6f7fb3;border-color:var(--line)}
+.chips.clubs{grid-template-columns:1fr}
+button.chip.club{height:46px;font-size:17px}
+button.chip.club i{font-size:11px}
+.sim{font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#1a1203;background:var(--mute);padding:2px 6px 1px;line-height:1.1;margin-left:6px}
 .holder{color:var(--mute);font-size:14px}
 .holder strong{color:var(--ice);font-weight:600}
 .hp{display:flex;flex-direction:column;gap:6px}
@@ -74,6 +85,14 @@ button.chip{height:44px;align-items:center}
 .scout .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .scout .ps{font-weight:600;font-size:13px;letter-spacing:.08em;color:var(--ice)}
 .scout i{font-style:normal;font-weight:600;font-size:13px;letter-spacing:.06em;color:var(--mute);text-align:right}
+.scout small{display:block;margin-top:2px;font-family:var(--body);font-weight:500;font-size:12px;letter-spacing:0;text-transform:none;line-height:1.3;color:var(--mute);white-space:normal}
+.scout.guard li{grid-template-columns:30px 1fr 34px}
+.scout.rank li{grid-template-columns:38px 1fr 46px 50px}
+.scout.rank .nm{white-space:normal;overflow:visible}
+.scout li.head{font-size:12px;letter-spacing:.12em;color:var(--mute)}
+.scout li.head b,.scout li.head .ps{font-weight:700;font-size:12px;color:var(--mute)}
+.scout.rank .ps{text-align:right}
+.scout li.me .nm,.scout li.me b{color:var(--gold)}
 button.chip.on{border-color:var(--gold);background:#1a1606}
 .cta{min-height:52px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:.1em;text-transform:uppercase}
 .cta:hover:not(:disabled){background:#1249e0}
@@ -273,26 +292,78 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 
 <section id="screen-map" class="screen">
   <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode">Hallenkampf</span></header>
+  <div class="clubbar" id="clubbar"></div>
+  <div class="nav"><button class="ghost" id="btn-table" type="button">Vereinstabelle</button><button class="ghost" id="btn-switch" type="button">Verein wechseln</button></div>
   <div class="map" id="map" role="img" aria-label="Schematische Karte: Du stehst 40 Meter neben den Sporthallen Weissenstein. Hardau und Grossmatt sind weiter weg."></div>
   <div id="halls" class="screen"></div>
   <div class="panel">
     <p class="group-label">So läuft es</p>
     <ul class="rules">
-      <li><b>Kader:</b> Du nimmst 6 deiner 10 Karten mit und bestimmst einen Captain.</li>
+      <li><b>Verein:</b> Die Hallen deines Vereins greifst du nicht an, du verteidigst sie. Stationiere dazu eine Karte pro Halle, sie spielt dort mit Heimvorteil.</li>
+      <li><b>Kader:</b> Du nimmst 6 deiner 10 Karten mit und bestimmst einen Captain. Stationierte Karten fehlen dir im Kader.</li>
       <li><b>Duell:</b> Du wählst die Karte und dazu den Spielzug oder die Abwehr. Danach läuft das Duell in drei Stufen ab: am Verteidiger vorbei, Schuss aufs Tor, Goalie geschlagen. Liest der Verteidiger den Zug, kommt der Angriff meist nicht durch.</li>
       <li><b>Konter und Fouls:</b> Ein Ballgewinn kann zum Konter führen, am ehesten nach einem Zweikampf. Ein Foul gibt einen Freischlag, eine 2-Minuten-Strafe mit 4 Duellen Überzahl oder einen Penalty.</li>
       <li><b>Taktik:</b> Time-out, Pressing und Ohne Goalie gibt es je einmal pro Match. Verteidiger wehren besser ab, Stürmer treffen besser.</li>
-      <li><b>Schaden:</b> Ein Sieg schwächt die Halle. Vor Ort zählt er voll, aus der Ferne halb.</li>
+      <li><b>Schaden:</b> Ein Sieg schwächt die Halle. Vor Ort zählt er voll, aus der Ferne halb, am Spieltag vor Ort doppelt. Fällt die Stärke auf 0, gehört die Halle deinem Verein.</li>
     </ul>
     <button class="ghost" id="btn-reset" type="button">Prototyp zurücksetzen</button>
-    <p class="note">Standort und Check-in sind simuliert. Die Kader und Werte stammen aus der Saison 2026/27, Stand 13.11.2026.</p>
+    <p class="note">Standort, Check-in, Spieltag, Fans und fremde Angriffe sind simuliert. Die Kader und Werte stammen aus der Saison 2026/27, Stand 13.11.2026.</p>
+  </div>
+</section>
+
+<section id="screen-club" class="screen" hidden>
+  <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode">Hallenkampf</span></header>
+  <div class="panel">
+    <h1 class="hall-name" id="club-title">Wähle deinen Verein</h1>
+    <p class="holder" id="club-text"></p>
+    <div class="chips clubs" id="club-list"></div>
+    <button class="ghost" id="btn-club-back" type="button" hidden>Zurück zur Karte</button>
+  </div>
+</section>
+
+<section id="screen-hall" class="screen" hidden>
+  <button class="back" id="btn-hall-back" type="button">Zur Karte</button>
+  <div class="panel">
+    <div class="hr-head"><h1 class="hall-name" id="hv-name"></h1><span class="tags" id="hv-tags"></span></div>
+    <p class="holder" id="hv-holder"></p>
+    <div class="hp">
+      <div class="hp-row"><span>Hallen-Stärke</span><b id="hv-hp"></b></div>
+      <div class="hp-track"><div class="hp-fill" id="hv-hp-fill"></div></div>
+    </div>
+    <div>
+      <p class="group-label">Verteidiger: <b id="hv-slots"></b></p>
+      <ul class="scout guard" id="hv-guard"></ul>
+    </div>
+    <p class="holder" id="hv-note"></p>
+    <button class="cta" id="btn-hall-attack" type="button">Angreifen</button>
+  </div>
+  <div class="panel" id="hv-station" hidden>
+    <p class="group-label">Karte stationieren</p>
+    <p class="holder" id="hv-station-text"></p>
+    <div class="hand" id="hv-cards"></div>
+    <button class="ghost" id="btn-withdraw" type="button" hidden>Karte zurückziehen</button>
+  </div>
+  <div class="panel">
+    <p class="group-label">Andere Fans<span class="sim">Simulation</span></p>
+    <p class="note">Im Prototyp gibt es keine anderen User. Die Fans in den Hallen sind erfunden, und mit dem Knopf lässt du einen erfundenen Fan eines anderen Vereins diese Halle angreifen.</p>
+    <button class="ghost" id="btn-sim-attack" type="button">Fremden Angriff simulieren</button>
+    <p class="holder" id="hv-news" aria-live="polite" hidden></p>
+  </div>
+</section>
+
+<section id="screen-table" class="screen" hidden>
+  <button class="back" id="btn-table-back" type="button">Zur Karte</button>
+  <div class="panel">
+    <h1 class="hall-name">Vereinstabelle</h1>
+    <p class="holder">Rang nach gehaltenen Hallen, bei Gleichstand nach der Summe der Hallenstärke. Die Tabelle zählt unabhängig von deiner persönlichen Elo.</p>
+    <ul class="scout rank" id="table-list"></ul>
   </div>
 </section>
 
 <section id="screen-squad" class="screen" hidden>
   <button class="back" id="btn-back-map" type="button">Zur Karte</button>
   <div class="panel">
-    <div class="hr-head"><h1 class="hall-name" id="sq-hall"></h1><span class="tag" id="sq-mode"></span></div>
+    <div class="hr-head"><h1 class="hall-name" id="sq-hall"></h1><span class="tags" id="sq-tags"></span></div>
     <p class="holder" id="sq-holder"></p>
     <div class="hp">
       <div class="hp-row"><span>Hallen-Stärke</span><b id="sq-hp"></b></div>
@@ -379,6 +450,9 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 </main>
 <script id="hk-engine">
 /*__ENGINE__*/
+</script>
+<script id="hk-world">
+/*__WORLD__*/
 </script>
 <script id="hk-scene">
 /*__SCENE__*/

@@ -1,7 +1,7 @@
 /* Oberfläche. Rechnet nichts selbst aus: Jede Eingabe geht an HK.act, angezeigt wird, was die Engine zurückgibt. */
 (function () {
   'use strict';
-  const E = window.HK, Scene = window.HKScene;
+  const E = window.HK, Scene = window.HKScene, World = window.HKWorld;
   const $ = id => document.getElementById(id);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -11,11 +11,12 @@
 
   const MOVES = E.MOVES, STANCES = E.STANCES, CORNERS = E.CORNERS;
   const COLLECTION = E.DATA.collection.map(c => Object.assign({}, c));
-  const HALLS = E.DATA.halls.map(h => Object.assign({}, h, { hp: 100, mine: false }));
+  const HALLS = E.DATA.halls;
+  let W = World.create();   // Welt: Verein, Besitz und Stärke der Hallen, stationierte Karten
   const USER = E.DATA.user;
 
   // g: Zustand der Engine. pick: gewählte eigene Karte. shown: Spielstand während einer laufenden Sequenz.
-  const S = { hall: null, squad: [], capId: null, g: null, phase: 'idle', pick: null, shown: null, penView: false, skip: false, token: 0,
+  const S = { hall: null, view: null, opp: '', squad: [], capId: null, g: null, phase: 'idle', pick: null, shown: null, penView: false, skip: false, token: 0,
     rng: E.makeRng((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0) };
 
   function skip() { if (S.phase === 'resolving' || S.phase === 'pen-resolving') { S.skip = true; Scene.skip(); } }
@@ -67,13 +68,28 @@ ${tagText ? `<div class="c-tag">${tagText}</div>` : ''}
 ${o.status ? `<span class="m-status">${o.status}</span>` : `<span class="m-lines">${lines}</span>`}${stamBar(c)}</span></button>`;
   }
 
-  // --- map and squad ---
-  function hpBlock(h) { return `<div class="hp"><div class="hp-row"><span>Hallen-Stärke</span><b>${h.hp} / 100</b></div><div class="hp-track"><div class="hp-fill" style="width:${h.hp}%"></div></div></div>`; }
+  // --- Welt: Verein, Hallen, Stationierung. Die Regeln dazu stehen in world.js. ---
+  const hallState = id => W.halls[id], ownerOf = id => World.club(W.halls[id].owner), isMine = id => !!W.club && W.halls[id].owner === W.club;
+  const fullName = c => (c.first + ' ' + c.last).trim();
+  const factorText = f => f.matchday ? 'Spieltag vor Ort: Ein Sieg zählt doppelt.' : f.near ? 'Vor Ort: Ein Sieg zählt voll.' : f.reclaim ? 'Zurückerobern: Ein Sieg zählt voll, auch aus der Ferne.' : 'Fernangriff: Ein Sieg zählt halb.';
+  function attackLabel(h) { const f = World.factor(W, h.id); return f.matchday ? 'Einchecken, doppelter Schaden' : f.near ? 'Einchecken und angreifen' : f.reclaim ? 'Zurückerobern, voller Schaden' : 'Fernangriff, halber Schaden'; }
+  function hpBlock(hp) { return `<div class="hp"><div class="hp-row"><span>Hallen-Stärke</span><b>${hp} / 100</b></div><div class="hp-track"><div class="hp-fill" style="width:${hp}%"></div></div></div>`; }
+  function hallTags(h) {
+    const t = [isMine(h.id) ? '<span class="tag mine">Dein Verein</span>' : (h.near ? '<span class="tag">Vor Ort</span>' : '<span class="tag far">Fernangriff</span>')];
+    if (W.matchday === h.id) t.push('<span class="tag day">Spieltag</span>');
+    return t.join('');
+  }
+  function holderText(h) {
+    const o = ownerOf(h.id);
+    return `Gehalten von <strong>${isMine(h.id) ? 'deinem Verein ' : ''}${esc(o.name)}</strong>${o.id !== h.id ? ', Heimhalle von ' + esc(h.short) : ''}.`;
+  }
+
+  // --- Karte ---
   function renderMap() {
     const marks = HALLS.map(h => {
-      const fill = h.mine ? '#1a57ff' : '#f7d774';
+      const m = isMine(h.id), fill = m ? '#1a57ff' : '#f7d774';
       return `<polygon points="${h.x - 14},${h.y - 12} ${h.x + 14},${h.y - 12} ${h.x},${h.y + 12}" fill="${fill}" stroke="#050818" stroke-width="2"></polygon>
-<text x="${h.x}" y="${h.y - 20}" font-size="13" letter-spacing="1.5" fill="${h.mine ? '#9fbcff' : '#f7d774'}">${esc(h.short.toUpperCase())} · ${h.dist.toUpperCase()}</text>`;
+<text x="${h.x}" y="${h.y - 20}" font-size="13" letter-spacing="1.5" fill="${m ? '#9fbcff' : '#f7d774'}">${esc(ownerOf(h.id).short.toUpperCase())} · ${h.dist.toUpperCase()}</text>`;
     }).join('');
     $('map').innerHTML = `<svg viewBox="0 0 428 190" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <rect width="428" height="190" fill="#0b1437"></rect>
@@ -85,32 +101,94 @@ ${o.status ? `<span class="m-status">${o.status}</span>` : `<span class="m-lines
 <text x="86" y="166" font-size="14" letter-spacing="2" fill="#e3ecff">DU</text></g>
 <circle class="pulse" cx="86" cy="138" r="9" fill="none" stroke="#5b87ff" stroke-width="2"></circle>
 <circle cx="86" cy="138" r="8" fill="#1a57ff" stroke="#ffffff" stroke-width="3"></circle></svg>`;
+    $('clubbar').innerHTML = `<span>Dein Verein</span><b>${esc(World.club(W.club).name)}</b>`;
+    $('btn-switch').disabled = !World.canSwitch(W);
+    $('btn-switch').textContent = World.canSwitch(W) ? 'Verein wechseln' : 'Wechsel aufgebraucht';
     $('halls').innerHTML = HALLS.map(h => `<div class="panel">
-<div class="hr-head"><h2 class="hall-name">${esc(h.name)}</h2><span class="tag${h.mine ? ' mine' : (h.near ? '' : ' far')}">${h.mine ? 'Erobert' : (h.near ? 'Vor Ort' : 'Fernangriff')}</span></div>
-<p class="holder">${esc(h.place)}, ${h.dist} entfernt. Gehalten von <strong>${h.mine ? 'deinem Verein' : esc(h.club)}</strong>.</p>
-${hpBlock(h)}
-<button class="cta small" type="button" data-hall="${h.id}"${h.mine ? ' disabled' : ''}>${h.mine ? 'Gehört deinem Verein' : (h.near ? 'Einchecken und angreifen' : 'Fernangriff, halber Schaden')}</button></div>`).join('');
+<div class="hr-head"><h2 class="hall-name">${esc(h.name)}</h2><span class="tags">${hallTags(h)}</span></div>
+<p class="holder">${esc(h.place)}, ${h.dist} entfernt. ${holderText(h)} ${World.taken(W, h.id)} von ${World.CFG.slots} Plätzen besetzt.</p>
+${hpBlock(hallState(h.id).hp)}
+${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Verteidigen und stationieren</button>`
+    : `<button class="cta small" type="button" data-hall="${h.id}">${attackLabel(h)}</button><button class="ghost" type="button" data-view="${h.id}">Halle ansehen</button>`}</div>`).join('');
   }
+
+  // --- Vereinswahl ---
+  function openClub() {
+    const first = !W.club;
+    $('club-title').textContent = first ? 'Wähle deinen Verein' : 'Verein wechseln';
+    $('club-text').textContent = first ? 'Herren L-UPL 2026/27. Die Hallen deines Vereins verteidigst du, alle anderen kannst du angreifen. Wechseln kannst du einmal pro Saison.'
+      : 'Du kannst den Verein einmal pro Saison wechseln. Deine stationierten Karten kehren dabei zurück.';
+    $('club-list').innerHTML = World.CLUBS.map(c => `<button type="button" class="chip club${c.id === W.club ? ' on' : ''}" data-club="${c.id}"${c.id === W.club ? ' disabled' : ''}>${esc(c.name)}${c.id === W.club ? '<i>Dein Verein</i>' : (byId(HALLS, c.id) ? '<i>Halle im Prototyp</i>' : '')}</button>`).join('');
+    $('btn-club-back').hidden = first;
+    show('club');
+  }
+  function pickClub(id) {
+    const r = World.chooseClub(W, id); if (!r.ok) return;
+    W = r.world; S.squad = []; S.capId = null; renderMap(); show('map');
+  }
+
+  // --- Hallenansicht: Besitzer, Stärke, Plätze, Verteidiger mit Karte und User, Stationieren ---
+  function openHall(id) { S.view = id; renderHall(); show('hall'); }
+  function renderHall() {
+    const h = byId(HALLS, S.view), st = hallState(h.id), m = isMine(h.id), f = World.factor(W, h.id);
+    $('hv-name').textContent = h.name; $('hv-tags').innerHTML = hallTags(h);
+    $('hv-holder').innerHTML = `${esc(h.place)}, ${h.dist} entfernt. ${holderText(h)}`;
+    $('hv-hp').textContent = st.hp + ' / 100'; $('hv-hp-fill').style.width = st.hp + '%';
+    $('hv-slots').textContent = World.taken(W, h.id) + ' von ' + World.CFG.slots + ' Plätzen besetzt';
+    $('hv-guard').innerHTML = World.guard(W, h.id).map(c => `<li${c.kind === 'me' ? ' class="me"' : ''}><b>${c.ovr}</b><span class="nm">${esc(fullName(c))}<small>${esc(c.by)}${c.home ? ', stationiert, Heimvorteil +2' : (c.kind === 'team' ? ', füllt den freien Platz' : 'karte, Gesamtwert ' + World.CFG.fillerOvr)}</small></span><span class="ps">${c.pos}</span></li>`).join('');
+    $('hv-note').textContent = m ? '' : factorText(f);
+    $('btn-hall-attack').hidden = m; $('btn-hall-attack').textContent = attackLabel(h);
+    $('hv-station').hidden = !m;
+    if (m) {
+      const slot = World.mySlot(W, h.id), why = slot ? '' : World.canStation(W, h.id), placed = World.stationed(W), open = !slot && !why;
+      $('btn-withdraw').hidden = !slot;
+      $('hv-station-text').textContent = slot ? byId(COLLECTION, slot.card).last + ' verteidigt hier für dich und fehlt dir in eigenen Matches. Du kannst die Karte jederzeit zurückziehen.'
+        : (why || 'Wähle eine Karte. Sie verteidigt hier mit Heimvorteil und fehlt dir in eigenen Matches, bis du sie zurückziehst oder die Halle fällt.');
+      $('hv-cards').hidden = !open;
+      $('hv-cards').innerHTML = !open ? '' : COLLECTION.map(c => mini(c, { disabled: !!placed[c.id], cls: placed[c.id] ? 'out' : '', status: placed[c.id] ? 'Stationiert' : '',
+        lines: [['Angriff', Math.round(eff(bestMove(c).val(c), c))], ['Abwehr', Math.round(eff(defVal(c), c))]] })).join('');
+    }
+    $('hv-news').textContent = W.news; $('hv-news').hidden = !W.news;
+  }
+  function stationCard(id) {
+    const r = World.station(W, S.view, id); if (!r.ok) return;
+    W = r.world; S.squad = S.squad.filter(x => x !== id); if (S.capId === id) S.capId = null; renderHall();
+  }
+  function withdrawCard() { const r = World.withdraw(W, S.view); if (r.ok) { W = r.world; renderHall(); } }
+  function simAttack() { W = World.simAttack(W, S.view, S.rng).world; renderHall(); }
+
+  // --- Vereinstabelle ---
+  function openTable() {
+    $('table-list').innerHTML = '<li class="head"><b>Rang</b><span class="nm">Verein</span><span class="ps">Hallen</span><i>Stärke</i></li>'
+      + World.table(W).map((t, i) => `<li${t.id === W.club ? ' class="me"' : ''}><b>${t.halls ? (i + 1) + '.' : '–'}</b><span class="nm">${esc(t.name)}</span><span class="ps">${t.halls}</span><i>${t.hp}</i></li>`).join('');
+    show('table');
+  }
+
+  // --- Kader ---
   function openSquad(hallId) {
+    if (!World.canAttack(W, hallId)) return;
     S.hall = byId(HALLS, hallId);
+    const placed = World.stationed(W), fit = c => c.ovr * (0.78 + 0.22 * c.stam / 100), free = COLLECTION.filter(c => !placed[c.id]).sort((a, b) => fit(b) - fit(a));
+    S.squad = S.squad.filter(id => !placed[id]);
     if (S.squad.length !== 6) {
-      const fit = c => c.ovr * (0.78 + 0.22 * c.stam / 100), top = (pos, n) => COLLECTION.filter(c => c.pos === pos).sort((a, b) => fit(b) - fit(a)).slice(0, n);
+      const top = (pos, n) => free.filter(c => c.pos === pos).slice(0, n);
       S.squad = top('ATT', 4).concat(top('DEF', 2)).map(c => c.id);
+      free.forEach(c => { if (S.squad.length < 6 && S.squad.indexOf(c.id) === -1) S.squad.push(c.id); });
     }
     if (S.squad.indexOf(S.capId) === -1) S.capId = S.squad[0];
     renderSquad(); show('squad');
   }
   function renderSquad() {
-    const h = S.hall;
-    $('sq-hall').textContent = h.name;
-    $('sq-mode').textContent = h.near ? 'Vor Ort' : 'Fernangriff'; $('sq-mode').className = 'tag' + (h.near ? '' : ' far');
-    $('sq-holder').innerHTML = `${esc(h.place)}. Gehalten von <strong>${esc(h.club)}</strong>. ${h.near ? 'Ein Sieg zählt voll.' : 'Ein Sieg zählt halb.'}`;
-    $('sq-hp').textContent = h.hp + ' / 100'; $('sq-hp-fill').style.width = h.hp + '%';
-    $('sq-guard').innerHTML = h.guard.map(c => `<li><b>${c.ovr}</b><span class="nm">${esc(c.first)} ${esc(c.last)}</span><span class="ps">${c.pos}</span><i>${bestMove(c).name}</i></li>`).join('');
+    const h = S.hall, st = hallState(h.id), placed = World.stationed(W);
+    $('sq-hall').textContent = h.name; $('sq-tags').innerHTML = hallTags(h);
+    $('sq-holder').innerHTML = `${esc(h.place)}. ${holderText(h)} ${factorText(World.factor(W, h.id))}`;
+    $('sq-hp').textContent = st.hp + ' / 100'; $('sq-hp-fill').style.width = st.hp + '%';
+    $('sq-guard').innerHTML = World.guard(W, h.id).map(c => `<li><b>${c.ovr}</b><span class="nm">${esc(fullName(c))}</span><span class="ps">${c.pos}</span><i>${bestMove(c).name}</i></li>`).join('');
     $('sq-count').textContent = S.squad.length + ' von 6 gewählt';
     $('sq-grid').innerHTML = COLLECTION.map(c => {
-      const on = S.squad.indexOf(c.id) !== -1;
-      return mini(c, { cls: on ? '' : 'off', pressed: on, badge: on && c.id === S.capId ? 'C' : '', note: on ? (c.id === S.capId ? 'im Kader, Captain' : 'im Kader') : 'nicht im Kader',
+      const on = S.squad.indexOf(c.id) !== -1, gone = !!placed[c.id];
+      return mini(c, { cls: gone ? 'out' : (on ? '' : 'off'), disabled: gone, status: gone ? 'Stationiert' : '', pressed: on, badge: on && c.id === S.capId ? 'C' : '',
+        note: gone ? 'stationiert in ' + byId(HALLS, placed[c.id]).name : (on ? (c.id === S.capId ? 'im Kader, Captain' : 'im Kader') : 'nicht im Kader'),
         lines: [['Angriff', Math.round(eff(bestMove(c).val(c), c))], ['Abwehr', Math.round(eff(defVal(c), c))]] });
     }).join('');
     $('sq-cap').innerHTML = S.squad.map(id => { const c = byId(COLLECTION, id); return `<button type="button" class="chip${id === S.capId ? ' on' : ''}" data-cap="${id}" aria-pressed="${id === S.capId}"><b>${c.ovr}</b>${esc(c.last)}</button>`; }).join('');
@@ -119,13 +197,14 @@ ${hpBlock(h)}
     $('btn-kickoff').textContent = ok ? 'Match starten' : 'Wähle 6 Karten';
   }
   function toggleSquad(id) {
+    if (World.stationed(W)[id]) return;
     const i = S.squad.indexOf(id);
     if (i !== -1) S.squad.splice(i, 1); else if (S.squad.length < 6) S.squad.push(id); else return;
     if (S.squad.indexOf(S.capId) === -1) S.capId = S.squad.length ? S.squad.slice().sort((a, b) => byId(COLLECTION, b).ovr - byId(COLLECTION, a).ovr)[0] : null;
     renderSquad();
   }
   function show(name) {
-    ['map', 'squad', 'match', 'result'].forEach(n => { $('screen-' + n).hidden = n !== name; });
+    ['club', 'map', 'hall', 'table', 'squad', 'match', 'result'].forEach(n => { $('screen-' + n).hidden = n !== name; });
     window.scrollTo(0, 0);
   }
 
@@ -134,7 +213,7 @@ ${hpBlock(h)}
     const g = S.g, cur = g.cur; if (!cur) return;
     if (cur.so || S.penView) {
       const id = cur.so && cur.side === 'you' ? (cur.attacker || S.pick) : cur.attacker, sh = id ? card(cur.side, id) : null;
-      $('slot-home').innerHTML = cur.side === 'home' ? duelCard(sh, true, true, 'Penalty') : goalieSlot('Goalie ' + S.hall.short);
+      $('slot-home').innerHTML = cur.side === 'home' ? duelCard(sh, true, true, 'Penalty') : goalieSlot('Goalie ' + S.opp);
       $('slot-you').innerHTML = cur.side === 'home' ? goalieSlot('Dein Goalie') : (sh ? duelCard(sh, false, true, 'Penalty') : emptySlot('Dein Schütze'));
       return;
     }
@@ -144,7 +223,7 @@ ${hpBlock(h)}
   }
   function renderScore() {
     const g = S.g, sc = S.shown || g.score, pp = $('sc-pp');
-    $('sc-you').textContent = sc.you; $('sc-home').textContent = sc.home; $('sc-club').textContent = S.hall.short;
+    $('sc-you').textContent = sc.you; $('sc-home').textContent = sc.home; $('sc-club').textContent = S.opp;
     $('keeper-you').className = 'keeper bot' + (g.cur && g.cur.pull ? ' off' : '');
     pp.className = 'sb-pp'; pp.textContent = '';
     if (g.pen) { $('sc-period').textContent = 'Penaltys'; $('sc-duel').textContent = g.pen.you + ' : ' + g.pen.home; return; }
@@ -169,7 +248,7 @@ ${hpBlock(h)}
     for (let i = 3; i >= 1; i--) bar += `<i class="${g.mom <= -i ? 'h' : ''}"></i>`;
     bar += '<span class="mid"></span>';
     for (let i = 1; i <= 3; i++) bar += `<i class="${g.mom >= i ? 'y' : ''}"></i>`;
-    const who = g.mom > 0 ? 'bei dir' : (g.mom < 0 ? 'bei ' + S.hall.short : 'ausgeglichen');
+    const who = g.mom > 0 ? 'bei dir' : (g.mom < 0 ? 'bei ' + S.opp : 'ausgeglichen');
     $('mom').hidden = !!g.pen;
     $('mom').innerHTML = `<span>Momentum</span><span class="mom-bar" role="img" aria-label="Momentum ${who}">${bar}</span>`;
   }
@@ -269,7 +348,7 @@ ${hpBlock(h)}
 
   // --- Texte zu den Ereignissen der Engine ---
   const WITH = { direkt: 'einem Direktschuss', kombi: 'einer Kombination', solo: 'einem Solo' };
-  const team = side => side === 'you' ? 'dich' : S.hall.short;
+  const team = side => side === 'you' ? 'dich' : S.opp;
   function line(e) {
     const o = E.other;
     if (e.t === 'reveal') {
@@ -280,7 +359,7 @@ ${hpBlock(h)}
     if (e.t === 'foul') {
       const D = last(e.side, e.by), A = last(o(e.side), e.on), to = o(e.side);
       if (e.kind === 'penalty') return D + ' foult ' + A + ' bei klarer Torchance. Penalty für ' + team(to) + '.';
-      if (e.kind === 'twomin') return 'Foul von ' + D + '. 2 Minuten, ' + (to === 'you' ? 'du spielst' : S.hall.short + ' spielt') + ' in Überzahl.';
+      if (e.kind === 'twomin') return 'Foul von ' + D + '. 2 Minuten, ' + (to === 'you' ? 'du spielst' : S.opp + ' spielt') + ' in Überzahl.';
       return 'Foul von ' + D + ' an ' + A + '. Freischlag für ' + team(to) + '.';
     }
     if (e.t === 's1') {
@@ -338,9 +417,10 @@ ${hpBlock(h)}
   // --- match flow ---
   function startMatch() {
     COLLECTION.forEach(c => { c.box = 0; c.cap = c.id === S.capId; });
-    S.g = E.newMatch({ mode: 'hall', homeName: S.hall.short,
+    S.opp = ownerOf(S.hall.id).short;
+    S.g = E.newMatch({ mode: 'hall', homeName: S.opp,
       you: { goalie: USER.goalie, cards: S.squad.map(id => byId(COLLECTION, id)) },
-      home: { goalie: S.hall.goalie, cards: S.hall.guard.map(c => Object.assign({}, c, { stam: 100, box: 0, home: true })) } }, S.rng);
+      home: { goalie: S.hall.goalie, cards: World.guard(W, S.hall.id) } }, S.rng);
     S.pick = null; S.shown = null; S.penView = false; S.skip = false; S.phase = 'idle';
     $('btn-next').hidden = true;
     show('match'); announceDuel();
@@ -351,7 +431,7 @@ ${hpBlock(h)}
     S.pick = null; S.penView = false; S.skip = false; S.phase = 'card'; refresh();
     const pre = g.duel === 0 ? 'Anpfiff. ' : (g.duel % 4 === 0 ? period(g.duel) + '. Drittel. ' : '');
     if (cur.side === 'home') { const a = card('home', cur.attacker); say(pre + a.first + ' ' + a.last + ' greift an. Mit wem verteidigst du?'); }
-    else say(pre + S.hall.short + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
+    else say(pre + S.opp + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
   }
   function pickCard(id) {
     const g = S.g, c = card('you', id); if (!c) return;
@@ -365,7 +445,7 @@ ${hpBlock(h)}
     if (S.phase === 'pen-corner' && cur.so) { S.pick = null; S.phase = 'pen-card'; refresh(); say('Wer schiesst den Penalty?'); return; }
     if (S.phase !== 'option') return;
     S.pick = null; S.phase = 'card'; refresh();
-    say(cur.side === 'home' ? last('home', cur.attacker) + ' greift an. Mit wem verteidigst du?' : S.hall.short + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
+    say(cur.side === 'home' ? last('home', cur.attacker) + ' greift an. Mit wem verteidigst du?' : S.opp + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
   }
   function playTactic(id) {
     if (!(S.phase === 'card' || S.phase === 'option')) return;
@@ -426,14 +506,14 @@ ${hpBlock(h)}
   }
 
   // --- result ---
-  function setHp(h, before) {
-    $('res-hp').textContent = h.hp + ' / 100';
+  function setHp(hp, before) {
+    $('res-hp').textContent = hp + ' / 100';
     const fill = $('res-hp-fill');
     fill.style.transition = 'none'; fill.style.width = before + '%';
-    setTimeout(() => { fill.style.transition = ''; fill.style.width = h.hp + '%'; }, 250);
+    setTimeout(() => { fill.style.transition = ''; fill.style.width = hp + '%'; }, 250);
   }
   function logHtml() {
-    const g = S.g, h = S.hall, who = side => side === 'home' ? h.short : 'Du', o = E.other;
+    const g = S.g, who = side => side === 'home' ? S.opp : 'Du', o = E.other;
     const corner = id => id === 'm' ? 'Mitte' : byId(CORNERS, id).name.toLowerCase();
     const res = (side, text) => `<span class="${side === 'you' ? 'gy' : 'gh'}">${text}</span>`;
     let n = 0;
@@ -463,52 +543,67 @@ ${hpBlock(h)}
     }).join('');
   }
   function finish() {
-    const g = S.g, h = S.hall, y = g.score.you, o = g.score.home, before = h.hp, factor = h.near ? 1 : 0.5, outcome = g.outcome;
-    let title, cls, change, scoreText = y + ':' + o;
+    const g = S.g, h = S.hall, y = g.score.you, o = g.score.home, outcome = g.outcome, won = outcome === 'win' || outcome === 'penwin';
+    const r = World.applyResult(W, h.id, outcome, g.score), f = r.factor; W = r.world;
+    const hp = hallState(h.id).hp;
+    let title, cls, scoreText = y + ':' + o;
     if (g.pen) {
-      const won = outcome === 'penwin';
       title = won ? 'Sieg nach Penaltys' : 'Niederlage nach Penaltys'; cls = won ? 'win' : 'loss';
-      change = won ? -Math.round(20 * factor) : 0; scoreText = (y + (won ? 1 : 0)) + ':' + (o + (won ? 0 : 1));
-    } else if (outcome === 'win') { title = 'Sieg'; cls = 'win'; change = -Math.round(Math.min(70, 30 + 10 * (y - o)) * factor); }
-    else { title = 'Niederlage'; cls = 'loss'; change = 10; }
-    h.hp = clamp(before + change, 0, 100); const real = h.hp - before;
+      scoreText = (y + (won ? 1 : 0)) + ':' + (o + (won ? 0 : 1));
+    } else { title = won ? 'Sieg' : 'Niederlage'; cls = won ? 'win' : 'loss'; }
     COLLECTION.forEach(c => { const m = card('you', c.id); c.stam = m ? Math.min(100, m.stam + 45) : 100; c.box = 0; });
+    const why = f.matchday ? ' (Spieltag vor Ort, doppelter Schaden)' : f.near ? '' : f.reclaim ? ' (Zurückerobern, voller Schaden)' : ' (Fernangriff, halber Schaden)';
     let text;
-    if (h.hp === 0) { h.mine = true; text = 'Halle erobert. Dein Verein hält jetzt ' + h.name + '.'; }
-    else if (outcome === 'win' || outcome === 'penwin') text = 'Du nimmst der Halle ' + (-real) + ' Stärke' + (h.near ? '' : ' (Fernangriff, halber Schaden)') + '. Es fehlen noch ' + h.hp + ' bis zur Eroberung.';
-    else if (outcome === 'penloss') text = h.short + ' rettet sich im Penaltyschiessen. Die Halle bleibt unverändert.';
-    else text = real > 0 ? h.short + ' verteidigt die Halle. Sie erholt sich um ' + real + ' Stärke.' : h.short + ' verteidigt die Halle. Sie bleibt bei voller Stärke.';
+    if (r.conquered) text = 'Halle erobert. ' + World.club(W.club).name + ' hält jetzt ' + h.name + ' mit ' + hp + ' Stärke. Stationiere eine Karte, damit sie nicht gleich wieder fällt.';
+    else if (won) text = 'Du nimmst der Halle ' + (-r.delta) + ' Stärke' + why + '. Es fehlen noch ' + hp + ' bis zur Eroberung.';
+    else if (outcome === 'penloss') text = S.opp + ' rettet sich im Penaltyschiessen. Die Halle bleibt unverändert.';
+    else text = r.delta > 0 ? S.opp + ' verteidigt die Halle. Sie erholt sich um ' + r.delta + ' Stärke.' : S.opp + ' verteidigt die Halle. Sie bleibt bei voller Stärke.';
     $('res-hall').textContent = h.name;
     $('res-title').textContent = title; $('res-title').className = 'res-title ' + cls;
     $('res-score').textContent = scoreText;
-    $('res-sub').textContent = 'Du gegen ' + h.short + (g.pen ? ', Penaltys ' + g.pen.you + ':' + g.pen.home : '');
-    $('res-delta').textContent = real === 0 ? 'Keine Veränderung' : (real < 0 ? '−' + (-real) + ' Stärke' : '+' + real + ' Stärke');
+    $('res-sub').textContent = 'Du gegen ' + S.opp + (g.pen ? ', Penaltys ' + g.pen.you + ':' + g.pen.home : '');
+    $('res-delta').textContent = r.conquered ? 'Halle erobert' : (r.delta === 0 ? 'Keine Veränderung' : (r.delta < 0 ? '−' + (-r.delta) + ' Stärke' : '+' + r.delta + ' Stärke'));
     $('res-text').textContent = text;
-    const reward = (outcome === 'win' || outcome === 'penwin') && !h.mine;
+    const reward = won && !r.conquered;
     $('reward').hidden = !reward; $('res-actions').hidden = reward;
-    $('rw-dmg-val').textContent = '−' + Math.round(15 * factor);
-    $('btn-again').hidden = h.mine;
+    $('rw-dmg-val').textContent = '−' + World.bonusValue(W, h.id);
+    $('btn-again').textContent = isMine(h.id) ? 'Karte stationieren' : 'Nochmals angreifen';
     $('log').innerHTML = logHtml();
     S.phase = 'idle'; Scene.clear(); $('flash').hidden = true;
-    setHp(h, before); show('result');
+    setHp(hp, r.before); show('result');
   }
   function takeReward(kind) {
-    const h = S.hall, before = h.hp;
+    const h = S.hall;
     if (kind === 'dmg') {
-      h.hp = clamp(h.hp - Math.round(15 * (h.near ? 1 : 0.5)), 0, 100);
-      if (h.hp === 0) { h.mine = true; $('res-text').textContent = 'Nachgesetzt. Halle erobert, dein Verein hält jetzt ' + h.name + '.'; }
-      else $('res-text').textContent = 'Nachgesetzt. Es fehlen noch ' + h.hp + ' Stärke bis zur Eroberung.';
-      $('res-delta').textContent = '−' + (before - h.hp) + ' Stärke zusätzlich';
-      setHp(h, before);
+      const r = World.bonusDamage(W, h.id); W = r.world;
+      const hp = hallState(h.id).hp;
+      $('res-text').textContent = r.conquered ? 'Nachgesetzt. Halle erobert, ' + World.club(W.club).name + ' hält jetzt ' + h.name + ' mit ' + hp + ' Stärke. Stationiere eine Karte, damit sie nicht gleich wieder fällt.'
+        : 'Nachgesetzt. Es fehlen noch ' + hp + ' Stärke bis zur Eroberung.';
+      $('res-delta').textContent = r.conquered ? 'Halle erobert' : '−' + (-r.delta) + ' Stärke zusätzlich';
+      setHp(hp, r.before);
     } else {
       COLLECTION.forEach(c => { c.stam = 100; });
       $('res-text').textContent = 'Alle deine Karten sind wieder bei voller Ausdauer.';
     }
-    $('reward').hidden = true; $('res-actions').hidden = false; $('btn-again').hidden = h.mine;
+    $('reward').hidden = true; $('res-actions').hidden = false;
+    $('btn-again').textContent = isMine(h.id) ? 'Karte stationieren' : 'Nochmals angreifen';
   }
 
   // --- wiring ---
-  $('halls').addEventListener('click', e => { const b = e.target.closest('button[data-hall]'); if (b && !b.disabled) openSquad(b.getAttribute('data-hall')); });
+  $('halls').addEventListener('click', e => {
+    const a = e.target.closest('button[data-hall]'), v = e.target.closest('button[data-view]');
+    if (a) openSquad(a.getAttribute('data-hall')); else if (v) openHall(v.getAttribute('data-view'));
+  });
+  $('club-list').addEventListener('click', e => { const b = e.target.closest('button[data-club]'); if (b && !b.disabled) pickClub(b.getAttribute('data-club')); });
+  $('btn-club-back').addEventListener('click', () => { renderMap(); show('map'); });
+  $('btn-switch').addEventListener('click', () => { if (World.canSwitch(W)) openClub(); });
+  $('btn-table').addEventListener('click', openTable);
+  $('btn-table-back').addEventListener('click', () => { renderMap(); show('map'); });
+  $('btn-hall-back').addEventListener('click', () => { renderMap(); show('map'); });
+  $('btn-hall-attack').addEventListener('click', () => openSquad(S.view));
+  $('hv-cards').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) stationCard(b.getAttribute('data-id')); });
+  $('btn-withdraw').addEventListener('click', withdrawCard);
+  $('btn-sim-attack').addEventListener('click', simAttack);
   $('sq-grid').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) toggleSquad(b.getAttribute('data-id')); });
   $('sq-cap').addEventListener('click', e => { const b = e.target.closest('button[data-cap]'); if (b) { S.capId = b.getAttribute('data-cap'); renderSquad(); } });
   $('btn-kickoff').addEventListener('click', () => { if (S.squad.length === 6) startMatch(); });
@@ -522,12 +617,12 @@ ${hpBlock(h)}
   $('dialog').addEventListener('click', e => { if (!e.target.closest('button')) skip(); });
   $('rw-dmg').addEventListener('click', () => takeReward('dmg'));
   $('rw-rest').addEventListener('click', () => takeReward('rest'));
-  $('btn-again').addEventListener('click', () => openSquad(S.hall.id));
+  $('btn-again').addEventListener('click', () => { if (isMine(S.hall.id)) openHall(S.hall.id); else openSquad(S.hall.id); });
   $('btn-map').addEventListener('click', () => { renderMap(); show('map'); });
   $('btn-reset').addEventListener('click', () => {
-    HALLS.forEach(h => { h.hp = 100; h.mine = false; });
+    W = World.create();
     COLLECTION.forEach(c => { c.stam = 100; c.box = 0; c.cap = false; });
-    S.squad = []; S.capId = null; renderMap();
+    S.squad = []; S.capId = null; openClub();
   });
-  renderMap();
+  openClub();
 })();

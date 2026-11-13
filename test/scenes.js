@@ -34,7 +34,7 @@ const SETS = {
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     await page.goto('file://' + path.resolve(__dirname, '..', 'dist', 'index.html'), { waitUntil: 'load' });
     await page.evaluate(() => Promise.all(['700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
-    await page.click('#halls button[data-hall]'); await page.click('#btn-kickoff');
+    await page.click('#club-list button[data-club="tigers"]'); await page.click('#halls button[data-hall]'); await page.click('#btn-kickoff');
     await page.evaluate(() => {
       const f = document.getElementById('flash');
       window.__cb = { text() {}, label(t, c, w) { f.className = 'flash ' + c; f.textContent = t; f.style.top = ((w ? w === 'unten' : HKScene.ballY() < 50) ? 81 : 19) + '%'; f.hidden = false; }, goal(s) { this.label('Tor', s); } };

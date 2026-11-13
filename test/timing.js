@@ -16,7 +16,7 @@ const SHOTS = path.join(__dirname, 'shots'); fs.mkdirSync(SHOTS, { recursive: tr
     const pick = sel => page.evaluate(s => { const l = [...document.querySelectorAll(s)].filter(el => !el.hidden && el.offsetParent !== null && !el.disabled); if (l.length) l[Math.floor(Math.random() * l.length)].click(); return l.length; }, sel);
     let shot = 0;
     for (let m = 0; m < N; m++) {
-      await pick('#btn-reset'); await pick('#halls button[data-hall]'); await pick('#btn-kickoff');
+      await pick('#btn-reset'); await pick('#club-list button[data-club="tigers"]'); await pick('#halls button[data-hall]'); await pick('#btn-kickoff');
       for (;;) {
         if (await vis('#screen-result')) { await pick('#reward .opt'); await pick('#btn-map'); break; }
         if (await vis('#btn-next')) { await pick('#btn-next'); continue; }

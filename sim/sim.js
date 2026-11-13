@@ -3,15 +3,19 @@
    Vorher bauen: node build.js
    Aufruf:  node sim/sim.js [--n 2000] [--seed 1] [--src] [--legacy] [--set key=value ...] [--json]
    --src     Engine aus src/engine.js statt aus dist/index.html (während der Entwicklung)
-   --legacy  alte Regeln (ein Wurf pro Duell) mit denselben Spielweisen, als Vergleich */
+   --legacy  alte Regeln (ein Wurf pro Duell) mit denselben Spielweisen, als Vergleich
+   --heimteam  neue Regeln, aber die alte Hallenwache: immer das Heimteam mit Heimvorteil */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 
 function loadEngine(file) {
   let code = fs.readFileSync(file, 'utf8');
-  if (file.endsWith('.html')) code = code.match(/<script id="hk-engine">([\s\S]*?)<\/script>/)[1];
+  let world = '';
+  if (file.endsWith('.html')) { const w = code.match(/<script id="hk-world">([\s\S]*?)<\/script>/); world = w ? w[1] : ''; code = code.match(/<script id="hk-engine">([\s\S]*?)<\/script>/)[1]; }
+  else world = fs.readFileSync(path.join(path.dirname(file), 'world.js'), 'utf8');
   const box = {}; vm.createContext(box); vm.runInContext(code, box);
+  if (world) { vm.runInContext(world, box); box.HK.World = box.HKWorld; }     // Hallenwache aus der Welt: Fans mit Heimvorteil, Heimteam ohne
   return box.HK;
 }
 
@@ -152,10 +156,11 @@ function makePolicies(HK, ev) {
 }
 
 // ---------- ein Match, viele Matches ----------
-function playMatch(HK, actFn, policy, hall, squadIds, capId, rng, cfg, shift) {
+function playMatch(HK, actFn, policy, hall, squadIds, capId, rng, cfg, shift, oldGuard) {
   const you = squadIds.map(id => Object.assign({}, HK.DATA.collection.filter(c => c.id === id)[0], { stam: 100, box: 0, cap: id === capId }));
   if (shift) you.forEach(c => { ['sco', 'ply', 'clu', 'fai', 'frm', 'exp'].forEach(k => { c[k] = Math.max(40, Math.min(99, c[k] + shift)); }); });
-  const home = hall.guard.map(c => Object.assign({}, c, { stam: 100, box: 0, home: true }));
+  // Alte Regeln: immer das Heimteam mit Heimvorteil. Neu: die Wache, wie die Welt sie zu Beginn aufstellt.
+  const home = oldGuard || !HK.World ? hall.guard.map(c => Object.assign({}, c, { stam: 100, box: 0, home: true })) : HK.World.guard(HK.World.create(), hall.id);
   let s = HK.newMatch({ mode: 'hall', homeName: hall.short, cfg, you: { goalie: HK.DATA.user.goalie, cards: you }, home: { goalie: hall.goalie, cards: home } }, rng);
   let guard = 0;
   while (s.phase !== 'done') {
@@ -188,7 +193,7 @@ function run(HK, o) {
       const st = styles[name], rng = HK.makeRng((o.seed || 1) * 7919 + hi * 101 + si * 13);
       const m = { n: o.n, gf: 0, ga: 0, win: 0, regWin: 0, so: 0, fouls: 0, twomin: 0, matchPen: 0, counters: 0, stops: 0, src: { attack: 0, pp: 0, counter: 0, free: 0, pen: 0 } };
       for (let i = 0; i < o.n; i++) {
-        const s = playMatch(HK, actFn, st.policy, hall, st.squad, capOf(st.squad), rng, cfg, st.shift);
+        const s = playMatch(HK, actFn, st.policy, hall, st.squad, capOf(st.squad), rng, cfg, st.shift, o.legacy || o.oldGuard);
         m.gf += s.score.you; m.ga += s.score.home;
         if (s.outcome === 'win' || s.outcome === 'penwin') m.win++;
         if (s.outcome === 'win') m.regWin++;
@@ -233,6 +238,7 @@ if (require.main === module) {
     else if (a[i] === '--src') opt.src = true;
     else if (a[i] === '--legacy') opt.legacy = true;
     else if (a[i] === '--json') opt.json = true;
+    else if (a[i] === '--heimteam') opt.oldGuard = true;
     else if (a[i] === '--set') {
       const kv = a[++i].split('='), keys = kv[0].split('.');
       if (keys.length === 2) { opt.cfg[keys[0]] = opt.cfg[keys[0]] || {}; opt.cfg[keys[0]][keys[1]] = +kv[1]; } else opt.cfg[kv[0]] = +kv[1];

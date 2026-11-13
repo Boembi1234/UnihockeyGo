@@ -23,7 +23,7 @@ async function session(browser, o) {
   const snap = async name => { if (shots[name] || !o.shots) return; shots[name] = true; await page.screenshot({ path: path.join(SHOTS, o.width + '-' + name + '.png'), fullPage: true }); };
   const info = () => page.evaluate(() => {
     const $ = id => document.getElementById(id), vis = el => !!el && !el.hidden && el.offsetParent !== null;
-    const screen = ['map', 'squad', 'match', 'result'].filter(n => !$('screen-' + n).hidden)[0];
+    const screen = ['club', 'map', 'hall', 'table', 'squad', 'match', 'result'].filter(n => !$('screen-' + n).hidden)[0];
     return { screen, next: vis($('btn-next')), opts: [...document.querySelectorAll('#opts .opt')].filter(vis).length, row: $('opts').className.indexOf('row') !== -1,
       cards: [...document.querySelectorAll('#hand .mini:not(:disabled)')].filter(vis).length, tacs: [...document.querySelectorAll('#tactics .tac:not(:disabled)')].filter(vis).length,
       period: $('sc-period').textContent, pp: $('sc-pp').textContent, hint: $('hand-hint').textContent, say: $('say-sr').textContent, reward: vis($('reward')),
@@ -34,10 +34,25 @@ async function session(browser, o) {
   while (stat.matches < o.matches || (o.until && !(await page.evaluate(k => k.every(x => window.__seen[x]), o.until)) && stat.matches < o.max) || (o.needShootout && !stat.shootouts && stat.matches < o.max)) {
     const s = await info(); stat.steps++;
     if (s.overflow > 0 && !stat.overflow.some(x => x.indexOf(s.screen + ' ' + s.period) === 0)) stat.overflow.push(s.screen + ' ' + s.period + ' +' + s.overflow);
-    if (s.screen === 'map') {
+    if (s.screen === 'club') { await snap('00-vereinswahl'); await click('#club-list button[data-club]:not(:disabled)'); }
+    else if (s.screen === 'table') { await snap('13-vereinstabelle'); await click('#btn-table-back'); }
+    else if (s.screen === 'hall') {
+      const own = await page.evaluate(() => !document.getElementById('hv-station').hidden);
+      await snap(own ? '12-halle-eigene' : '12-halle-fremde');
+      const r = Math.random();
+      if (own && r < 0.45) { (await click('#hv-cards .mini:not(:disabled)')) || (await click('#btn-withdraw')); if (await page.evaluate(() => !document.getElementById('btn-withdraw').hidden)) await snap('12-halle-stationiert'); }
+      else if (r < 0.7) await click('#btn-sim-attack');
+      else if (r < 0.85) (await click('#btn-hall-attack')) || (await click('#btn-hall-back'));
+      else await click('#btn-hall-back');
+      stat.hallSteps = (stat.hallSteps || 0) + 1;
+    } else if (s.screen === 'map') {
       await snap('01-karte');
-      if (stat.matches % 2 === 0) await click('#btn-reset');
-      const n = await click('#halls button[data-hall]:not(:disabled)'); if (!n) await click('#btn-reset');
+      const r = Math.random();
+      if (stat.matches % 5 === 4 && r < 0.3) await click('#btn-reset');
+      else if (r < 0.12) await click('#btn-table');
+      else if (r < 0.2) await click('#btn-switch:not(:disabled)');
+      else if (r < 0.5) await click('#halls button[data-view]');
+      else { const n = await click('#halls button[data-hall]'); if (!n) await click('#halls button[data-view]'); }
     } else if (s.screen === 'squad') { await snap('02-kader'); await click('#btn-kickoff'); }
     else if (s.screen === 'match') {
       if (s.pp) await snap('07-ueberzahl');
@@ -58,7 +73,7 @@ async function session(browser, o) {
       if (s.logItems < 12) errors.push('Protokoll zu kurz: ' + s.logItems);
       await snap(/Penaltys/.test(s.title) ? '11-resultat-penaltys' : '10-resultat');
       if (s.reward) await click('#reward .opt');
-      await click(Math.random() < 0.5 ? '#btn-map' : '#btn-again:not([hidden])') || await click('#btn-map');
+      (await click(Math.random() < 0.5 ? '#btn-map' : '#btn-again')) || (await click('#btn-map'));
     }
   }
   stat.seen = await page.evaluate(() => window.__seen);
@@ -79,7 +94,7 @@ async function session(browser, o) {
   for (const r of runs) {
     const t0 = Date.now(), st = await session(browser, r);
     console.log('\n' + r.name + ': ' + st.matches + ' Matches, ' + st.wins + ' Siege, ' + st.shootouts + ' Penaltyschiessen, ' + st.steps + ' Schritte, ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
-    console.log('  gesehen: ' + JSON.stringify(st.seen));
+    console.log('  gesehen: ' + JSON.stringify(st.seen) + ', Schritte in der Hallenansicht: ' + (st.hallSteps || 0));
     console.log('  Resultate: ' + st.results.slice(0, 8).join(' | '));
     console.log('  Überlauf quer: ' + (st.overflow.length ? st.overflow.join(', ') : 'keiner'));
     console.log('  Konsole: ' + (st.errors.length ? st.errors.length + ' FEHLER\n   ' + st.errors.slice(0, 8).join('\n   ') : 'keine Fehler'));

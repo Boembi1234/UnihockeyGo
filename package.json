@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node build.js",
     "sim": "node build.js && node sim/sim.js",
-    "test": "node build.js && node test/engine.test.js",
+    "test": "node build.js && node test/engine.test.js && node test/world.test.js",
     "test:browser": "node build.js && node test/overflow.js && node test/play.js && node test/timing.js"
   }
 }
