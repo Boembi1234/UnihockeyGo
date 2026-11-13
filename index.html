@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hallenkampf Prototyp</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{
+  /* Layout: one phone-width column. Map with three halls, squad pick, then scoreboard, rink, dialog and the action area. */
+  --ink:#050818;
+  --navy:#0e1b47;
+  --blue:#1a57ff;
+  --gold:#f7d774;
+  --ice:#e3ecff;
+  --mute:#9fb4e8;
+  --line:#24347a;
+  --goal:#10b981;
+  --against:#ef4444;
+  --foil:linear-gradient(135deg,#7a4d0b 0%,#f2c14e 16%,#fff3c4 30%,#d19a2a 46%,#7a4d0b 58%,#f0c75a 76%,#fff0b3 88%,#9c6a14 100%);
+  --display:'Saira Condensed','Arial Narrow',ui-sans-serif,system-ui,sans-serif;
+  --body:'Inter',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ink);background-image:radial-gradient(120% 70% at 50% 0%,#16224f 0%,#0a1030 48%,#050818 100%);background-attachment:fixed;color:var(--ice);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+#app{max-width:460px;margin:0 auto;min-height:100%;padding:14px 16px 28px}
+.screen{display:flex;flex-direction:column;gap:12px}
+.screen[hidden]{display:none}
+[hidden]{display:none !important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:default}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+h1,h2,p,ul{margin:0}
+ul{padding:0;list-style:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.brand{font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.2em}
+.mode{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.back{align-self:flex-start;height:44px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:transparent;font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.1em;text-transform:uppercase}
+.back:hover{border-color:var(--mute)}
+
+/* map */
+.map{position:relative;height:190px;border-radius:14px;overflow:hidden;background:#0b1437;border:1px solid var(--line)}
+.map svg{display:block;width:100%;height:100%}
+.pulse{transform-origin:86px 138px;animation:pulse 2.2s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+
+.panel{background:rgba(14,27,71,.72);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.hall-name{font-family:var(--display);font-weight:800;font-size:26px;line-height:1;letter-spacing:.03em;text-transform:uppercase}
+.hr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.tag{flex-shrink:0;padding:4px 9px 3px;font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.12em;text-transform:uppercase;line-height:1;background:var(--gold);color:#1a1203}
+.tag.far{background:transparent;color:var(--mute);border:1px solid var(--line)}
+.tag.mine{background:var(--blue);color:#fff}
+.holder{color:var(--mute);font-size:14px}
+.holder strong{color:var(--ice);font-weight:600}
+.hp{display:flex;flex-direction:column;gap:6px}
+.hp-row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-weight:700;font-size:14px}
+.hp-row b{font-weight:800;font-size:18px;color:var(--gold);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.hp-track{height:9px;background:#070b1f;border:1px solid var(--line);overflow:hidden}
+.hp-fill{height:100%;width:100%;background:var(--foil);transition:width .9s cubic-bezier(.2,.7,.2,1)}
+.group-label{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.group-label b{color:var(--gold);font-weight:800}
+.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.chip{display:flex;align-items:baseline;gap:6px;padding:5px 8px;background:#070b1f;border:1px solid var(--line);font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.chip b{font-weight:800;color:var(--gold)}
+.chip i{font-style:normal;margin-left:auto;font-weight:600;font-size:12px;letter-spacing:.08em;color:var(--mute)}
+button.chip{height:44px;align-items:center}
+.scout{display:flex;flex-direction:column;margin-top:4px}
+.scout li{display:grid;grid-template-columns:30px 1fr 34px 96px;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid rgba(36,52,122,.7);font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.04em;text-transform:uppercase;line-height:1.1}
+.scout b{font-weight:800;color:var(--gold)}
+.scout .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scout .ps{font-weight:600;font-size:13px;letter-spacing:.08em;color:var(--ice)}
+.scout i{font-style:normal;font-weight:600;font-size:13px;letter-spacing:.06em;color:var(--mute);text-align:right}
+button.chip.on{border-color:var(--gold);background:#1a1606}
+.cta{min-height:52px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:.1em;text-transform:uppercase}
+.cta:hover:not(:disabled){background:#1249e0}
+.cta:disabled{background:#1b2757;color:var(--mute)}
+.cta.small{min-height:46px;font-size:18px}
+.ghost{min-height:46px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ice);font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.1em;text-transform:uppercase}
+.ghost:hover{border-color:var(--mute)}
+.rules{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mute)}
+.rules b{color:var(--ice);font-weight:600}
+.note{font-size:12px;color:var(--mute)}
+
+/* scoreboard */
+.sb{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:#070b1f;border:1px solid var(--line);border-radius:12px;padding:5px 16px}
+.sb-side{display:flex;align-items:center;gap:12px;font-family:var(--display);text-transform:uppercase}
+.sb-side.right{justify-content:flex-end}
+.sb-lbl{font-weight:700;font-size:16px;letter-spacing:.14em;color:var(--mute)}
+.sb-num{font-weight:800;font-size:44px;line-height:1;font-variant-numeric:tabular-nums}
+.sb-mid{display:flex;flex-direction:column;align-items:center;gap:1px;font-family:var(--display);text-transform:uppercase}
+.sb-period{font-weight:700;font-size:16px;letter-spacing:.14em;color:var(--gold)}
+.sb-duel{font-weight:600;font-size:13px;letter-spacing:.1em;color:var(--mute)}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.dots{display:flex;align-items:center;gap:4px}
+.dots .gap{width:6px}
+.dot{width:13px;height:11px;background:#2a3970;clip-path:polygon(0 0,100% 0,50% 100%)}
+.dot.you{clip-path:polygon(50% 0,100% 100%,0 100%)}
+.dot.pen{clip-path:none;border-radius:50%;width:10px;height:10px}
+.dot.miss{background:#4a5a96}
+.dot.g-you{background:var(--goal)}
+.dot.g-home{background:var(--against)}
+.dot.now{background:var(--gold)}
+.mom{display:flex;align-items:center;gap:6px;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.mom-bar{display:flex;gap:2px}
+.mom-bar i{width:9px;height:9px;background:#2a3970}
+.mom-bar i.h{background:var(--against)}
+.mom-bar i.y{background:var(--goal)}
+.mom-bar .mid{width:2px;height:13px;background:var(--mute);align-self:center}
+
+/* rink */
+.rink{position:relative;height:372px;border-radius:30px;overflow:hidden;background:linear-gradient(180deg,#123aa8 0%,#0d2c86 100%);border:3px solid rgba(255,255,255,.82)}
+.rink::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,rgba(255,255,255,0) 1px 26px)}
+.r-mid{position:absolute;left:0;right:0;top:50%;height:2px;background:rgba(255,255,255,.5)}
+.r-spot{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:rgba(255,255,255,.7)}
+.r-crease{position:absolute;left:33%;width:34%;height:40px;border:2px solid rgba(255,255,255,.5);transition:background .2s}
+.r-crease.top{top:-2px}
+.r-crease.bot{bottom:-2px}
+.r-goal{position:absolute;left:43%;width:14%;height:6px;background:#fff}
+.r-goal.top{top:0}
+.r-goal.bot{bottom:0}
+.rink.hit-top-you .r-crease.top{background:rgba(16,185,129,.55)}
+.rink.hit-bot-home .r-crease.bot{background:rgba(239,68,68,.55)}
+.slot{position:absolute;display:flex;flex-direction:column;gap:6px;filter:drop-shadow(0 12px 14px rgba(0,0,0,.5))}
+.slot.home{top:12px;right:12px}
+.slot.you{bottom:12px;left:12px}
+.role{font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1}
+.role.atk{color:var(--gold)}
+.role.def{color:var(--ice)}
+.stam{height:5px;background:rgba(5,8,24,.7)}
+.stam i{display:block;height:100%;background:var(--ice);transition:width .5s}
+.stam.low i{background:var(--against)}
+.card{position:relative;width:150px;height:204px;background:var(--foil);clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+.card-in{position:absolute;inset:3px;clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);background:radial-gradient(95% 55% at 70% 22%,#3a74ff 0%,rgba(26,87,255,.62) 34%,rgba(14,27,71,0) 76%),linear-gradient(170deg,#0b1437 0%,#050818 100%);font-family:var(--display);text-transform:uppercase;color:#fff}
+.card.home .card-in{background:radial-gradient(95% 55% at 70% 22%,#b8862a 0%,rgba(150,104,24,.6) 34%,rgba(14,27,71,0) 76%),linear-gradient(170deg,#141006 0%,#050818 100%)}
+.c-rate{position:absolute;left:10px;top:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.c-rate b{font-weight:800;font-size:44px;line-height:.8;color:var(--gold);text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.c-rate span{font-weight:700;font-size:12px;letter-spacing:.1em}
+.jersey{position:absolute;right:-12px;top:5px;width:104px;height:auto;transform:rotate(-6deg)}
+.c-name{position:absolute;left:0;right:0;top:91px;padding:5px 10px 4px;display:flex;flex-direction:column;gap:1px;background:rgba(5,8,24,.78);border-top:1px solid rgba(247,215,116,.6);border-bottom:1px solid rgba(247,215,116,.6)}
+.c-name .f{display:flex;justify-content:space-between;gap:6px;font-weight:600;font-size:11px;letter-spacing:.12em;color:var(--gold);line-height:1;white-space:nowrap}
+.c-name .f span:last-child{color:#c9d8ff}
+.c-name .l{font-weight:800;font-size:23px;line-height:.95;letter-spacing:.02em;white-space:nowrap;text-align:center}
+.c-name .l.long{font-size:19px}
+.c-stats{position:absolute;left:10px;right:10px;bottom:9px;display:flex;flex-direction:column;gap:1px}
+.c-stats div{display:flex;justify-content:space-between;align-items:baseline;line-height:1}
+.c-stats span{font-weight:600;font-size:12px;letter-spacing:.12em;color:var(--gold)}
+.c-stats b{font-weight:800;font-size:16px}
+.c-tag{position:absolute;left:8px;top:70px;padding:2px 6px 1px;background:var(--gold);color:#1a1203;font-weight:800;font-size:11px;letter-spacing:.1em;line-height:1.1}
+.empty{width:150px;height:204px;border:2px dashed rgba(255,255,255,.55);background:rgba(5,8,24,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-family:var(--display);text-transform:uppercase;text-align:center}
+.empty b{font-weight:800;font-size:54px;line-height:.8;color:rgba(255,255,255,.75)}
+.empty span{font-weight:700;font-size:14px;letter-spacing:.12em;color:#fff}
+.ball{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,#fff 45%,#cfd8ee 100%);box-shadow:0 3px 6px rgba(0,0,0,.5),inset -2px -2px 0 rgba(0,0,0,.12);z-index:3}
+.ball::after{content:"";position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle,#5c6b96 0 1.3px,rgba(0,0,0,0) 1.6px);background-size:5px 5px}
+.flash{position:absolute;left:50%;top:50%;z-index:4;transform:translate(-50%,-50%) skewX(-8deg);padding:4px 20px 2px;font-family:var(--display);font-weight:800;font-size:52px;line-height:1;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;animation:pop .28s cubic-bezier(.2,1.4,.4,1)}
+.flash.you{background:var(--goal);color:#03130c}
+.flash.home{background:var(--against);color:#fff}
+.flash.save{background:var(--ice);color:var(--navy);font-size:38px}
+@keyframes pop{from{transform:translate(-50%,-50%) skewX(-8deg) scale(.6);opacity:0}to{transform:translate(-50%,-50%) skewX(-8deg) scale(1);opacity:1}}
+
+.dialog{min-height:78px;background:#070b1f;border:2px solid var(--ice);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dialog p{flex:1;font-size:15px;font-weight:500;line-height:1.4}
+.next{flex-shrink:0;height:44px;padding:0 18px;border:0;border-radius:8px;background:var(--gold);color:#1a1203;font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.1em;text-transform:uppercase}
+.next:hover{background:#ffe9a0}
+
+/* tactics */
+.tactics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tac{min-height:48px;padding:5px 6px;border:1px solid var(--gold);border-radius:8px;background:#141006;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:var(--display);text-transform:uppercase;line-height:1}
+.tac b{font-weight:800;font-size:15px;letter-spacing:.08em;color:var(--gold)}
+.tac span{font-weight:600;font-size:11px;letter-spacing:.06em;color:#e8dcae}
+.tac:hover:not(:disabled){background:#241c08}
+.tac:disabled{border-color:var(--line);background:#070b1f}
+.tac:disabled b,.tac:disabled span{color:#6f7fb3}
+.tac.active{background:var(--gold)}
+.tac.active b,.tac.active span{color:#1a1203}
+
+.hand-head{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);text-transform:uppercase;letter-spacing:.14em}
+.hand-head span:first-child{font-weight:700;font-size:15px;color:var(--mute)}
+.hand-head span:last-child{font-weight:700;font-size:15px;color:var(--gold)}
+.hand{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mini{position:relative;height:136px;padding:0;border:0;background:var(--foil);clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);text-align:left;transition:transform .12s}
+.mini-in{position:absolute;inset:2.5px;clip-path:polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);background:linear-gradient(170deg,#12235c 0%,#070b1f 100%);padding:8px 9px 8px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--display);text-transform:uppercase;color:#fff}
+.mini:not(:disabled):hover{transform:translateY(-3px)}
+.mini:not(:disabled):hover .mini-in{background:linear-gradient(170deg,#1b3384 0%,#0b1233 100%)}
+.mini.out{opacity:.42}
+.mini.off{background:#33406e}
+.mini.off .mini-in{background:#0a1030}
+.mini.off .m-top b{color:#a9b6e0}
+.m-top{display:flex;justify-content:space-between;align-items:flex-start;padding-left:6px}
+.m-top b{font-weight:800;font-size:32px;line-height:.8;color:var(--gold)}
+.m-top span{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-weight:600;font-size:12px;letter-spacing:.1em;color:var(--mute);line-height:1}
+.m-top em{font-style:normal;font-weight:800;color:#fff}
+.m-name{display:flex;align-items:center;justify-content:space-between;gap:4px;font-weight:800;font-size:16px;line-height:1;letter-spacing:.03em;white-space:nowrap}
+.m-name .nm{overflow:hidden;text-overflow:ellipsis}
+.m-name i{flex-shrink:0;font-style:normal;font-size:11px;letter-spacing:.06em;line-height:1.25;padding:1px 4px 0;background:var(--gold);color:#1a1203}
+.m-name.long{font-size:13.5px;letter-spacing:.01em}
+.m-lines{display:flex;flex-direction:column;gap:2px;font-weight:600;font-size:12px;letter-spacing:.08em;line-height:1;color:#c9d8ff}
+.m-lines div{display:flex;justify-content:space-between;align-items:baseline}
+.m-lines b{font-weight:800;font-size:15px;color:#fff}
+.m-status{font-weight:700;font-size:12px;letter-spacing:.1em;color:#ffb3b3;line-height:1}
+
+/* option buttons: move, stance, corner */
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{width:100%;min-height:62px;padding:9px 12px;border:1px solid var(--gold);border-radius:10px;background:#101a45;display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:baseline;text-align:left}
+.opt:hover{background:#1b2a6b}
+.opt b{font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.opt .big{font-family:var(--display);font-weight:800;font-size:21px;color:var(--gold);line-height:1;text-align:right;white-space:nowrap}
+.opt .sub{font-size:13px;color:var(--mute);line-height:1.25}
+.opt .sub2{font-size:13px;color:var(--mute);text-align:right;white-space:nowrap;line-height:1.25}
+.opts.row{flex-direction:row}
+.opts.row .opt{display:flex;justify-content:center;align-items:center;min-height:58px}
+.hint{font-size:13px;color:var(--mute)}
+
+/* result */
+.res-title{font-family:var(--display);font-weight:800;font-size:50px;line-height:.9;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding-top:10px}
+.res-title.win{color:var(--goal)}
+.res-title.loss{color:#ff8a8a}
+.res-score{font-family:var(--display);font-weight:800;font-size:88px;line-height:.9;text-align:center;font-variant-numeric:tabular-nums}
+.res-sub{text-align:center;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.res-delta{font-family:var(--display);font-weight:800;font-size:22px;color:var(--gold)}
+.res-text{font-size:15px}
+.actions{display:flex;flex-direction:column;gap:8px}
+.log{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute)}
+.log li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(36,52,122,.7)}
+.log li span:last-child{white-space:nowrap;flex-shrink:0}
+.log b{font-weight:600;color:var(--ice)}
+.log .gy{color:var(--goal);font-weight:600}
+.log .gh{color:#ff8a8a;font-weight:600}
+
+@media (max-width:380px){
+  .card,.empty{width:136px}
+  .jersey{width:92px}
+  .c-name .l{font-size:21px}
+  .c-name .l.long{font-size:17px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pulse,.flash{animation:none}
+  .hp-fill,.stam i,.mini{transition:none}
+}
+</style>
+</head>
+<body>
+<main id="app">
+
+<section id="screen-map" class="screen">
+  <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode">Hallenkampf</span></header>
+  <div class="map" id="map" role="img" aria-label="Schematische Karte: Du stehst 40 Meter neben den Sporthallen Weissenstein. Hardau und Grossmatt sind weiter weg."></div>
+  <div id="halls" class="screen"></div>
+  <div class="panel">
+    <p class="group-label">So läuft es</p>
+    <ul class="rules">
+      <li><b>Kader:</b> Du nimmst 6 deiner 10 Karten mit und bestimmst einen Captain.</li>
+      <li><b>Duell:</b> Du wählst die Karte und dazu den Spielzug oder die Abwehr. Liest der Verteidiger den Zug, sinkt die Torchance stark.</li>
+      <li><b>Taktik:</b> Time-out, Pressing und Ohne Goalie gibt es je einmal pro Match. Verteidiger wehren besser ab, Stürmer treffen besser.</li>
+      <li><b>Schaden:</b> Ein Sieg schwächt die Halle. Vor Ort zählt er voll, aus der Ferne halb.</li>
+    </ul>
+    <button class="ghost" id="btn-reset" type="button">Prototyp zurücksetzen</button>
+    <p class="note">Standort und Check-in sind simuliert. Die Kader und Werte stammen aus der Saison 2026/27, Stand 13.11.2026.</p>
+  </div>
+</section>
+
+<section id="screen-squad" class="screen" hidden>
+  <button class="back" id="btn-back-map" type="button">Zur Karte</button>
+  <div class="panel">
+    <div class="hr-head"><h1 class="hall-name" id="sq-hall"></h1><span class="tag" id="sq-mode"></span></div>
+    <p class="holder" id="sq-holder"></p>
+    <div class="hp">
+      <div class="hp-row"><span>Hallen-Stärke</span><b id="sq-hp"></b></div>
+      <div class="hp-track"><div class="hp-fill" id="sq-hp-fill"></div></div>
+    </div>
+    <div>
+      <p class="group-label">Hallenwache und ihr liebster Spielzug</p>
+      <ul class="scout" id="sq-guard"></ul>
+    </div>
+  </div>
+  <div class="hand-head"><span>Dein Kader</span><span id="sq-count"></span></div>
+  <div class="hand" id="sq-grid"></div>
+  <div class="panel">
+    <p class="group-label">Captain: <b>+4 auf alle Werte</b></p>
+    <div class="chips" id="sq-cap"></div>
+    <button class="cta" id="btn-kickoff" type="button">Match starten</button>
+  </div>
+</section>
+
+<section id="screen-match" class="screen" hidden>
+  <div class="sb">
+    <div class="sb-side"><span class="sb-lbl">Du</span><span class="sb-num" id="sc-you">0</span></div>
+    <div class="sb-mid"><span class="sb-period" id="sc-period">1. Drittel</span><span class="sb-duel" id="sc-duel">Duell 1 von 12</span></div>
+    <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club">Köniz</span></div>
+  </div>
+  <div class="meta">
+    <div class="dots" id="dots" aria-hidden="true"></div>
+    <div class="mom" id="mom"></div>
+  </div>
+  <div class="rink" id="rink">
+    <div class="r-mid"></div><div class="r-spot"></div>
+    <div class="r-crease top"></div><div class="r-crease bot"></div>
+    <div class="r-goal top"></div><div class="r-goal bot"></div>
+    <div class="slot home" id="slot-home"></div>
+    <div class="slot you" id="slot-you"></div>
+    <div class="ball" id="ball" hidden></div>
+    <div class="flash" id="flash" hidden></div>
+  </div>
+  <div class="dialog">
+    <p id="say" aria-hidden="true"></p>
+    <p id="say-sr" class="sr" aria-live="polite"></p>
+    <button class="next" id="btn-next" type="button" hidden>Weiter</button>
+  </div>
+  <div class="tactics" id="tactics"></div>
+  <div class="hand-head" id="hand-head"><span>Deine Karten</span><span id="hand-hint"></span></div>
+  <div class="hand" id="hand"></div>
+  <div class="opts" id="opts" hidden></div>
+  <button class="ghost" id="btn-recard" type="button" hidden>Andere Karte wählen</button>
+  <p class="hint">Der Balken zeigt die Ausdauer. Müde Karten spielen schwächer, unter 20 setzen sie aus.</p>
+</section>
+
+<section id="screen-result" class="screen" hidden>
+  <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode" id="res-hall"></span></header>
+  <h2 class="res-title" id="res-title">Sieg</h2>
+  <div class="res-score" id="res-score">0:0</div>
+  <p class="res-sub" id="res-sub"></p>
+  <div class="panel">
+    <div class="hp">
+      <div class="hp-row"><span>Hallen-Stärke</span><b id="res-hp">100 / 100</b></div>
+      <div class="hp-track"><div class="hp-fill" id="res-hp-fill"></div></div>
+    </div>
+    <p class="res-delta" id="res-delta"></p>
+    <p class="res-text" id="res-text"></p>
+    <div id="reward" class="actions" hidden>
+      <p class="group-label">Wähle deinen Bonus</p>
+      <div class="opts">
+        <button class="opt" id="rw-dmg" type="button"><b>Nachsetzen</b><span class="big" id="rw-dmg-val"></span><span class="sub">Die Halle verliert sofort weitere Stärke.</span><span class="sub2"></span></button>
+        <button class="opt" id="rw-rest" type="button"><b>Erholung</b><span class="big">100</span><span class="sub">Alle deine Karten starten das nächste Match ausgeruht.</span><span class="sub2">Ausdauer</span></button>
+      </div>
+    </div>
+    <div class="actions" id="res-actions">
+      <button class="cta" id="btn-again" type="button">Nochmals angreifen</button>
+      <button class="ghost" id="btn-map" type="button">Zur Karte</button>
+    </div>
+  </div>
+  <div class="panel">
+    <p class="group-label">Alle Duelle</p>
+    <ul class="log" id="log"></ul>
+  </div>
+</section>
+
+</main>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sleep = ms => new Promise(r => setTimeout(r, reduce ? Math.min(ms, 30) : ms));
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+  const pct = p => Math.round(p * 100);
+
+  // Ratings: Herren L-UPL 2026/27 to 13 Nov 2026, draft formula (percentile in the league mapped to 60-99).
+  function mk(id, first, last, short, pos, no, ovr, sco, ply, clu, fai, frm, exp) {
+    return { id, first, last, short, pos, no, ovr, sco, ply, clu, fai, frm, exp, stam: 100, box: 0, home: false, cap: false };
+  }
+  const COLLECTION = [
+    mk('steiner', 'Simon', 'Steiner', 'Tigers', 'ATT', 11, 94, 95, 93, 99, 80, 92, 98),
+    mk('sjogren', 'Albin', 'Sjögren', 'Zug', 'ATT', 22, 93, 95, 99, 87, 99, 99, 74),
+    mk('wilhelmsson', 'Johannes', 'Wilhelmsson', 'Uster', 'ATT', 82, 93, 97, 98, 87, 99, 95, 67),
+    mk('kainulainen', 'Justus', 'Kainulainen', 'Zug', 'ATT', null, 92, 99, 96, 87, 80, 99, 62),
+    mk('kovanen', 'Joonatan', 'Kovanen', 'Malans', 'ATT', null, 92, 97, 98, 94, 80, 98, 61),
+    mk('mariotti', 'Pablo', 'Mariotti', 'Thurgau', 'ATT', 13, 92, 95, 98, 85, 63, 96, 87),
+    mk('kauppinen', 'Pyry', 'Kauppinen', 'Kloten', 'ATT', 16, 87, 93, 80, 95, 99, 90, 64),
+    mk('schwab', 'Simon', 'Schwab', 'Malans', 'DEF', null, 87, 89, 80, 87, 99, 92, 82),
+    mk('larsson', 'Johan', 'Larsson', 'Kloten', 'DEF', 5, 85, 95, 94, 93, 70, 92, 75),
+    mk('mettier', 'Tino', 'Mettier', 'Chur', 'DEF', 3, 81, 78, 60, 81, 99, 70, 95)
+  ];
+  const HALLS = [
+    { id: 'koeniz', name: 'Sporthallen Weissenstein', place: 'Bern', club: 'Floorball Köniz Bern', short: 'Köniz', dist: '40 m', near: true, hp: 100, mine: false, x: 150, y: 96, guard: [
+      mk('zaugg', 'Jan', 'Zaugg', 'Köniz', 'ATT', 61, 96, 99, 93, 96, 80, 98, 97),
+      mk('jansson', 'Michael', 'Jansson', 'Köniz', 'ATT', null, 92, 97, 92, 98, 99, 96, 60),
+      mk('hutzli', 'Stefan', 'Hutzli', 'Köniz', 'ATT', null, 88, 84, 93, 81, 99, 92, 93),
+      mk('buehler', 'Nino', 'Bühler', 'Köniz', 'ATT', 24, 81, 72, 99, 60, 99, 97, 76),
+      mk('ruh', 'Yann', 'Ruh', 'Köniz', 'DEF', 81, 93, 91, 96, 96, 80, 92, 98),
+      mk('tringaniello', 'Leon', 'Tringaniello', 'Köniz', 'DEF', 7, 85, 72, 93, 60, 99, 82, 91)
+    ] },
+    { id: 'wiler', name: 'Sportanlage Grossmatt', place: 'Kirchberg BE', club: 'SV Wiler-Ersigen', short: 'Wiler', dist: '20 km', near: false, hp: 100, mine: false, x: 268, y: 46, guard: [
+      mk('kaenzig', 'Deny', 'Känzig', 'Wiler', 'ATT', 77, 95, 99, 86, 98, 99, 97, 97),
+      mk('martinjas', 'Jamie', 'Martinjas', 'Wiler', 'ATT', 65, 90, 91, 95, 87, 67, 98, 83),
+      mk('trekse', 'Pēteris', 'Trekše', 'Wiler', 'ATT', null, 90, 97, 94, 85, 99, 92, 60),
+      mk('persson', 'Ludwig', 'Persson', 'Wiler', 'ATT', null, 88, 93, 86, 96, 80, 90, 63),
+      mk('wyss', 'Yannis', 'Wyss', 'Wiler', 'DEF', 16, 95, 95, 95, 87, 99, 99, 92),
+      mk('hollenstein', 'Andrin', 'Hollenstein', 'Wiler', 'DEF', 73, 84, 72, 80, 60, 99, 76, 99)
+    ] },
+    { id: 'gc', name: 'Sporthalle Hardau', place: 'Zürich', club: 'Grasshopper Club Zürich', short: 'GC', dist: '95 km', near: false, hp: 100, mine: false, x: 338, y: 126, guard: [
+      mk('riedi', 'Paolo', 'Riedi', 'GC', 'ATT', 21, 97, 98, 98, 94, 80, 99, 99),
+      mk('bolin', 'Tommy', 'Bolin', 'GC', 'ATT', 30, 93, 98, 93, 99, 80, 97, 68),
+      mk('freiburghaus', 'Miro', 'Freiburghaus', 'GC', 'ATT', null, 90, 91, 93, 87, 99, 95, 72),
+      mk('castelberg', 'Yanik', 'Castelberg', 'GC', 'ATT', 34, 85, 78, 90, 87, 99, 90, 84),
+      mk('bier', 'Kay', 'Bier', 'GC', 'DEF', 13, 88, 89, 80, 95, 80, 82, 99),
+      mk('niederberger', 'Florian', 'Niederberger', 'GC', 'DEF', null, 77, 78, 86, 60, 80, 82, 72)
+    ] }
+  ];
+  const MOVES = [
+    { id: 'direkt', name: 'Direktschuss', short: 'Direkt', basis: 'Abschluss', val: c => 0.75 * c.sco + 0.25 * c.frm, extra: 0 },
+    { id: 'kombi', name: 'Kombination', short: 'Kombi', basis: 'Vorlagen', val: c => 0.75 * c.ply + 0.25 * c.frm, extra: 0 },
+    { id: 'solo', name: 'Solo', short: 'Solo', basis: 'Form und Clutch', val: c => 0.5 * c.frm + 0.5 * c.clu, extra: 6 }
+  ];
+  const STANCES = [
+    { id: 'block', name: 'Block', stops: 'direkt', against: 'den Direktschuss', expects: 'einem Direktschuss', foul: 1 },
+    { id: 'pass', name: 'Passweg zu', stops: 'kombi', against: 'die Kombination', expects: 'einer Kombination', foul: 0.5 },
+    { id: 'zwei', name: 'Zweikampf', stops: 'solo', against: 'das Solo', expects: 'einem Solo', foul: 2 }
+  ];
+  const CORNERS = [{ id: 'l', name: 'Links' }, { id: 'm', name: 'Mitte' }, { id: 'r', name: 'Rechts' }];
+  const byId = (list, id) => list.filter(x => x.id === id)[0];
+
+  const S = { hall: null, squad: [], capId: null, you: [], home: [], duel: 0, score: { you: 0, home: 0 }, phase: 'idle', cur: null,
+    results: [], log: [], token: 0, mom: 0, tac: {}, hist: { direkt: 0, kombi: 0, solo: 0 }, pen: null, outcome: null };
+
+  // --- match maths ---
+  const defVal = c => 0.45 * c.exp + 0.30 * c.fai + 0.25 * c.frm + (c.pos === 'DEF' ? 5 : 0);
+  const eff = (v, c) => v * (0.78 + 0.22 * c.stam / 100) + (c.home ? 2 : 0) + (c.cap ? 4 : 0);
+  const clutch = (c, duel) => duel >= 8 ? (c.clu - 85) * 0.006 : 0;
+  const foulRisk = (c, stance) => clamp((100 - c.fai) * 0.005 * (stance ? stance.foul : 1), 0, 0.6);
+  const bestMove = c => MOVES.slice().sort((a, b) => b.val(c) - a.val(c))[0];
+  function tendency(c) {
+    const order = MOVES.slice().sort((a, b) => b.val(c) - a.val(c)), w = [0.5, 0.3, 0.2], out = {};
+    order.forEach((m, i) => { out[m.id] = w[i]; });
+    return out;
+  }
+  function sample(weights) {
+    const keys = Object.keys(weights); let r = Math.random() * keys.reduce((a, k) => a + weights[k], 0);
+    for (let i = 0; i < keys.length; i++) { r -= weights[keys[i]]; if (r <= 0) return keys[i]; }
+    return keys[keys.length - 1];
+  }
+  function chance(A, move, D, read, foul) {
+    const cur = S.cur;
+    let p = 0.36 + (eff(move.val(A), A) - eff(defVal(D), D)) * 0.014 + (read ? -0.22 : 0.04) + clutch(A, S.duel);
+    if (foul) p += 0.18;
+    p += (cur.side === 'you' ? 1 : -1) * 0.04 * S.mom;
+    if (cur.side === 'home' && cur.pressing) p -= 0.15;
+    if (cur.side === 'you' && cur.pull) p += 0.22;
+    return clamp(p, 0.06, 0.90);
+  }
+  const cost = (c, move) => 38 - (c.exp - 60) * 0.2 + (move ? move.extra : 0);
+  function pool(team) {
+    let p = team.filter(c => c.box === 0 && c.stam >= 20);
+    if (!p.length) p = team.filter(c => c.box === 0);
+    if (!p.length) p = team.slice();
+    return p;
+  }
+  function best(list, fn) { let top = null, score = -Infinity; list.forEach(c => { const v = fn(c); if (v > score) { score = v; top = c; } }); return top; }
+  const aiAttacker = () => best(pool(S.home), c => eff(bestMove(c).val(c), c) + clutch(c, S.duel) / 0.014 + rand(-3, 3));
+  const aiDefender = () => best(pool(S.home), c => eff(defVal(c), c) - foulRisk(c) * 10 + rand(-3, 3));
+  function aiStance(card) {
+    const t = tendency(card), tot = S.hist.direkt + S.hist.kombi + S.hist.solo, w = {};
+    MOVES.forEach(m => { w[m.id] = 0.45 * t[m.id] + 0.30 * (S.hist[m.id] + 1) / (tot + 3) + 0.25 / 3; });
+    const guess = sample(w);
+    return STANCES.filter(s => s.stops === guess)[0];
+  }
+  const period = d => Math.min(3, Math.floor(d / 4) + 1);
+
+  // --- card rendering ---
+  function jersey(c, uid, homeSide) {
+    const body = 'M112 16 Q150 40 188 16 L232 30 Q250 36 262 52 L296 104 L258 128 L234 98 L232 244 Q150 256 68 244 L66 98 L42 128 L4 104 L38 52 Q50 36 68 30 Z';
+    const c1 = homeSide ? '#3b4257' : '#5a8dff', c2 = homeSide ? '#1b2033' : '#1a57ff', c3 = homeSide ? '#080a14' : '#0a2a8f';
+    const trim = homeSide ? '#f7d774' : '#ffffff', font = "'Saira Condensed','Arial Narrow',sans-serif", long = c.last.length > 9;
+    const num = c.no === null ? '' : `<text x="154" y="212" text-anchor="middle" font-family="${font}" font-weight="800" font-size="136" fill="#000" opacity="0.28">${c.no}</text><text x="150" y="208" text-anchor="middle" font-family="${font}" font-weight="800" font-size="136" fill="#fff">${c.no}</text>`;
+    return `<svg class="jersey" viewBox="0 0 300 260" aria-hidden="true"><defs>
+<linearGradient id="jb-${uid}" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="0.5" stop-color="${c2}"/><stop offset="1" stop-color="${c3}"/></linearGradient>
+<linearGradient id="js-${uid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.45"/><stop offset="0.32" stop-color="#000" stop-opacity="0"/><stop offset="0.68" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.45"/></linearGradient>
+<clipPath id="jc-${uid}"><path d="${body}"/></clipPath></defs>
+<path d="${body}" fill="url(#jb-${uid})"/>
+<g clip-path="url(#jc-${uid})"><path d="M-20 168 L320 78 L320 100 L-20 190 Z" fill="#fff" opacity="0.09"/>
+<path d="M0 98 L46 134 L52 124 L8 90 Z" fill="${trim}"/><path d="M300 98 L254 134 L248 124 L292 90 Z" fill="${trim}"/>
+<path d="M60 236 Q150 248 240 236 L240 244 Q150 256 60 244 Z" fill="${trim}" opacity="0.9"/>
+<rect width="300" height="260" fill="url(#js-${uid})"/></g>
+<path d="M112 16 Q150 40 188 16 Q150 24 112 16 Z" fill="#000" opacity="0.45"/>
+<path d="M110 15 Q150 42 190 15" fill="none" stroke="${trim}" stroke-width="8" stroke-linecap="round"/>
+<text x="150" y="${c.no === null ? 150 : 86}" text-anchor="middle" font-family="${font}" font-weight="700" font-size="${long ? 24 : 30}" letter-spacing="2" fill="#fff">${esc(c.last.toUpperCase())}</text>${num}</svg>`;
+  }
+  function stamBar(c) { return `<span class="stam${c.stam < 40 ? ' low' : ''}"><i style="width:${Math.round(c.stam)}%"></i></span>`; }
+  function duelCard(c, homeSide, attacking, roleText) {
+    const rows = attacking ? [['Abschluss', c.sco], ['Vorlagen', c.ply], ['Clutch', c.clu]] : [['Erfahrung', c.exp], ['Fairness', c.fai], ['Form', c.frm]];
+    const tagText = c.cap ? 'Captain' : (c.home ? 'Heimvorteil' : '');
+    return `<div class="role ${attacking ? 'atk' : 'def'}">${roleText || (attacking ? 'Greift an' : 'Verteidigt')}</div>
+<div class="card${homeSide ? ' home' : ''}"><div class="card-in">
+<div class="c-rate"><b>${c.ovr}</b><span>${c.pos}</span></div>${jersey(c, c.id + (homeSide ? 'h' : 'y'), homeSide)}
+${tagText ? `<div class="c-tag">${tagText}</div>` : ''}
+<div class="c-name"><span class="f"><span>${esc(c.first)}</span><span>${esc(c.short)}</span></span><span class="l${c.last.length > 9 ? ' long' : ''}">${esc(c.last)}</span></div>
+<div class="c-stats">${rows.map(r => `<div><span>${r[0]}</span><b>${r[1]}</b></div>`).join('')}</div>
+</div></div>
+<div class="stam${c.stam < 40 ? ' low' : ''}" role="img" aria-label="Ausdauer ${Math.round(c.stam)} von 100"><i style="width:${Math.round(c.stam)}%"></i></div>`;
+  }
+  const emptySlot = label => `<div class="role def">&nbsp;</div><div class="empty"><b>?</b><span>${label}</span></div><div class="stam"><i style="width:0%"></i></div>`;
+  const goalieSlot = label => `<div class="role def">Im Tor</div><div class="empty"><b>G</b><span>${label}</span></div><div class="stam"><i style="width:0%"></i></div>`;
+  function mini(c, o) {
+    const lines = (o.lines || []).map(l => `<div><span>${l[0]}</span><b>${l[1]}</b></div>`).join('');
+    const label = `${c.first} ${c.last}, ${c.pos}, Gesamtwert ${c.ovr}, Ausdauer ${Math.round(c.stam)}${o.status ? ', ' + o.status : ''}${o.note ? ', ' + o.note : ''}`;
+    return `<button type="button" class="mini${o.cls ? ' ' + o.cls : ''}" data-id="${c.id}" aria-label="${esc(label)}"${o.pressed === undefined ? '' : ` aria-pressed="${o.pressed}"`}${o.disabled ? ' disabled' : ''}>
+<span class="mini-in"><span class="m-top"><b>${c.ovr}</b><span><em>${c.pos}</em>${esc(c.short)}</span></span>
+<span class="m-name${c.last.length > 9 ? ' long' : ''}"><span class="nm">${esc(c.last)}</span>${o.badge ? `<i>${o.badge}</i>` : ''}</span>
+${o.status ? `<span class="m-status">${o.status}</span>` : `<span class="m-lines">${lines}</span>`}${stamBar(c)}</span></button>`;
+  }
+
+  // --- map and squad ---
+  function hpBlock(h) { return `<div class="hp"><div class="hp-row"><span>Hallen-Stärke</span><b>${h.hp} / 100</b></div><div class="hp-track"><div class="hp-fill" style="width:${h.hp}%"></div></div></div>`; }
+  function renderMap() {
+    const marks = HALLS.map(h => {
+      const fill = h.mine ? '#1a57ff' : '#f7d774';
+      return `<polygon points="${h.x - 14},${h.y - 12} ${h.x + 14},${h.y - 12} ${h.x},${h.y + 12}" fill="${fill}" stroke="#050818" stroke-width="2"></polygon>
+<text x="${h.x}" y="${h.y - 20}" font-size="13" letter-spacing="1.5" fill="${h.mine ? '#9fbcff' : '#f7d774'}">${esc(h.short.toUpperCase())} · ${h.dist.toUpperCase()}</text>`;
+    }).join('');
+    $('map').innerHTML = `<svg viewBox="0 0 428 190" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+<rect width="428" height="190" fill="#0b1437"></rect>
+<g stroke="#1b2a66" stroke-width="13" fill="none" stroke-linecap="round"><path d="M-10 150 L120 132 L250 150 L440 120"></path><path d="M60 -10 L86 138 L70 200"></path><path d="M150 96 L268 46 L338 126"></path><path d="M300 -10 L286 60 L330 200"></path></g>
+<g stroke="#2a3d85" stroke-width="2" fill="none" stroke-dasharray="6 8"><path d="M150 96 L268 46 L338 126"></path><path d="M-10 150 L120 132 L250 150 L440 120"></path></g>
+<circle cx="150" cy="96" r="76" fill="rgba(247,215,116,0.08)" stroke="#f7d774" stroke-width="1.5" stroke-dasharray="5 6"></circle>
+<path d="M86 138 L150 96" stroke="#e3ecff" stroke-width="1.5" stroke-dasharray="3 5"></path>
+<g font-family="'Saira Condensed','Arial Narrow',sans-serif" font-weight="700" text-anchor="middle">${marks}
+<text x="86" y="166" font-size="14" letter-spacing="2" fill="#e3ecff">DU</text></g>
+<circle class="pulse" cx="86" cy="138" r="9" fill="none" stroke="#5b87ff" stroke-width="2"></circle>
+<circle cx="86" cy="138" r="8" fill="#1a57ff" stroke="#ffffff" stroke-width="3"></circle></svg>`;
+    $('halls').innerHTML = HALLS.map(h => `<div class="panel">
+<div class="hr-head"><h2 class="hall-name">${esc(h.name)}</h2><span class="tag${h.mine ? ' mine' : (h.near ? '' : ' far')}">${h.mine ? 'Erobert' : (h.near ? 'Vor Ort' : 'Fernangriff')}</span></div>
+<p class="holder">${esc(h.place)}, ${h.dist} entfernt. Gehalten von <strong>${h.mine ? 'deinem Verein' : esc(h.club)}</strong>.</p>
+${hpBlock(h)}
+<button class="cta small" type="button" data-hall="${h.id}"${h.mine ? ' disabled' : ''}>${h.mine ? 'Gehört deinem Verein' : (h.near ? 'Einchecken und angreifen' : 'Fernangriff, halber Schaden')}</button></div>`).join('');
+  }
+  function openSquad(hallId) {
+    S.hall = byId(HALLS, hallId);
+    if (S.squad.length !== 6) {
+      const fit = c => c.ovr * (0.78 + 0.22 * c.stam / 100), top = (pos, n) => COLLECTION.filter(c => c.pos === pos).sort((a, b) => fit(b) - fit(a)).slice(0, n);
+      S.squad = top('ATT', 4).concat(top('DEF', 2)).map(c => c.id);
+    }
+    if (S.squad.indexOf(S.capId) === -1) S.capId = S.squad[0];
+    renderSquad(); show('squad');
+  }
+  function renderSquad() {
+    const h = S.hall;
+    $('sq-hall').textContent = h.name;
+    $('sq-mode').textContent = h.near ? 'Vor Ort' : 'Fernangriff'; $('sq-mode').className = 'tag' + (h.near ? '' : ' far');
+    $('sq-holder').innerHTML = `${esc(h.place)}. Gehalten von <strong>${esc(h.club)}</strong>. ${h.near ? 'Ein Sieg zählt voll.' : 'Ein Sieg zählt halb.'}`;
+    $('sq-hp').textContent = h.hp + ' / 100'; $('sq-hp-fill').style.width = h.hp + '%';
+    $('sq-guard').innerHTML = h.guard.map(c => `<li><b>${c.ovr}</b><span class="nm">${esc(c.first)} ${esc(c.last)}</span><span class="ps">${c.pos}</span><i>${bestMove(c).name}</i></li>`).join('');
+    $('sq-count').textContent = S.squad.length + ' von 6 gewählt';
+    $('sq-grid').innerHTML = COLLECTION.map(c => {
+      const on = S.squad.indexOf(c.id) !== -1;
+      return mini(c, { cls: on ? '' : 'off', pressed: on, badge: on && c.id === S.capId ? 'C' : '', note: on ? (c.id === S.capId ? 'im Kader, Captain' : 'im Kader') : 'nicht im Kader',
+        lines: [['Angriff', Math.round(eff(bestMove(c).val(c), c))], ['Abwehr', Math.round(eff(defVal(c), c))]] });
+    }).join('');
+    $('sq-cap').innerHTML = S.squad.map(id => { const c = byId(COLLECTION, id); return `<button type="button" class="chip${id === S.capId ? ' on' : ''}" data-cap="${id}" aria-pressed="${id === S.capId}"><b>${c.ovr}</b>${esc(c.last)}</button>`; }).join('');
+    const ok = S.squad.length === 6;
+    $('btn-kickoff').disabled = !ok;
+    $('btn-kickoff').textContent = ok ? 'Match starten' : 'Wähle 6 Karten';
+  }
+  function toggleSquad(id) {
+    const i = S.squad.indexOf(id);
+    if (i !== -1) S.squad.splice(i, 1); else if (S.squad.length < 6) S.squad.push(id); else return;
+    if (S.squad.indexOf(S.capId) === -1) S.capId = S.squad.length ? S.squad.slice().sort((a, b) => byId(COLLECTION, b).ovr - byId(COLLECTION, a).ovr)[0] : null;
+    renderSquad();
+  }
+  function show(name) {
+    ['map', 'squad', 'match', 'result'].forEach(n => { $('screen-' + n).hidden = n !== name; });
+    window.scrollTo(0, 0);
+  }
+
+  // --- match rendering ---
+  function renderSlots() {
+    const cur = S.cur; if (!cur) return;
+    if (cur.pen) {
+      $('slot-home').innerHTML = cur.side === 'home' ? duelCard(cur.attacker, true, true, 'Penalty') : goalieSlot('Goalie ' + S.hall.short);
+      $('slot-you').innerHTML = cur.side === 'home' ? goalieSlot('Dein Goalie') : (cur.attacker ? duelCard(cur.attacker, false, true, 'Penalty') : emptySlot('Dein Schütze'));
+      return;
+    }
+    const homeCard = cur.side === 'home' ? cur.attacker : cur.defender, youCard = cur.side === 'home' ? cur.defender : cur.attacker;
+    $('slot-home').innerHTML = duelCard(homeCard, true, cur.side === 'home');
+    $('slot-you').innerHTML = youCard ? duelCard(youCard, false, cur.side === 'you') : emptySlot(cur.side === 'home' ? 'Dein Verteidiger' : 'Dein Angreifer');
+  }
+  function renderScore() {
+    $('sc-you').textContent = S.score.you; $('sc-home').textContent = S.score.home; $('sc-club').textContent = S.hall.short;
+    if (S.pen) { $('sc-period').textContent = 'Penaltys'; $('sc-duel').textContent = S.pen.you + ' : ' + S.pen.home; return; }
+    const d = Math.min(S.duel, 11);
+    $('sc-period').textContent = period(d) + '. Drittel'; $('sc-duel').textContent = 'Duell ' + (d + 1) + ' von 12';
+  }
+  function renderDots() {
+    let html = '';
+    for (let i = 0; i < 12; i++) {
+      if (i > 0 && i % 4 === 0) html += '<span class="gap"></span>';
+      const side = i % 2 === 0 ? 'home' : 'you', r = S.results[i]; let cls = 'dot ' + side;
+      if (r) cls += r.goal ? (side === 'you' ? ' g-you' : ' g-home') : ' miss'; else if (i === S.duel && !S.pen) cls += ' now';
+      html += `<span class="${cls}"></span>`;
+    }
+    if (S.pen) { html += '<span class="gap"></span>'; S.pen.results.forEach(r => { html += `<span class="dot pen ${r.goal ? (r.side === 'you' ? 'g-you' : 'g-home') : 'miss'}"></span>`; }); }
+    $('dots').innerHTML = html;
+    let bar = '';
+    for (let i = 3; i >= 1; i--) bar += `<i class="${S.mom <= -i ? 'h' : ''}"></i>`;
+    bar += '<span class="mid"></span>';
+    for (let i = 1; i <= 3; i++) bar += `<i class="${S.mom >= i ? 'y' : ''}"></i>`;
+    const who = S.mom > 0 ? 'bei dir' : (S.mom < 0 ? 'bei ' + S.hall.short : 'ausgeglichen');
+    $('mom').innerHTML = `<span>Momentum</span><span class="mom-bar" role="img" aria-label="Momentum ${who}">${bar}</span>`;
+  }
+  function renderTactics() {
+    const cur = S.cur, live = (S.phase === 'card' || S.phase === 'option') && cur && !cur.pen;
+    $('tactics').hidden = !!S.pen;
+    const t = [
+      { id: 'timeout', name: 'Time-out', sub: 'Alle +30 Ausdauer', ok: live },
+      { id: 'pressing', name: 'Pressing', sub: 'Gegentor −15', ok: live && cur.side === 'home', active: cur && cur.pressing },
+      { id: 'pull', name: 'Ohne Goalie', sub: S.duel >= 8 ? 'Tor +22, Konter-Risiko' : 'Ab 3. Drittel', ok: live && cur.side === 'you' && S.duel >= 8, active: cur && cur.pull }
+    ];
+    $('tactics').innerHTML = t.map(x => `<button type="button" class="tac${x.active ? ' active' : ''}" data-tac="${x.id}"${x.ok && !S.tac[x.id] ? '' : ' disabled'}><b>${x.name}</b><span>${x.active ? 'Aktiv' : (S.tac[x.id] ? 'Gespielt' : x.sub)}</span></button>`).join('');
+  }
+  function renderHand() {
+    const cur = S.cur, ph = S.phase, usable = pool(S.you);
+    const showOpts = ph === 'option' || ph === 'pen-guess' || ph === 'pen-corner';
+    $('hand').hidden = showOpts; $('hand-head').hidden = showOpts; $('opts').hidden = !showOpts;
+    $('btn-recard').hidden = !(ph === 'option' || ph === 'pen-corner');
+    renderTactics();
+    if (showOpts) { renderOptions(); return; }
+    const picking = ph === 'card' || ph === 'pen-card';
+    $('hand-hint').textContent = !picking ? '' : (ph === 'pen-card' ? 'Wähle deinen Schützen' : (cur.side === 'home' ? 'Wähle deinen Verteidiger' : 'Wähle deinen Angreifer'));
+    $('hand').innerHTML = S.you.map(c => {
+      if (ph === 'pen-card' || (cur && cur.pen)) {
+        const used = S.pen.used.indexOf(c.id) !== -1 && S.pen.used.length < S.you.length;
+        return mini(c, { disabled: ph !== 'pen-card' || used, cls: used ? 'out' : '', status: used ? 'Hat geschossen' : '', lines: [['Clutch', c.clu], ['Abschluss', c.sco]] });
+      }
+      const can = usable.indexOf(c) !== -1; let status = '';
+      if (c.box > 0) status = 'Strafbank, noch ' + c.box; else if (!can) status = 'Zu müde';
+      let lines = [];
+      if (cur && cur.side === 'home') lines = [['Abwehr', Math.round(eff(defVal(c), c))], ['Foul', pct(foulRisk(c)) + '%']];
+      else if (cur) { const m = bestMove(c); lines = [['Angriff', Math.round(eff(m.val(c), c))], ['Stark im', m.short]]; }
+      return mini(c, { disabled: !(picking && can && !status), cls: status ? 'out' : '', status, lines, badge: c.cap ? 'C' : '', note: c.cap ? 'Captain' : '' });
+    }).join('');
+  }
+  function renderOptions() {
+    const cur = S.cur, el = $('opts');
+    if (S.phase === 'pen-guess' || S.phase === 'pen-corner') {
+      el.className = 'opts row';
+      el.innerHTML = CORNERS.map(k => `<button type="button" class="opt" data-opt="${k.id}"><b>${k.name}</b></button>`).join('');
+      return;
+    }
+    el.className = 'opts';
+    if (cur.side === 'home') {
+      const t = tendency(cur.attacker), D = cur.defender;
+      el.innerHTML = STANCES.map(s => {
+        const m = byId(MOVES, s.stops), right = pct(chance(cur.attacker, m, D, true, false));
+        return `<button type="button" class="opt" data-opt="${s.id}"><b>${s.name}</b><span class="big">${pct(t[s.stops])}%</span>
+<span class="sub">Stoppt ${s.against}. Liegst du richtig, bleibt ${right}% Gegentor-Chance. Foul-Risiko ${pct(foulRisk(D, s))}%.</span><span class="sub2">Tendenz</span></button>`;
+      }).join('');
+    } else {
+      const A = cur.attacker, D = cur.defender;
+      el.innerHTML = MOVES.map(m => `<button type="button" class="opt" data-opt="${m.id}"><b>${m.name}</b><span class="big">${pct(chance(A, m, D, false, false))}%</span>
+<span class="sub">${m.basis}: ${Math.round(m.val(A))}. Wird der Zug gelesen, bleiben ${pct(chance(A, m, D, true, false))}%.${m.extra ? ' Kostet mehr Ausdauer.' : ''}</span><span class="sub2">Torchance</span></button>`).join('');
+    }
+  }
+  function refresh() { renderScore(); renderDots(); renderSlots(); renderHand(); }
+
+  // --- dialog ---
+  function say(text) {
+    const el = $('say'), token = ++S.token;
+    $('say-sr').textContent = text;
+    return new Promise(resolve => {
+      if (reduce) { el.textContent = text; resolve(); return; }
+      let i = 0; el.textContent = '';
+      (function tick() {
+        if (token !== S.token) { resolve(); return; }
+        i = Math.min(text.length, i + 2); el.textContent = text.slice(0, i);
+        if (i < text.length) setTimeout(tick, 14); else resolve();
+      })();
+    });
+  }
+
+  // --- shot animation ---
+  const place = (ball, p) => { ball.style.left = p[0] + '%'; ball.style.top = p[1] + '%'; };
+  async function shot(side, goal) {
+    const ball = $('ball');
+    const from = side === 'home' ? [72, 36] : [28, 64], goalPos = side === 'home' ? [50, 98] : [50, 2];
+    const block = side === 'home' ? [30, 58] : [70, 42], out = side === 'home' ? [6, 40] : [94, 60];
+    ball.style.transition = 'none'; ball.style.opacity = '1'; place(ball, from); ball.hidden = false;
+    if (reduce) { place(ball, goal ? goalPos : block); return; }
+    await frame();
+    ball.style.transition = 'left .5s cubic-bezier(.4,0,.6,1), top .5s cubic-bezier(.4,0,.6,1)';
+    place(ball, goal ? goalPos : block);
+    await sleep(520);
+    if (!goal) { ball.style.transition = 'left .35s ease-out, top .35s ease-out, opacity .35s'; place(ball, out); ball.style.opacity = '0'; await sleep(360); }
+  }
+  function flashResult(side, goal) {
+    const f = $('flash');
+    if (goal) { f.className = 'flash ' + side; f.textContent = 'Tor'; $('rink').className = 'rink ' + (side === 'you' ? 'hit-top-you' : 'hit-bot-home'); }
+    else { f.className = 'flash save'; f.textContent = 'Gehalten'; }
+    f.hidden = false;
+  }
+  function waitContinue(label) {
+    S.phase = S.phase.indexOf('pen') === 0 ? 'pen-continue' : 'continue';
+    const btn = $('btn-next'); btn.textContent = label || 'Weiter'; btn.hidden = false;
+    try { btn.focus({ preventScroll: true }); } catch (e) {}
+  }
+
+  // --- match flow ---
+  function startMatch() {
+    COLLECTION.forEach(c => { c.box = 0; c.cap = c.id === S.capId; });
+    S.you = S.squad.map(id => byId(COLLECTION, id));
+    S.home = S.hall.guard.map(c => Object.assign({}, c, { stam: 100, box: 0, home: true }));
+    S.duel = 0; S.score = { you: 0, home: 0 }; S.results = []; S.log = []; S.cur = null; S.phase = 'idle'; S.mom = 0;
+    S.tac = {}; S.hist = { direkt: 0, kombi: 0, solo: 0 }; S.pen = null; S.outcome = null;
+    $('btn-next').hidden = true; $('flash').hidden = true; $('ball').hidden = true;
+    show('match'); nextDuel();
+  }
+  async function nextDuel() {
+    if (S.duel >= 12) { if (S.score.you === S.score.home) startShootout(); else finish(); return; }
+    const side = S.duel % 2 === 0 ? 'home' : 'you';
+    $('flash').hidden = true; $('ball').hidden = true; $('rink').className = 'rink';
+    const pre = S.duel === 0 ? 'Anpfiff. ' : (S.duel % 4 === 0 ? period(S.duel) + '. Drittel. ' : '');
+    if (side === 'home') { const a = aiAttacker(); S.cur = { side, attacker: a, defender: null, move: byId(MOVES, sample(tendency(a))), pressing: false, pull: false }; }
+    else S.cur = { side, attacker: null, defender: aiDefender(), move: null, pressing: false, pull: false };
+    S.phase = 'card'; refresh();
+    if (side === 'home') await say(pre + S.cur.attacker.first + ' ' + S.cur.attacker.last + ' greift an. Mit wem verteidigst du?');
+    else await say(pre + S.hall.short + ' verteidigt mit ' + S.cur.defender.last + '. Wen schickst du nach vorne?');
+  }
+  function pickCard(id) {
+    const c = byId(S.you, id); if (!c) return;
+    if (S.phase === 'pen-card') { S.cur.attacker = c; S.phase = 'pen-corner'; refresh(); say(c.last + ' läuft an. Wohin schiesst du?'); return; }
+    if (S.phase !== 'card' || pool(S.you).indexOf(c) === -1) return;
+    if (S.cur.side === 'home') S.cur.defender = c; else S.cur.attacker = c;
+    S.phase = 'option'; refresh();
+    say(S.cur.side === 'home' ? 'Wie verteidigt ' + c.last + ' gegen ' + S.cur.attacker.last + '?' : 'Welchen Spielzug macht ' + c.last + '?');
+  }
+  function recard() {
+    if (S.phase === 'pen-corner') { S.cur.attacker = null; S.phase = 'pen-card'; refresh(); say('Wer schiesst den Penalty?'); return; }
+    if (S.phase !== 'option') return;
+    if (S.cur.side === 'home') S.cur.defender = null; else S.cur.attacker = null;
+    S.phase = 'card'; refresh();
+    say(S.cur.side === 'home' ? S.cur.attacker.last + ' greift an. Mit wem verteidigst du?' : S.hall.short + ' verteidigt mit ' + S.cur.defender.last + '. Wen schickst du nach vorne?');
+  }
+  function playTactic(id) {
+    if (S.tac[id] || !(S.phase === 'card' || S.phase === 'option')) return;
+    const cur = S.cur;
+    if (id === 'timeout') S.you.forEach(c => { c.stam = Math.min(100, c.stam + 30); });
+    else if (id === 'pressing' && cur.side === 'home') cur.pressing = true;
+    else if (id === 'pull' && cur.side === 'you' && S.duel >= 8) cur.pull = true;
+    else return;
+    S.tac[id] = true; refresh();
+  }
+  function bump(good) { S.mom = good ? (S.mom < 0 ? 0 : Math.min(3, S.mom + 1)) : (S.mom > 0 ? 0 : Math.max(-3, S.mom - 1)); }
+  async function pickOption(id) {
+    if (S.phase === 'pen-guess' || S.phase === 'pen-corner') { resolvePenalty(id); return; }
+    if (S.phase !== 'option') return;
+    S.phase = 'resolving';
+    const cur = S.cur, side = cur.side, A = cur.attacker, D = cur.defender;
+    let move, stance;
+    if (side === 'home') { move = cur.move; stance = byId(STANCES, id); }
+    else { move = byId(MOVES, id); stance = aiStance(A); S.hist[move.id]++; }
+    const read = stance.stops === move.id;
+    const foul = Math.random() < foulRisk(D, stance);
+    const p = chance(A, move, D, read, foul), goal = Math.random() < p;
+    refresh();
+    if (side === 'home') await say(A.last + ' versucht es mit ' + (move.id === 'solo' ? 'einem Solo' : move.id === 'kombi' ? 'einer Kombination' : 'einem Direktschuss') + '. ' + (read ? D.last + ' hat es gelesen.' : D.last + ' ist falsch gestanden.'));
+    else await say(D.last + ' rechnet mit ' + stance.expects + '. ' + (read ? 'Er liegt richtig.' : 'Er liegt falsch.'));
+    await sleep(520);
+    if (foul) { await say('Foul. 2 Minuten für ' + D.last + (side === 'home' ? ', ' + S.hall.short + ' spielt in Überzahl.' : ', du spielst in Überzahl.')); await sleep(650); }
+    await shot(side, goal);
+
+    A.stam = Math.max(0, A.stam - cost(A, move)); D.stam = Math.max(0, D.stam - cost(D));
+    S.you.concat(S.home).forEach(x => { if (x !== A && x !== D) x.stam = Math.min(100, x.stam + 7); if (x.box > 0) x.box--; });
+    if (foul) D.box = 2;
+    if (goal) S.score[side]++;
+    const counter = cur.pull && !goal && Math.random() < 0.35;
+    if (counter) S.score.home++;
+    bump(side === 'you' ? goal : !goal);
+    S.results[S.duel] = { goal };
+    S.log.push({ side, a: A.last, d: D.last, move: move.short, read, goal, foul, pct: pct(p) });
+    if (counter) S.log.push({ side: 'home', a: S.hall.short, d: 'leeres Tor', move: 'Konter', read: false, goal: true, foul: false, pct: 35 });
+    flashResult(side, goal); refresh();
+    let line;
+    if (goal) line = side === 'home' ? 'Tor für ' + S.hall.short + '. ' + A.last + ' trifft.' : 'Tor für dich. ' + A.last + ' trifft.';
+    else line = side === 'home' ? 'Gehalten. ' + D.last + ' stoppt ' + A.last + '.' : D.last + ' stoppt ' + A.last + '. Kein Tor.';
+    await say(line);
+    if (counter) { await sleep(500); await say(D.last + ' stoppt ' + A.last + ' und trifft ins leere Tor. Konter für ' + S.hall.short + '.'); }
+    waitContinue(S.duel === 11 ? (S.score.you === S.score.home ? 'Penaltys' : 'Zum Resultat') : 'Weiter');
+  }
+  function goOn() {
+    if (S.phase === 'continue') { $('btn-next').hidden = true; S.duel++; nextDuel(); }
+    else if (S.phase === 'pen-continue') { $('btn-next').hidden = true; nextPenalty(); }
+  }
+
+  // --- penalty shootout ---
+  function startShootout() {
+    S.pen = { round: 0, turn: 'home', you: 0, home: 0, used: [], results: [], corners: { l: 0, m: 0, r: 0 }, order: S.home.slice().sort((a, b) => b.clu - a.clu) };
+    nextPenalty(true);
+  }
+  function nextPenalty(first) {
+    const P = S.pen;
+    if (P.turn === 'home' && P.round >= 3 && P.you !== P.home) { finish(); return; }
+    $('flash').hidden = true; $('ball').hidden = true; $('rink').className = 'rink';
+    if (P.turn === 'home') {
+      const a = P.order[P.round % P.order.length];
+      S.cur = { pen: true, side: 'home', attacker: a, corner: sample({ l: 0.4, m: 0.2, r: 0.4 }) };
+      S.phase = 'pen-guess'; refresh();
+      say((first ? 'Unentschieden. Es gibt Penaltys. ' : '') + a.first + ' ' + a.last + ' läuft an. In welche Ecke springt dein Goalie?');
+    } else {
+      S.cur = { pen: true, side: 'you', attacker: null };
+      S.phase = 'pen-card'; refresh();
+      say('Dein Penalty. Wer schiesst?');
+    }
+  }
+  async function resolvePenalty(id) {
+    const P = S.pen, cur = S.cur, side = cur.side, A = cur.attacker;
+    let shotCorner, guess;
+    if (S.phase === 'pen-guess') { shotCorner = cur.corner; guess = id; }
+    else if (S.phase === 'pen-corner') {
+      shotCorner = id; const tot = P.corners.l + P.corners.m + P.corners.r;
+      guess = sample({ l: 1 + 1.5 * P.corners.l / (tot || 1), m: 0.7 + 1.5 * P.corners.m / (tot || 1), r: 1 + 1.5 * P.corners.r / (tot || 1) });
+      P.corners[id]++; P.used.push(A.id); if (P.used.length > S.you.length) P.used = [A.id];
+    } else return;
+    S.phase = 'pen-resolving'; refresh();
+    const right = guess === shotCorner;
+    const p = right ? clamp(0.20 + (A.clu - 85) * 0.008, 0.08, 0.4) : clamp(0.82 + (A.clu - 85) * 0.006, 0.6, 0.95);
+    const goal = Math.random() < p, name = byId(CORNERS, shotCorner).name.toLowerCase();
+    await say(A.last + ' schiesst nach ' + (shotCorner === 'm' ? 'in die Mitte' : name) + '. ' + (side === 'home' ? 'Dein Goalie' : 'Der Goalie') + (right ? ' ist in der richtigen Ecke.' : ' springt falsch.'));
+    await sleep(450);
+    await shot(side, goal);
+    if (goal) P[side]++;
+    P.results.push({ side, goal });
+    S.log.push({ side, a: A.last, d: 'Goalie', move: 'Penalty', read: right, goal, foul: false, pct: pct(p) });
+    flashResult(side, goal);
+    if (side === 'you') P.round++;
+    P.turn = side === 'home' ? 'you' : 'home';
+    S.phase = 'pen-resolving'; refresh();
+    await say(goal ? (side === 'home' ? 'Tor für ' + S.hall.short + '.' : 'Tor für dich.') : 'Gehalten.');
+    const done = P.turn === 'home' && P.round >= 3 && P.you !== P.home;
+    S.phase = 'pen-resolving'; waitContinue(done ? 'Zum Resultat' : 'Weiter');
+  }
+
+  // --- result ---
+  function setHp(h, before) {
+    $('res-hp').textContent = h.hp + ' / 100';
+    const fill = $('res-hp-fill');
+    fill.style.transition = 'none'; fill.style.width = before + '%';
+    setTimeout(() => { fill.style.transition = ''; fill.style.width = h.hp + '%'; }, 250);
+  }
+  function finish() {
+    const h = S.hall, y = S.score.you, o = S.score.home, before = h.hp, factor = h.near ? 1 : 0.5;
+    let title, cls, change, outcome, scoreText = y + ':' + o;
+    if (S.pen) {
+      const won = S.pen.you > S.pen.home; outcome = won ? 'penwin' : 'penloss';
+      title = won ? 'Sieg nach Penaltys' : 'Niederlage nach Penaltys'; cls = won ? 'win' : 'loss';
+      change = won ? -Math.round(20 * factor) : 0; scoreText = (y + (won ? 1 : 0)) + ':' + (o + (won ? 0 : 1));
+    } else if (y > o) { outcome = 'win'; title = 'Sieg'; cls = 'win'; change = -Math.round(Math.min(70, 30 + 10 * (y - o)) * factor); }
+    else { outcome = 'loss'; title = 'Niederlage'; cls = 'loss'; change = 10; }
+    S.outcome = outcome;
+    h.hp = clamp(before + change, 0, 100); const real = h.hp - before;
+    COLLECTION.forEach(c => { c.stam = S.squad.indexOf(c.id) !== -1 ? Math.min(100, c.stam + 45) : 100; c.box = 0; });
+    let text;
+    if (h.hp === 0) { h.mine = true; text = 'Halle erobert. Dein Verein hält jetzt ' + h.name + '.'; }
+    else if (outcome === 'win' || outcome === 'penwin') text = 'Du nimmst der Halle ' + (-real) + ' Stärke' + (h.near ? '' : ' (Fernangriff, halber Schaden)') + '. Es fehlen noch ' + h.hp + ' bis zur Eroberung.';
+    else if (outcome === 'penloss') text = h.short + ' rettet sich im Penaltyschiessen. Die Halle bleibt unverändert.';
+    else text = real > 0 ? h.short + ' verteidigt die Halle. Sie erholt sich um ' + real + ' Stärke.' : h.short + ' verteidigt die Halle. Sie bleibt bei voller Stärke.';
+    $('res-hall').textContent = h.name;
+    $('res-title').textContent = title; $('res-title').className = 'res-title ' + cls;
+    $('res-score').textContent = scoreText;
+    $('res-sub').textContent = 'Du gegen ' + h.short + (S.pen ? ', Penaltys ' + S.pen.you + ':' + S.pen.home : '');
+    $('res-delta').textContent = real === 0 ? 'Keine Veränderung' : (real < 0 ? '−' + (-real) + ' Stärke' : '+' + real + ' Stärke');
+    $('res-text').textContent = text;
+    const reward = (outcome === 'win' || outcome === 'penwin') && !h.mine;
+    $('reward').hidden = !reward; $('res-actions').hidden = reward;
+    $('rw-dmg-val').textContent = '−' + Math.round(15 * factor);
+    $('btn-again').hidden = h.mine;
+    $('log').innerHTML = S.log.map((l, i) => {
+      const who = l.side === 'home' ? h.short : 'Du';
+      const res = l.goal ? `<span class="${l.side === 'you' ? 'gy' : 'gh'}">Tor</span>` : 'gehalten';
+      return `<li><span>${i + 1}. ${who}: <b>${esc(l.a)}</b> gegen <b>${esc(l.d)}</b>, ${l.move}${l.read ? ', gelesen' : ''}${l.foul ? ', Überzahl' : ''}</span><span>${l.pct}% · ${res}</span></li>`;
+    }).join('');
+    setHp(h, before); show('result');
+  }
+  function takeReward(kind) {
+    const h = S.hall, before = h.hp;
+    if (kind === 'dmg') {
+      h.hp = clamp(h.hp - Math.round(15 * (h.near ? 1 : 0.5)), 0, 100);
+      if (h.hp === 0) { h.mine = true; $('res-text').textContent = 'Nachgesetzt. Halle erobert, dein Verein hält jetzt ' + h.name + '.'; }
+      else $('res-text').textContent = 'Nachgesetzt. Es fehlen noch ' + h.hp + ' Stärke bis zur Eroberung.';
+      $('res-delta').textContent = '−' + (before - h.hp) + ' Stärke zusätzlich';
+      setHp(h, before);
+    } else {
+      COLLECTION.forEach(c => { c.stam = 100; });
+      $('res-text').textContent = 'Alle deine Karten sind wieder bei voller Ausdauer.';
+    }
+    $('reward').hidden = true; $('res-actions').hidden = false; $('btn-again').hidden = h.mine;
+  }
+
+  // --- wiring ---
+  $('halls').addEventListener('click', e => { const b = e.target.closest('button[data-hall]'); if (b && !b.disabled) openSquad(b.getAttribute('data-hall')); });
+  $('sq-grid').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) toggleSquad(b.getAttribute('data-id')); });
+  $('sq-cap').addEventListener('click', e => { const b = e.target.closest('button[data-cap]'); if (b) { S.capId = b.getAttribute('data-cap'); renderSquad(); } });
+  $('btn-kickoff').addEventListener('click', () => { if (S.squad.length === 6) startMatch(); });
+  $('btn-back-map').addEventListener('click', () => { renderMap(); show('map'); });
+  $('hand').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) pickCard(b.getAttribute('data-id')); });
+  $('opts').addEventListener('click', e => { const b = e.target.closest('button[data-opt]'); if (b) pickOption(b.getAttribute('data-opt')); });
+  $('tactics').addEventListener('click', e => { const b = e.target.closest('button[data-tac]'); if (b && !b.disabled) playTactic(b.getAttribute('data-tac')); });
+  $('btn-recard').addEventListener('click', recard);
+  $('btn-next').addEventListener('click', goOn);
+  $('rw-dmg').addEventListener('click', () => takeReward('dmg'));
+  $('rw-rest').addEventListener('click', () => takeReward('rest'));
+  $('btn-again').addEventListener('click', () => openSquad(S.hall.id));
+  $('btn-map').addEventListener('click', () => { renderMap(); show('map'); });
+  $('btn-reset').addEventListener('click', () => {
+    HALLS.forEach(h => { h.hp = 100; h.mine = false; });
+    COLLECTION.forEach(c => { c.stam = 100; c.box = 0; c.cap = false; });
+    S.squad = []; S.capId = null; renderMap();
+  });
+  renderMap();
+})();
+</script>
+</body>
+</html>
