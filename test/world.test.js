@@ -55,5 +55,21 @@ ok(!W.canSwitch(r.world) && !W.chooseClub(r.world, 'uster').ok, 'zweiter Wechsel
 // Simulierter Angriff: gleiche Welt und gleicher Seed ergeben dasselbe
 const s1 = W.simAttack(w, 'gc', HK.makeRng(5)), s2 = W.simAttack(w, 'gc', HK.makeRng(5));
 ok(JSON.stringify(s1.world) === JSON.stringify(s2.world) && JSON.stringify(w) !== JSON.stringify(s1.world), 'simulierter Angriff ist mit Seed wiederholbar und ändert die alte Welt nicht');
+// Freunde und Elo
+let e = W.chooseClub(W.create(), 'koeniz').world;
+ok(e.elo.me === 1000 && W.CFG.eloK === 32, 'Elo startet bei 1000, K-Faktor 32');
+ok(W.USERS.length >= 10 && W.USERS.filter(u => u.friend).length === 4, 'rund zehn erfundene User, vier davon Freunde');
+ok(W.friendSquad('mika').length === 6 && W.friendSquad('mika').every(c => !c.home && c.stam === 100) && W.friendSquad('mika').filter(c => c.cap).length === 1, 'Kader des Freundes: sechs Karten, ein Captain, kein Heimvorteil, 100 Ausdauer');
+let g1 = W.friendResult(e, 'mika', true, '2026-11-13');
+ok(g1.delta === Math.round(32 * (1 - W.expected(1000, 1184))) && g1.after === 1000 + g1.delta && g1.oppAfter === 1184 - g1.delta, 'Sieg gegen den Stärkeren: Elo nach Formel, der Gegner verliert gleich viel');
+ok(W.friendResult(e, 'mika', false, '2026-11-13').delta === Math.round(32 * (0 - W.expected(1000, 1184))), 'Niederlage kostet nach Formel, die Tordifferenz spielt keine Rolle');
+let g = g1.world; g = W.friendResult(g, 'mika', true, '2026-11-13').world; g = W.friendResult(g, 'mika', true, '2026-11-13').world;
+const g4 = W.friendResult(g, 'mika', true, '2026-11-13');
+ok(!g4.counted && g4.delta === 0 && g4.played === 4, 'viertes Spiel desselben Paars am selben Tag zählt nicht');
+ok(W.friendResult(g4.world, 'mika', true, '2026-11-14').counted && W.friendResult(g4.world, 'sara', true, '2026-11-13').counted, 'am nächsten Tag und gegen andere Freunde zählt es wieder');
+const all = W.ranking(g, 'all'), fr = W.ranking(g, 'friends'), cl = W.ranking(g, 'club');
+ok(all.length === W.USERS.length + 1 && all.every((x, i) => i === 0 || all[i - 1].elo >= x.elo), 'Rangliste aller User, nach Elo sortiert');
+ok(fr.length === 5 && fr.some(x => x.me) && cl.every(x => x.me || x.club === 'koeniz') && cl.length === 2, 'Filter Freunde und mein Verein, der eigene Eintrag ist immer dabei');
+ok(JSON.stringify(W.table(g)) === JSON.stringify(W.table(e)), 'die Vereinstabelle zählt unabhängig von der Elo');
 console.log(fails ? '\n' + fails + ' Prüfungen fehlgeschlagen' : '\nAlle Prüfungen bestanden');
 process.exit(fails ? 1 : 0);

@@ -4,7 +4,8 @@
    Aufruf:  node sim/sim.js [--n 2000] [--seed 1] [--src] [--legacy] [--set key=value ...] [--json]
    --src     Engine aus src/engine.js statt aus dist/index.html (während der Entwicklung)
    --legacy  alte Regeln (ein Wurf pro Duell) mit denselben Spielweisen, als Vergleich
-   --heimteam  neue Regeln, aber die alte Hallenwache: immer das Heimteam mit Heimvorteil */
+   --heimteam  neue Regeln, aber die alte Hallenwache: immer das Heimteam mit Heimvorteil
+   --freunde   Freundschaftsspiele gegen die erfundenen Freunde statt Hallen */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
@@ -120,8 +121,13 @@ function makePolicies(HK, ev) {
         if (!s.tac.you.timeout) { const need = you.reduce((a, c) => a + Math.min(30, 100 - c.stam), 0); if (need >= 130 || (s.duel >= 8 && need >= 80)) return { type: 'tactic', id: 'timeout' }; }
         if (cur.side === 'home' && !s.tac.you.pressing && !cur.pressing && ((s.duel === 8 && s.score.you - s.score.home <= 1) || s.duel >= 10)) return { type: 'tactic', id: 'pressing' };
         if (cur.side === 'you' && !s.tac.you.pull && !cur.pull && ((s.duel === 9 && s.score.you - s.score.home < 2) || s.duel >= 11)) return { type: 'tactic', id: 'pull' };
+        if (cur.wait === 'defender') {          // Freundschaftsspiel: Verteidiger zuerst zeigen, der Angreifer ist noch unbekannt
+          const defs = usable.filter(c => c.pos === 'DEF'), cand = defs.length ? defs : usable;
+          return { type: 'card', card: argbest(cand, c => HK.eff(HK.defVal(c), c) - HK.foulRisk(c, null, s.cfg) * 10).id };
+        }
         if (cur.side === 'home') {
           const A = HK.card(s, 'home', cur.attacker), st = HK.STANCES.filter(x => x.stops === HK.bestMove(A).id)[0];
+          if (cur.defender) return { type: 'play', card: cur.defender, option: st.id };
           const defs = usable.filter(c => c.pos === 'DEF'), cand = defs.length ? defs : usable;
           const D = argbest(cand, c => -ev.defend(s, A, c, st));
           return { type: 'play', card: D.id, option: st.id };
@@ -207,6 +213,23 @@ function run(HK, o) {
   return out;
 }
 
+// Freundschaftsspiele: «vernünftig» gegen die vier erfundenen Freunde, die im Prototyp die KI spielt.
+function runFriends(HK, o) {
+  const cfg = Object.assign({}, HK.CFG, o.cfg || {}), P = makePolicies(HK, makeEV(HK)), sq = squads(HK).standard, lines = [];
+  HK.World.USERS.filter(u => u.friend).forEach((u, i) => {
+    const rng = HK.makeRng((o.seed || 1) * 7919 + 500 + i), pol = P.reasonable({});
+    let win = 0, gf = 0, ga = 0, so = 0;
+    for (let n = 0; n < o.n; n++) {
+      const you = sq.map(id => Object.assign({}, HK.DATA.collection.filter(c => c.id === id)[0], { stam: 100, box: 0, cap: id === 'steiner' }));
+      let s = HK.newMatch({ mode: 'friend', homeName: u.name, cfg, you: { goalie: HK.DATA.user.goalie, cards: you }, home: { goalie: { val: cfg.goalie }, cards: HK.World.friendSquad(u.id) } }, rng), guard = 0;
+      while (s.phase !== 'done') { const r = HK.act(s, pol(s, rng), rng); if (!r.ok) throw new Error('Ungültige Aktion in Phase ' + s.phase); s = r.state; if (++guard > 600) throw new Error('Match endet nicht'); }
+      if (s.outcome === 'win' || s.outcome === 'penwin') win++; gf += s.score.you; ga += s.score.home; if (s.pen) so++;
+    }
+    lines.push(u.name.padEnd(7) + ' Siegquote ' + pc(win / o.n) + '   Tore ' + f2(gf / o.n) + ':' + f2(ga / o.n) + '   Penaltyschiessen ' + pc(so / o.n));
+  });
+  return lines.join('\n');
+}
+
 // ---------- Ausgabe ----------
 const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), pc = v => (100 * v).toFixed(1) + '%';
 function report(HK, res) {
@@ -239,12 +262,14 @@ if (require.main === module) {
     else if (a[i] === '--legacy') opt.legacy = true;
     else if (a[i] === '--json') opt.json = true;
     else if (a[i] === '--heimteam') opt.oldGuard = true;
+    else if (a[i] === '--freunde') opt.friends = true;
     else if (a[i] === '--set') {
       const kv = a[++i].split('='), keys = kv[0].split('.');
       if (keys.length === 2) { opt.cfg[keys[0]] = opt.cfg[keys[0]] || {}; opt.cfg[keys[0]][keys[1]] = +kv[1]; } else opt.cfg[kv[0]] = +kv[1];
     }
   }
   const HK = loadEngine(opt.src ? path.join(ROOT, 'src/engine.js') : path.join(ROOT, 'dist/index.html'));
+  if (opt.friends) { console.log('FREUNDSCHAFTSSPIELE, ' + opt.n + ' Matches je Freund, Standardkader, Spielweise vernünftig\n' + runFriends(HK, opt)); return; }
   const t0 = Date.now(), res = run(HK, opt);
   if (opt.json) console.log(JSON.stringify(res));
   else {
@@ -254,4 +279,4 @@ if (require.main === module) {
     console.log('\n' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
   }
 }
-module.exports = { loadEngine, run, report, squads, makeEV, makeLegacy, makePolicies, playMatch };
+module.exports = { runFriends, loadEngine, run, report, squads, makeEV, makeLegacy, makePolicies, playMatch };

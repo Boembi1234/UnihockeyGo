@@ -76,5 +76,21 @@ ok(HK.keeperWeights(r.state.corners).l === 2.5, 'Goalie gewichtet die geschossen
 // Goalie-Feld pro Team
 u = fresh(); const base = HK.stage3(u, 'you', HK.card(u, 'you', 'steiner')); u.teams.home.goalie.val = 98;
 ok(Math.abs(base - HK.stage3(u, 'you', HK.card(u, 'you', 'steiner')) - 0.12) < 1e-9, 'Goalie-Wert pro Team wirkt in Stufe 3');
+// Freundschaftsspiel: Verteidiger zeigt zuerst, Zug des Freundes bleibt verdeckt, Taktiken auf beiden Seiten
+function friendly() {
+  return HK.newMatch({ mode: 'friend', homeName: 'Mika', you: { goalie: { val: 88 }, cards: ['steiner', 'sjogren', 'wilhelmsson', 'kainulainen', 'schwab', 'larsson'].map(col) },
+    home: { goalie: { val: 88 }, cards: hall.guard.map(c => Object.assign({}, c, { home: false })) } }, HK.makeRng(2));
+}
+let fm = friendly();
+ok(fm.cur.side === 'home' && fm.cur.wait === 'defender' && fm.cur.attacker === null && fm.cur.move === null, 'Freund greift an: Sein Angreifer und sein Zug sind noch nicht gewählt');
+ok(!HK.act(fm, { type: 'play', card: 'schwab', option: 'block' }, seq([])).ok, 'ohne gezeigten Verteidiger keine Auflösung');
+r = HK.act(fm, { type: 'card', card: 'schwab' }, seq([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]));
+ok(r.ok && r.state.cur.defender === 'schwab' && !!r.state.cur.attacker && r.state.cur.move === null && r.state.cur.wait === null, 'Verteidiger gezeigt, danach wählt der Freund den Angreifer, der Zug bleibt verdeckt');
+r2 = HK.act(r.state, { type: 'play', card: 'schwab', option: 'pass' }, HK.makeRng(4));
+ok(r2.ok && r2.state.phase === 'duelDone' && !!r2.state.log[0].move && r2.state.shist.pass === 1, 'Auflösung deckt den Zug des Freundes auf');
+ok(HK.card(fm, 'home', 'zaugg').home === false && HK.stage1(fm, 'home', HK.card(fm, 'home', 'zaugg'), HK.move('direkt'), HK.card(fm, 'you', 'schwab'), true) < HK.stage1(fresh(), 'home', HK.card(fresh(), 'home', 'zaugg'), HK.move('direkt'), HK.card(fresh(), 'you', 'schwab'), true), 'kein Heimvorteil im Freundschaftsspiel');
+fm = friendly(); fm.duel = 9; fm.cur = null;
+let fn = HK.act(Object.assign({}, fm, { phase: 'duelDone', duel: 8, results: [], cur: { side: 'home', attacker: 'zaugg', defender: 'schwab', move: 'direkt', entry: { steps: [] } } }), { type: 'next' }, HK.makeRng(1));
+ok(fn.ok && fn.state.cur.side === 'you' && fn.state.cur.pressing === true && fn.state.tac.home.pressing === true && fn.state.cur.told.indexOf('pressing') !== -1, 'der Freund spielt sein Pressing im 3. Drittel und sagt es an');
 console.log(fails ? '\n' + fails + ' Prüfungen fehlgeschlagen' : '\nAlle Prüfungen bestanden');
 process.exit(fails ? 1 : 0);

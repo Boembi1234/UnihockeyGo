@@ -23,7 +23,7 @@ async function session(browser, o) {
   const snap = async name => { if (shots[name] || !o.shots) return; shots[name] = true; await page.screenshot({ path: path.join(SHOTS, o.width + '-' + name + '.png'), fullPage: true }); };
   const info = () => page.evaluate(() => {
     const $ = id => document.getElementById(id), vis = el => !!el && !el.hidden && el.offsetParent !== null;
-    const screen = ['club', 'map', 'hall', 'table', 'squad', 'match', 'result'].filter(n => !$('screen-' + n).hidden)[0];
+    const screen = ['club', 'map', 'hall', 'table', 'friends', 'rank', 'squad', 'match', 'result'].filter(n => !$('screen-' + n).hidden)[0];
     return { screen, next: vis($('btn-next')), opts: [...document.querySelectorAll('#opts .opt')].filter(vis).length, row: $('opts').className.indexOf('row') !== -1,
       cards: [...document.querySelectorAll('#hand .mini:not(:disabled)')].filter(vis).length, tacs: [...document.querySelectorAll('#tactics .tac:not(:disabled)')].filter(vis).length,
       period: $('sc-period').textContent, pp: $('sc-pp').textContent, hint: $('hand-hint').textContent, say: $('say-sr').textContent, reward: vis($('reward')),
@@ -36,6 +36,8 @@ async function session(browser, o) {
     if (s.overflow > 0 && !stat.overflow.some(x => x.indexOf(s.screen + ' ' + s.period) === 0)) stat.overflow.push(s.screen + ' ' + s.period + ' +' + s.overflow);
     if (s.screen === 'club') { await snap('00-vereinswahl'); await click('#club-list button[data-club]:not(:disabled)'); }
     else if (s.screen === 'table') { await snap('13-vereinstabelle'); await click('#btn-table-back'); }
+    else if (s.screen === 'friends') { await snap('14-freunde'); if (Math.random() < 0.15) await click('#btn-copy'); else if (Math.random() < 0.8) await click('#fr-list button[data-friend]'); else await click('#btn-friends-back'); }
+    else if (s.screen === 'rank') { await snap('15-rangliste'); if (Math.random() < 0.6) await click('#rank-filter button[data-filter]'); else await click('#btn-rank-back'); }
     else if (s.screen === 'hall') {
       const own = await page.evaluate(() => !document.getElementById('hv-station').hidden);
       await snap(own ? '12-halle-eigene' : '12-halle-fremde');
@@ -49,17 +51,19 @@ async function session(browser, o) {
       await snap('01-karte');
       const r = Math.random();
       if (stat.matches % 5 === 4 && r < 0.3) await click('#btn-reset');
-      else if (r < 0.12) await click('#btn-table');
-      else if (r < 0.2) await click('#btn-switch:not(:disabled)');
-      else if (r < 0.5) await click('#halls button[data-view]');
+      else if (r < 0.1) await click('#btn-table');
+      else if (r < 0.16) await click('#btn-rank');
+      else if (r < 0.45) await click('#btn-friends');
+      else if (r < 0.5) await click('#btn-switch:not(:disabled)');
+      else if (r < 0.7) await click('#halls button[data-view]');
       else { const n = await click('#halls button[data-hall]'); if (!n) await click('#halls button[data-view]'); }
-    } else if (s.screen === 'squad') { await snap('02-kader'); await click('#btn-kickoff'); }
+    } else if (s.screen === 'squad') { const fr = await page.evaluate(() => document.getElementById('sq-hall').textContent === 'Freundschaftsspiel'); await snap(fr ? '02-kader-freund' : '02-kader'); if (fr) stat._friend = true; else stat._friend = false; await click('#btn-kickoff'); }
     else if (s.screen === 'match') {
       if (s.pp) await snap('07-ueberzahl');
       if (s.next) { if (/Penalty|Tor für|Parade|Gehalten|Konter/.test(s.say)) await snap('06-nach-sequenz'); await click('#btn-next'); idle = 0; }
       else if (s.opts) {
         if (s.row && s.period === 'Penaltys') await snap('09-penaltyschiessen'); else if (s.row) await snap('08-penalty-im-match');
-        else await snap(/verteidigt/.test(s.say) ? '04-abwehr-wahl' : '05-spielzug-wahl');
+        else await snap((stat._friend ? 'freund-' : '') + (/verteidigt/.test(s.say) ? '04-abwehr-wahl' : '05-spielzug-wahl'));
         await click('#opts .opt'); idle = 0;
       } else if (s.cards) {
         if (s.tacs && Math.random() < 0.3) await click('#tactics .tac:not(:disabled)');
@@ -68,12 +72,12 @@ async function session(browser, o) {
       } else { idle++; if (!o.reduce && Math.random() < o.skip) await page.click('#rink', { position: { x: 40, y: 40 } }); await page.waitForTimeout(o.reduce ? 15 : 120); if (idle > 2000) throw new Error('hängt: ' + JSON.stringify(s)); }
       if (s.period === 'Penaltys' && !stat._so) { stat._so = true; stat.shootouts++; }
     } else if (s.screen === 'result') {
-      stat.matches++; stat._so = false; if (/Sieg/.test(s.title)) stat.wins++;
+      stat.matches++; stat._so = false; if (/Sieg/.test(s.title)) stat.wins++; if (stat._friend) { stat.friendly = (stat.friendly || 0) + 1; await snap('16-resultat-freund'); }
       stat.results.push(s.title + ' ' + s.score + ' (' + s.logItems + ' Zeilen)');
       if (s.logItems < 12) errors.push('Protokoll zu kurz: ' + s.logItems);
       await snap(/Penaltys/.test(s.title) ? '11-resultat-penaltys' : '10-resultat');
       if (s.reward) await click('#reward .opt');
-      (await click(Math.random() < 0.5 ? '#btn-map' : '#btn-again')) || (await click('#btn-map'));
+      const r2 = Math.random(); (await click(r2 < 0.4 ? '#btn-map' : r2 < 0.75 ? '#btn-again' : '#btn-friends2')) || (await click('#btn-map'));
     }
   }
   stat.seen = await page.evaluate(() => window.__seen);
@@ -93,7 +97,7 @@ async function session(browser, o) {
   let bad = 0;
   for (const r of runs) {
     const t0 = Date.now(), st = await session(browser, r);
-    console.log('\n' + r.name + ': ' + st.matches + ' Matches, ' + st.wins + ' Siege, ' + st.shootouts + ' Penaltyschiessen, ' + st.steps + ' Schritte, ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
+    console.log('\n' + r.name + ': ' + st.matches + ' Matches, davon ' + (st.friendly || 0) + ' gegen Freunde, ' + st.wins + ' Siege, ' + st.shootouts + ' Penaltyschiessen, ' + st.steps + ' Schritte, ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
     console.log('  gesehen: ' + JSON.stringify(st.seen) + ', Schritte in der Hallenansicht: ' + (st.hallSteps || 0));
     console.log('  Resultate: ' + st.results.slice(0, 8).join(' | '));
     console.log('  Überlauf quer: ' + (st.overflow.length ? st.overflow.join(', ') : 'keiner'));

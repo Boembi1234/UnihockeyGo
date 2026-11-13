@@ -6,7 +6,7 @@ Der Prototyp ist eine einzelne HTML-Datei ohne Server. Standort, Check-in und al
 
 ## Stand
 
-Etappe 3 von 4 ist umgesetzt: die Duell-Engine, die 2D-Animation jeder Stufe und Vereine mit Hallenverteidigung. Es folgt das Spiel gegen Freunde mit Elo.
+Alle vier Etappen sind umgesetzt: die Duell-Engine, die 2D-Animation jeder Stufe, Vereine mit Hallenverteidigung und das Spiel gegen Freunde mit Elo-Rangliste.
 
 Live: <https://unihockeygo.netlify.app>
 
@@ -15,7 +15,7 @@ Live: <https://unihockeygo.netlify.app>
 | Pfad | Inhalt |
 | --- | --- |
 | `src/engine.js` | Spiel-Engine: Regeln, Zufall und KI der Halle als reine Funktionen. Alle Stellschrauben stehen in `CFG`. |
-| `src/world.js` | Welt: Vereine, Hallenbesitz, Stationierung, Schaden und Vereinstabelle, ebenfalls reine Funktionen |
+| `src/world.js` | Welt: Vereine, Hallenbesitz, Stationierung, Schaden, Vereinstabelle, Freunde und Elo, ebenfalls reine Funktionen |
 | `src/scene.js` | 2D-Szenen von oben: eine kurze Szene pro Ereignis der Engine, nur HTML und CSS, keine Bilder |
 | `src/ui.js` | Oberfläche. Rechnet nichts selbst aus, sondern zeigt, was die Engine zurückgibt. |
 | `src/page.html` | Markup und Styles |
@@ -35,6 +35,10 @@ node sim/sim.js --n 2000
 
 ```bash
 node sim/sim.js --n 2000 --legacy
+```
+
+```bash
+node sim/sim.js --n 2000 --freunde
 ```
 
 ```bash
@@ -75,11 +79,20 @@ node test/timing.js
 - **Schaden:** Vor Ort voll, aus der Ferne halb, am Spieltag vor Ort doppelt. Die eigene Heimhalle zurückzuerobern zählt auch aus der Ferne voll.
 - **Simulation:** Die Fans (Köniz 4, Wiler 6, GC 1), der Spieltag in Weissenstein und fremde Angriffe sind erfunden.
 
+## Freunde und Elo
+
+- **Ablauf:** Dieselbe Engine wie gegen die Halle. Die verteidigende Seite zeigt zuerst ihre Karte, dann wählt der Angreifer. Spielzug und Abwehr wählen beide verdeckt.
+- **Fairness:** Kein Heimvorteil, beide Kader starten mit 100 Ausdauer, Taktiken je einmal pro Seite. Die Ausdauer für Hallenkämpfe bleibt unberührt, stationierte Karten bleiben gesperrt.
+- **Elo:** Start 1000, K-Faktor 32. Ein Sieg nach Penaltys zählt als Sieg, die Tordifferenz zählt nicht. Dasselbe Paar zählt höchstens dreimal pro Tag. Matches gegen Hallen zählen nie.
+- **Simulation:** Ohne Server spielt die KI vier erfundene Freunde, ohne Tendenz-Anzeige. Die Rangliste hat elf erfundene User, Einladungscode und Link führen nirgends hin.
+- **Messung:** Vernünftiges Spiel mit dem Standardkader gewinnt gegen die vier Freunde 49.3 %, 57.9 %, 42.9 % und 54.4 % (2000 Matches je Freund).
+
 ## Engine
 
+- **Zwei Modi:** `mode: 'hall'` gegen die Hallenwache, `mode: 'friend'` für das Freundschaftsspiel.
 - **Zustand rein, Ergebnis raus:** `HK.newMatch(setup, rng)` erzeugt ein Match, `HK.act(state, action, rng)` gibt einen neuen Zustand und die Ereignisse der Sequenz zurück. Der alte Zustand bleibt unverändert.
 - **Zufall mit Seed:** `HK.makeRng(seed)`. Jede Funktion, die Zahlen von 0 bis 1 liefert, kann sie ersetzen. Gleicher Seed ergibt dasselbe Match.
-- **Für die echte App:** Der Kommentar am Anfang von `src/engine.js` hält fest, welche Funktionen später auf den Server gehören.
+- **Für die echte App:** Die Kommentare am Anfang von `src/engine.js` und `src/world.js` halten fest, welche Funktionen später auf den Server gehören.
 
 ## Messwerte
 

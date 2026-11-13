@@ -93,6 +93,12 @@ button.chip{height:44px;align-items:center}
 .scout li.head b,.scout li.head .ps{font-weight:700;font-size:12px;color:var(--mute)}
 .scout.rank .ps{text-align:right}
 .scout li.me .nm,.scout li.me b{color:var(--gold)}
+.scout.friends li{grid-template-columns:48px 1fr auto;align-items:center}
+.scout.elo li{grid-template-columns:38px 1fr 56px}
+.scout.elo .nm,.scout.friends .nm{white-space:normal;overflow:visible}
+.chips.filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+.chips.filters .chip{justify-content:center}
+.hp-row b.link{font-size:14px;letter-spacing:.02em;text-transform:none;overflow-wrap:anywhere;text-align:right}
 button.chip.on{border-color:var(--gold);background:#1a1606}
 .cta{min-height:52px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:.1em;text-transform:uppercase}
 .cta:hover:not(:disabled){background:#1249e0}
@@ -293,7 +299,7 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
 <section id="screen-map" class="screen">
   <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode">Hallenkampf</span></header>
   <div class="clubbar" id="clubbar"></div>
-  <div class="nav"><button class="ghost" id="btn-table" type="button">Vereinstabelle</button><button class="ghost" id="btn-switch" type="button">Verein wechseln</button></div>
+  <div class="nav"><button class="ghost" id="btn-table" type="button">Vereinstabelle</button><button class="ghost" id="btn-switch" type="button">Verein wechseln</button><button class="ghost" id="btn-friends" type="button">Freunde</button><button class="ghost" id="btn-rank" type="button">Elo-Rangliste</button></div>
   <div class="map" id="map" role="img" aria-label="Schematische Karte: Du stehst 40 Meter neben den Sporthallen Weissenstein. Hardau und Grossmatt sind weiter weg."></div>
   <div id="halls" class="screen"></div>
   <div class="panel">
@@ -304,10 +310,11 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
       <li><b>Duell:</b> Du wählst die Karte und dazu den Spielzug oder die Abwehr. Danach läuft das Duell in drei Stufen ab: am Verteidiger vorbei, Schuss aufs Tor, Goalie geschlagen. Liest der Verteidiger den Zug, kommt der Angriff meist nicht durch.</li>
       <li><b>Konter und Fouls:</b> Ein Ballgewinn kann zum Konter führen, am ehesten nach einem Zweikampf. Ein Foul gibt einen Freischlag, eine 2-Minuten-Strafe mit 4 Duellen Überzahl oder einen Penalty.</li>
       <li><b>Taktik:</b> Time-out, Pressing und Ohne Goalie gibt es je einmal pro Match. Verteidiger wehren besser ab, Stürmer treffen besser.</li>
+      <li><b>Freunde:</b> Gegen Freunde spielst du um Elo, ohne Heimvorteil und mit verdeckter Wahl auf beiden Seiten. Matches gegen Hallen zählen nie für die Elo.</li>
       <li><b>Schaden:</b> Ein Sieg schwächt die Halle. Vor Ort zählt er voll, aus der Ferne halb, am Spieltag vor Ort doppelt. Fällt die Stärke auf 0, gehört die Halle deinem Verein.</li>
     </ul>
     <button class="ghost" id="btn-reset" type="button">Prototyp zurücksetzen</button>
-    <p class="note">Standort, Check-in, Spieltag, Fans und fremde Angriffe sind simuliert. Die Kader und Werte stammen aus der Saison 2026/27, Stand 13.11.2026.</p>
+    <p class="note">Standort, Check-in, Spieltag, Fans, fremde Angriffe, Freunde und Rangliste sind simuliert. Die Kader und Werte stammen aus der Saison 2026/27, Stand 13.11.2026.</p>
   </div>
 </section>
 
@@ -360,17 +367,48 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
   </div>
 </section>
 
+<section id="screen-friends" class="screen" hidden>
+  <button class="back" id="btn-friends-back" type="button">Zur Karte</button>
+  <div class="panel">
+    <h1 class="hall-name">Freunde</h1>
+    <p class="holder">Gegen Freunde läuft dieselbe Duell-Engine wie gegen die Halle: kein Heimvorteil, beide Kader mit 100 Ausdauer, Taktiken je einmal pro Seite. Nur diese Matches zählen für deine Elo.</p>
+    <div class="hp-row"><span>Deine Elo</span><b id="fr-elo"></b></div>
+    <ul class="scout friends" id="fr-list"></ul>
+    <p class="note">Im Prototyp gibt es keine zweite Person. Die Freunde sind erfunden und werden von der KI gespielt. Sie zeigt keine Tendenz an, weil ein Mensch keiner festen Tendenz folgt.</p>
+  </div>
+  <div class="panel">
+    <p class="group-label">Freund einladen<span class="sim">Simulation</span></p>
+    <p class="holder">Schick deinem Freund den Code oder den Link. Sobald er annimmt, wählt ihr beide den Kader mit 6 Karten und Captain.</p>
+    <div class="hp-row"><span>Code</span><b id="fr-code"></b></div>
+    <div class="hp-row"><span>Link</span><b class="link" id="fr-link"></b></div>
+    <button class="ghost" id="btn-copy" type="button">Code kopieren</button>
+    <p class="note" id="fr-copied" aria-live="polite" hidden></p>
+    <p class="note">Ohne Server führen Code und Link nirgends hin. Wähle oben einen erfundenen Freund, er nimmt sofort an.</p>
+  </div>
+</section>
+
+<section id="screen-rank" class="screen" hidden>
+  <button class="back" id="btn-rank-back" type="button">Zur Karte</button>
+  <div class="panel">
+    <h1 class="hall-name">Elo-Rangliste</h1>
+    <p class="holder">Alle starten bei 1000. Ein Sieg nach Penaltys zählt als Sieg, die Tordifferenz zählt nicht. Dasselbe Paar zählt höchstens 3 Mal pro Tag.</p>
+    <div class="chips filters" id="rank-filter"></div>
+    <ul class="scout elo" id="rank-list"></ul>
+    <p class="note">Simulation: Alle anderen User in dieser Rangliste sind erfunden.</p>
+  </div>
+</section>
+
 <section id="screen-squad" class="screen" hidden>
   <button class="back" id="btn-back-map" type="button">Zur Karte</button>
   <div class="panel">
     <div class="hr-head"><h1 class="hall-name" id="sq-hall"></h1><span class="tags" id="sq-tags"></span></div>
     <p class="holder" id="sq-holder"></p>
-    <div class="hp">
+    <div class="hp" id="sq-hpwrap">
       <div class="hp-row"><span>Hallen-Stärke</span><b id="sq-hp"></b></div>
       <div class="hp-track"><div class="hp-fill" id="sq-hp-fill"></div></div>
     </div>
     <div>
-      <p class="group-label">Hallenwache und ihr liebster Spielzug</p>
+      <p class="group-label" id="sq-guard-label">Hallenwache und ihr liebster Spielzug</p>
       <ul class="scout" id="sq-guard"></ul>
     </div>
   </div>
@@ -423,7 +461,7 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
   <div class="res-score" id="res-score">0:0</div>
   <p class="res-sub" id="res-sub"></p>
   <div class="panel">
-    <div class="hp">
+    <div class="hp" id="res-hpwrap">
       <div class="hp-row"><span>Hallen-Stärke</span><b id="res-hp">100 / 100</b></div>
       <div class="hp-track"><div class="hp-fill" id="res-hp-fill"></div></div>
     </div>
@@ -438,6 +476,7 @@ button.chip.on{border-color:var(--gold);background:#1a1606}
     </div>
     <div class="actions" id="res-actions">
       <button class="cta" id="btn-again" type="button">Nochmals angreifen</button>
+      <button class="ghost" id="btn-friends2" type="button" hidden>Zu den Freunden</button>
       <button class="ghost" id="btn-map" type="button">Zur Karte</button>
     </div>
   </div>

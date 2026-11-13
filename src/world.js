@@ -6,7 +6,8 @@
    - station, withdraw: Stationierung, inklusive der Sperre für eigene Matches
    - chooseClub: Vereinswahl und der eine Wechsel pro Saison
    - guard: die Hallenwache, gegen die ein Match gerechnet wird
-   - matchday kommt dort aus den Spiel- und Venue-Daten von swiss unihockey, simAttack entfällt. */
+   - friendResult: Elo, inklusive der Grenze von drei Wertungsspielen pro Paar und Tag
+   - matchday kommt dort aus den Spiel- und Venue-Daten von swiss unihockey, simAttack und die erfundenen User entfallen. */
 (function (root) {
   'use strict';
   const E = root.HK, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -18,7 +19,10 @@
     fillerOvr: 70,       // Ersatzkarten in Hallen, die ein fremder Verein hält
     remote: 0.5,         // Fernangriff
     matchday: 2,         // Angriff vor Ort am Spieltag
-    switches: 1          // Vereinswechsel pro Saison
+    switches: 1,         // Vereinswechsel pro Saison
+    eloStart: 1000,      // Elo zu Beginn
+    eloK: 32,            // K-Faktor
+    eloPerDay: 3         // so oft zählt dasselbe Paar pro Tag für die Elo
   };
   // Herren L-UPL 2026/27, Namen wie in den Spieldaten von swiss unihockey.
   const CLUBS = [
@@ -49,6 +53,21 @@
     { id: 'w6', name: 'Kirchberger', club: 'wiler', card: 'hollenstein' },
     { id: 'g1', name: 'Hopper_ZH', club: 'gc', card: 'riedi' }
   ];
+  /* Erfundene User für Freundesliste und Rangliste. Freunde haben einen Kader aus dem Kartenpool: vier Stürmer, zwei Verteidiger,
+     die erste Karte ist Captain. Im Prototyp spielt die KI für sie. */
+  const USERS = [
+    { id: 'mika', name: 'Mika', club: 'koeniz', elo: 1184, friend: true, squad: ['zaugg', 'jansson', 'kovanen', 'hutzli', 'ruh', 'tringaniello'] },
+    { id: 'sara', name: 'Sara', club: 'gc', elo: 1072, friend: true, squad: ['riedi', 'bolin', 'freiburghaus', 'castelberg', 'bier', 'niederberger'] },
+    { id: 'jonas', name: 'Jonas', club: 'wiler', elo: 1011, friend: true, squad: ['kaenzig', 'martinjas', 'trekse', 'persson', 'wyss', 'hollenstein'] },
+    { id: 'elin', name: 'Elin', club: 'zug', elo: 946, friend: true, squad: ['sjogren', 'kainulainen', 'mariotti', 'kauppinen', 'schwab', 'mettier'] },
+    { id: 'u5', name: 'Tigerente', club: 'tigers', elo: 1263, friend: false },
+    { id: 'u6', name: 'Alligator77', club: 'malans', elo: 1140, friend: false },
+    { id: 'u7', name: 'Buchholz_Uli', club: 'uster', elo: 1098, friend: false },
+    { id: 'u8', name: 'Rychi_Fan', club: 'rychenberg', elo: 1035, friend: false },
+    { id: 'u9', name: 'Thurgauerin', club: 'thurgau', elo: 987, friend: false },
+    { id: 'u10', name: 'Jets_Luca', club: 'jets', elo: 921, friend: false },
+    { id: 'u11', name: 'WASA_Noe', club: 'wasa', elo: 874, friend: false }
+  ];
   // Karte eines Vereins, die ein erfundener Fan nach einer Eroberung stationiert.
   const CLUB_CARD = { tigers: 'steiner', zug: 'sjogren', uster: 'wilhelmsson', malans: 'kovanen', thurgau: 'mariotti', jets: 'kauppinen', chur: 'mettier', koeniz: 'hutzli', wiler: 'persson', gc: 'bolin' };
 
@@ -69,7 +88,8 @@
   function create() {
     const halls = {};
     E.DATA.halls.forEach(h => { halls[h.id] = { owner: h.id, hp: 100, slots: FANS.filter(f => f.club === h.id).map(f => ({ user: f.id, card: f.card })) }; });
-    return { season: '2026/27', club: null, switches: 0, halls, matchday: 'koeniz', news: '' };
+    const elo = {}; USERS.forEach(u => { elo[u.id] = u.elo; });
+    return { season: '2026/27', club: null, switches: 0, halls, matchday: 'koeniz', news: '', elo: { me: CFG.eloStart, users: elo }, games: {} };
   }
 
   // --- Hallenwache ---
@@ -193,5 +213,28 @@
     return { world: n, text, conquered, by: by.id };
   }
 
-  root.HKWorld = { CFG, CLUBS, FANS, create, club, hallData, guard, taken, canSwitch, chooseClub, stationed, mySlot, canStation, station, withdraw, canAttack, factor, applyResult, bonusValue, bonusDamage, table, simAttack, poolCard };
+  // --- Freunde und Elo ---
+  const user = id => byId(USERS, id);
+  // Kader eines Freundes fürs Freundschaftsspiel: ohne Heimvorteil, volle Ausdauer, erste Karte ist Captain.
+  function friendSquad(id) { return user(id).squad.map((cid, i) => Object.assign({}, poolCard(cid), { stam: 100, box: 0, home: false, cap: i === 0 })); }
+  const expected = (a, b) => 1 / (1 + Math.pow(10, (b - a) / 400));
+  const playedToday = (w, id, day) => (w.games[id] && w.games[id][day]) || 0;
+  /* Wertet ein Freundschaftsspiel. Ein Sieg nach Penaltys zählt als Sieg, die Tordifferenz zählt nicht.
+     Dasselbe Paar zählt höchstens eloPerDay Mal pro Tag, damit Freunde sich nicht gegenseitig hochspielen. */
+  function friendResult(w, id, won, day) {
+    const n = copy(w), played = playedToday(w, id, day), counted = played < CFG.eloPerDay, mine = w.elo.me, theirs = w.elo.users[id];
+    const delta = counted ? Math.round(CFG.eloK * ((won ? 1 : 0) - expected(mine, theirs))) : 0;
+    n.games[id] = n.games[id] || {}; n.games[id][day] = played + 1;
+    n.elo.me = mine + delta; n.elo.users[id] = theirs - delta;
+    return { world: n, delta, counted, played: played + 1, before: mine, after: mine + delta, oppBefore: theirs, oppAfter: theirs - delta };
+  }
+  // Rangliste aller User. filter: 'all', 'friends' oder 'club' (mein Verein). Der eigene Eintrag ist immer dabei.
+  function ranking(w, filter) {
+    const rows = USERS.map(u => ({ id: u.id, name: u.name, club: u.club, elo: w.elo.users[u.id], friend: u.friend, me: false }));
+    rows.push({ id: 'me', name: 'Du', club: w.club, elo: w.elo.me, friend: false, me: true });
+    return rows.filter(r => r.me || filter === 'all' || (filter === 'friends' && r.friend) || (filter === 'club' && r.club === w.club))
+      .sort((a, b) => b.elo - a.elo || (a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name, 'de')));
+  }
+
+  root.HKWorld = { USERS, user, friendSquad, expected, playedToday, friendResult, ranking, CFG, CLUBS, FANS, create, club, hallData, guard, taken, canSwitch, chooseClub, stationed, mySlot, canStation, station, withdraw, canAttack, factor, applyResult, bonusValue, bonusDamage, table, simAttack, poolCard };
 })(typeof window !== 'undefined' ? window : globalThis);

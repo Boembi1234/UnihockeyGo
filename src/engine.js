@@ -8,6 +8,7 @@
    - newMatch, act und alles darunter: beginDuel, resolveDuel, shoot, counter, freeHit,
      resolveMatchPenalty, resolveShootout, endDuel, finish
    - aiAttacker, aiDefender, aiStance: die Wahl der Halle, heute im Zustand unter cur.move und cur.corner verdeckt
+   - friendMoveWeights, friendTactics: entfallen, dort spielt ein Mensch. Seine verdeckten Wahlen gehen an den Server.
    - später aus der Oberfläche: Hallenstand und Schaden, Stationierung, Elo, Vereinswechsel, verdeckte Wahlen gegen Freunde
    Auf dem Gerät bleiben nur Anzeige und Vorschau: stage1, stage2, stage3, foulRisk, tendency. */
 (function (root) {
@@ -190,6 +191,22 @@
   }
   const aiStance = (c, hist, rng) => { const guess = sample(stanceWeights(c, hist), rng); return STANCES.filter(x => x.stops === guess)[0]; };
 
+  /* Freundschaftsspiel: Im Prototyp spielt eine KI den Freund. Sie folgt keiner festen Tendenz pro Karte, sondern mischt
+     ihre Züge nach Stärke und weicht der Abwehr aus, die der User bisher oft gewählt hat. In der echten App sitzt hier ein Mensch. */
+  function friendMoveWeights(c, shist) {
+    const order = MOVES.slice().sort((a, b) => b.val(c) - a.val(c)), base = [0.45, 0.33, 0.22], tot = shist.block + shist.pass + shist.zwei, w = {};
+    order.forEach((m, i) => { const st = STANCES.filter(x => x.stops === m.id)[0]; w[m.id] = base[i] * (1.25 - (shist[st.id] + 1) / (tot + 3)); });
+    return w;
+  }
+  // Taktiken des Freundes, je einmal pro Match wie beim User.
+  function friendTactics(s) {
+    const cur = s.cur, used = s.tac.home, cards = s.teams.home.cards, lead = s.score.home - s.score.you;
+    cur.told = [];   // was der Freund in diesem Duell ansagt
+    if (!used.timeout && cards.reduce((a, c) => a + Math.min(s.cfg.timeout, 100 - c.stam), 0) >= 120) { cards.forEach(c => { c.stam = Math.min(100, c.stam + s.cfg.timeout); }); used.timeout = true; cur.told.push('timeout'); }
+    if (!used.pressing && cur.side === 'you' && s.duel >= 8 && (lead <= 1 || s.duel >= 11)) { cur.pressing = true; used.pressing = true; cur.told.push('pressing'); }
+    if (!used.pull && cur.side === 'home' && s.duel >= 8 && (lead <= 0 || s.duel >= 10)) { cur.pull = true; used.pull = true; cur.told.push('pull'); }
+  }
+
   // --- Zustand ---
   function copy(s) {
     const t = Object.assign({}, s);
@@ -200,6 +217,7 @@
     t.score = Object.assign({}, s.score);
     t.tac = { you: Object.assign({}, s.tac.you), home: Object.assign({}, s.tac.home) };
     t.hist = Object.assign({}, s.hist);
+    t.shist = Object.assign({}, s.shist);
     t.corners = Object.assign({}, s.corners);
     t.results = s.results.slice();
     t.log = s.log.slice();
@@ -214,6 +232,7 @@
   }
 
   /* setup: { mode, homeName, cfg, you: { goalie, cards }, home: { goalie, cards } }
+     mode 'hall': gegen die Hallenwache. mode 'friend': Freundschaftsspiel, der Verteidiger zeigt zuerst, Taktiken auf beiden Seiten.
      Karten werden kopiert. home und cap auf den Karten bestimmen Heimvorteil und Captain. */
   function newMatch(setup, rng) {
     const team = t => ({ goalie: Object.assign({}, t.goalie), cards: t.cards.map(c => Object.assign({}, c)) });
@@ -223,6 +242,7 @@
       duel: 0, score: { you: 0, home: 0 }, mom: 0,
       tac: { you: {}, home: {} },
       hist: { direkt: 0, kombi: 0, solo: 0 },   // gespielte Züge des Users, für die Abwehr der Halle
+      shist: { block: 0, pass: 0, zwei: 0 },    // gewählte Abwehr des Users, nur im Freundschaftsspiel genutzt
       corners: { l: 0, m: 0, r: 0 },            // Ecken des Users, Penaltys im Match und im Penaltyschiessen zusammen
       results: [], log: [], cur: null, phase: 'pick', pen: null, outcome: null,
       stats: { fouls: 0, twomin: 0, matchPen: 0, counters: 0, stops: 0, shootout: 0, src: { attack: 0, pp: 0, counter: 0, free: 0, pen: 0 } }
@@ -230,11 +250,22 @@
     beginDuel(s, rng);
     return s;
   }
+  /* Halle: Sie zeigt ihren Angreifer und hat den Zug schon verdeckt gewählt. Freundschaftsspiel: Die verteidigende Seite zeigt
+     zuerst ihre Karte (wait: 'defender'), dann wählt der Angreifer. Spielzug und Abwehr bleiben verdeckt bis zur Auflösung. */
   function beginDuel(s, rng) {
-    const side = s.duel % 2 === 0 ? 'home' : 'you';
-    if (side === 'home') { const a = aiAttacker(s, 'home', rng); s.cur = { side, attacker: a.id, defender: null, move: sample(tendency(a), rng), pressing: false, pull: false }; }
-    else s.cur = { side, attacker: null, defender: aiDefender(s, 'home', rng).id, move: null, pressing: false, pull: false };
+    const side = s.duel % 2 === 0 ? 'home' : 'you', friend = s.mode === 'friend';
+    if (side === 'you') s.cur = { side, attacker: null, defender: aiDefender(s, 'home', rng).id, move: null, pressing: false, pull: false };
+    else if (friend) s.cur = { side, attacker: null, defender: null, move: null, pressing: false, pull: false, wait: 'defender' };
+    else { const a = aiAttacker(s, 'home', rng); s.cur = { side, attacker: a.id, defender: null, move: sample(tendency(a), rng), pressing: false, pull: false }; }
+    if (friend) friendTactics(s);
     s.phase = 'pick';
+  }
+  // Freundschaftsspiel: Der User zeigt seinen Verteidiger, der Freund wählt darauf seinen Angreifer.
+  function showDefender(s, rng, cardId) {
+    const D = card(s, 'you', cardId);
+    if (!D || usable(s, 'you').indexOf(D) === -1) return false;
+    s.cur.defender = D.id; s.cur.attacker = aiAttacker(s, 'home', rng).id; s.cur.wait = null;
+    return true;
   }
   function bump(s, good) { s.mom = good ? (s.mom < 0 ? 0 : Math.min(3, s.mom + 1)) : (s.mom > 0 ? 0 : Math.max(-3, s.mom - 1)); }
 
@@ -280,11 +311,17 @@
   function resolveDuel(s, rng, ev, cardId, optionId) {
     const cfg = s.cfg, cur = s.cur, side = cur.side, dside = other(side);
     let A, D, mv, st;
-    if (side === 'home') { A = card(s, 'home', cur.attacker); mv = move(cur.move); D = card(s, 'you', cardId); st = stance(optionId); }
-    else { A = card(s, 'you', cardId); mv = move(optionId); D = card(s, 'home', cur.defender); }
-    const mine = side === 'home' ? D : A;
-    if (!mine || !mv || (side === 'home' && !st) || usable(s, 'you').indexOf(mine) === -1) return false;
-    if (side === 'you') { st = aiStance(A, s.hist, rng); s.hist[mv.id]++; }
+    if (cur.wait) return false;
+    if (side === 'home') {
+      A = card(s, 'home', cur.attacker); D = card(s, 'you', cur.defender || cardId); st = stance(optionId);
+      if (!A || !D || !st || usable(s, 'you').indexOf(D) === -1) return false;
+      mv = cur.move ? move(cur.move) : move(sample(friendMoveWeights(A, s.shist), rng));     // der Freund wählt verdeckt
+      s.shist[st.id]++;
+    } else {
+      A = card(s, 'you', cardId); mv = move(optionId); D = card(s, 'home', cur.defender);
+      if (!A || !mv || usable(s, 'you').indexOf(A) === -1) return false;
+      st = aiStance(A, s.hist, rng); s.hist[mv.id]++;
+    }
     const read = st.stops === mv.id;
     cur.attacker = A.id; cur.defender = D.id; cur.move = mv.id; cur.stance = st.id; cur.read = read;
     cur.entry = { duel: s.duel, side, a: A.id, d: D.id, move: mv.id, stance: st.id, read, steps: [] };
@@ -382,6 +419,7 @@
 
   /* Einziger Einstieg für Eingaben. Gibt einen neuen Zustand und die Ereignisse der Sequenz zurück, der alte bleibt unverändert.
      action: { type: 'tactic', id }                 Time-out, Pressing, Ohne Goalie
+             { type: 'card', card }                  Freundschaftsspiel: eigenen Verteidiger zuerst zeigen
              { type: 'play', card, option }          Karte und Spielzug oder Abwehr
              { type: 'corner', corner }              Ecke bei Penalty im Match oder beim Raten im Penaltyschiessen
              { type: 'shoot', card, corner }         eigener Penalty im Penaltyschiessen
@@ -394,7 +432,8 @@
       else if (action.id === 'pressing' && cur.side === 'home') { cur.pressing = true; ok = true; }
       else if (action.id === 'pull' && cur.side === 'you' && s.duel >= 8) { cur.pull = true; ok = true; }
       if (ok) s.tac.you[action.id] = true;
-    } else if (action.type === 'play' && s.phase === 'pick') ok = resolveDuel(s, rng, ev, action.card, action.option);
+    } else if (action.type === 'card' && s.phase === 'pick' && cur.wait === 'defender') ok = showDefender(s, rng, action.card);
+    else if (action.type === 'play' && s.phase === 'pick') ok = resolveDuel(s, rng, ev, action.card, action.option);
     else if (action.type === 'corner' && s.phase === 'penalty') ok = resolveMatchPenalty(s, rng, ev, action.corner);
     else if (action.type === 'corner' && s.phase === 'so-guess') ok = resolveShootout(s, rng, ev, null, action.corner);
     else if (action.type === 'shoot' && s.phase === 'so-shoot') ok = resolveShootout(s, rng, ev, action.card, action.corner);

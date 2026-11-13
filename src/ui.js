@@ -16,7 +16,7 @@
   const USER = E.DATA.user;
 
   // g: Zustand der Engine. pick: gewählte eigene Karte. shown: Spielstand während einer laufenden Sequenz.
-  const S = { hall: null, view: null, opp: '', squad: [], capId: null, g: null, phase: 'idle', pick: null, shown: null, penView: false, skip: false, token: 0,
+  const S = { mode: 'hall', friend: null, filter: 'all', code: '', hall: null, view: null, opp: '', squad: [], capId: null, g: null, phase: 'idle', pick: null, shown: null, penView: false, skip: false, token: 0,
     rng: E.makeRng((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0) };
 
   function skip() { if (S.phase === 'resolving' || S.phase === 'pen-resolving') { S.skip = true; Scene.skip(); } }
@@ -164,10 +164,37 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
     show('table');
   }
 
+  // --- Freunde und Elo-Rangliste. Freunde und andere User sind im Prototyp erfunden. ---
+  const today = () => new Date().toISOString().slice(0, 10);
+  function openFriends() {
+    const day = today(), max = World.CFG.eloPerDay;
+    if (!S.code) { const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; S.code = 'HK-' + [0, 1, 2, 3].map(() => abc[Math.floor(S.rng() * abc.length)]).join(''); }
+    $('fr-elo').textContent = W.elo.me; $('fr-code').textContent = S.code; $('fr-link').textContent = 'playmakerz.ch/hallenkampf/' + S.code; $('fr-copied').hidden = true;
+    $('fr-list').innerHTML = World.USERS.filter(u => u.friend).map(u => {
+      const left = Math.max(0, max - World.playedToday(W, u.id, day));
+      return `<li><b>${W.elo.users[u.id]}</b><span class="nm">${esc(u.name)}<small>${esc(World.club(u.club).name)}. ${left ? 'Heute noch ' + left + ' von ' + max + ' Spielen mit Elo-Wertung.' : 'Heute zählt kein weiteres Spiel für die Elo.'}</small></span><button type="button" class="next" data-friend="${u.id}">Spielen</button></li>`;
+    }).join('');
+    show('friends');
+  }
+  function copyCode() {
+    const note = $('fr-copied'), done = ok => { note.textContent = ok ? 'Code kopiert.' : 'Kopieren geht hier nicht. Markiere den Code von Hand.'; note.hidden = false; };
+    try { navigator.clipboard.writeText(S.code).then(() => done(true), () => done(false)); } catch (e) { done(false); }
+  }
+  function openRank() {
+    const names = { all: 'Alle', friends: 'Freunde', club: 'Mein Verein' };
+    $('rank-filter').innerHTML = Object.keys(names).map(k => `<button type="button" class="chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${names[k]}</button>`).join('');
+    $('rank-list').innerHTML = World.ranking(W, S.filter).map((r, i) => `<li${r.me ? ' class="me"' : ''}><b>${i + 1}.</b><span class="nm">${esc(r.name)}<small>${esc(World.club(r.club).name)}${r.friend ? ', Freund' : ''}</small></span><i>${r.elo}</i></li>`).join('');
+    show('rank');
+  }
+
   // --- Kader ---
   function openSquad(hallId) {
     if (!World.canAttack(W, hallId)) return;
-    S.hall = byId(HALLS, hallId);
+    S.mode = 'hall'; S.hall = byId(HALLS, hallId); prepareSquad();
+  }
+  // Freundschaftsspiel: gleiche Kaderwahl, stationierte Karten sind auch hier gesperrt.
+  function challenge(id) { S.mode = 'friend'; S.friend = World.user(id); prepareSquad(); }
+  function prepareSquad() {
     const placed = World.stationed(W), fit = c => c.ovr * (0.78 + 0.22 * c.stam / 100), free = COLLECTION.filter(c => !placed[c.id]).sort((a, b) => fit(b) - fit(a));
     S.squad = S.squad.filter(id => !placed[id]);
     if (S.squad.length !== 6) {
@@ -179,17 +206,29 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
     renderSquad(); show('squad');
   }
   function renderSquad() {
-    const h = S.hall, st = hallState(h.id), placed = World.stationed(W);
-    $('sq-hall').textContent = h.name; $('sq-tags').innerHTML = hallTags(h);
-    $('sq-holder').innerHTML = `${esc(h.place)}. ${holderText(h)} ${factorText(World.factor(W, h.id))}`;
-    $('sq-hp').textContent = st.hp + ' / 100'; $('sq-hp-fill').style.width = st.hp + '%';
-    $('sq-guard').innerHTML = World.guard(W, h.id).map(c => `<li><b>${c.ovr}</b><span class="nm">${esc(fullName(c))}</span><span class="ps">${c.pos}</span><i>${bestMove(c).name}</i></li>`).join('');
+    const friend = S.mode === 'friend', placed = World.stationed(W), fresh = c => (friend ? Object.assign({}, c, { stam: 100 }) : c);
+    $('sq-hpwrap').hidden = friend; $('btn-back-map').textContent = friend ? 'Zu den Freunden' : 'Zur Karte';
+    if (friend) {
+      const fr = S.friend;
+      $('sq-hall').textContent = 'Freundschaftsspiel'; $('sq-tags').innerHTML = '<span class="tag far">Simulation</span>';
+      $('sq-holder').innerHTML = `Gegen <strong>${esc(fr.name)}</strong>, Elo ${W.elo.users[fr.id]}, ${esc(World.club(fr.club).name)}. Kein Heimvorteil, beide Kader starten mit 100 Ausdauer. Deine Ausdauer für Hallenkämpfe bleibt unverändert.`;
+      $('sq-guard-label').textContent = 'Kader von ' + fr.name;
+      $('sq-guard').innerHTML = World.friendSquad(fr.id).map(c => `<li><b>${c.ovr}</b><span class="nm">${esc(fullName(c))}</span><span class="ps">${c.pos}</span><i>${c.cap ? 'Captain' : ''}</i></li>`).join('');
+    } else {
+      const h = S.hall, st = hallState(h.id);
+      $('sq-hall').textContent = h.name; $('sq-tags').innerHTML = hallTags(h);
+      $('sq-holder').innerHTML = `${esc(h.place)}. ${holderText(h)} ${factorText(World.factor(W, h.id))}`;
+      $('sq-hp').textContent = st.hp + ' / 100'; $('sq-hp-fill').style.width = st.hp + '%';
+      $('sq-guard-label').textContent = 'Hallenwache und ihr liebster Spielzug';
+      $('sq-guard').innerHTML = World.guard(W, h.id).map(c => `<li><b>${c.ovr}</b><span class="nm">${esc(fullName(c))}</span><span class="ps">${c.pos}</span><i>${bestMove(c).name}</i></li>`).join('');
+    }
     $('sq-count').textContent = S.squad.length + ' von 6 gewählt';
     $('sq-grid').innerHTML = COLLECTION.map(c => {
       const on = S.squad.indexOf(c.id) !== -1, gone = !!placed[c.id];
-      return mini(c, { cls: gone ? 'out' : (on ? '' : 'off'), disabled: gone, status: gone ? 'Stationiert' : '', pressed: on, badge: on && c.id === S.capId ? 'C' : '',
+      const v = fresh(c);
+      return mini(v, { cls: gone ? 'out' : (on ? '' : 'off'), disabled: gone, status: gone ? 'Stationiert' : '', pressed: on, badge: on && c.id === S.capId ? 'C' : '',
         note: gone ? 'stationiert in ' + byId(HALLS, placed[c.id]).name : (on ? (c.id === S.capId ? 'im Kader, Captain' : 'im Kader') : 'nicht im Kader'),
-        lines: [['Angriff', Math.round(eff(bestMove(c).val(c), c))], ['Abwehr', Math.round(eff(defVal(c), c))]] });
+        lines: [['Angriff', Math.round(eff(bestMove(v).val(v), v))], ['Abwehr', Math.round(eff(defVal(v), v))]] });
     }).join('');
     $('sq-cap').innerHTML = S.squad.map(id => { const c = byId(COLLECTION, id); return `<button type="button" class="chip${id === S.capId ? ' on' : ''}" data-cap="${id}" aria-pressed="${id === S.capId}"><b>${c.ovr}</b>${esc(c.last)}</button>`; }).join('');
     const ok = S.squad.length === 6;
@@ -204,7 +243,7 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
     renderSquad();
   }
   function show(name) {
-    ['club', 'map', 'hall', 'table', 'squad', 'match', 'result'].forEach(n => { $('screen-' + n).hidden = n !== name; });
+    ['club', 'map', 'hall', 'table', 'friends', 'rank', 'squad', 'match', 'result'].forEach(n => { $('screen-' + n).hidden = n !== name; });
     window.scrollTo(0, 0);
   }
 
@@ -218,13 +257,14 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
       return;
     }
     const homeId = cur.side === 'home' ? cur.attacker : cur.defender, youId = (cur.side === 'home' ? cur.defender : cur.attacker) || S.pick;
-    $('slot-home').innerHTML = duelCard(card('home', homeId), true, cur.side === 'home');
+    $('slot-home').innerHTML = homeId ? duelCard(card('home', homeId), true, cur.side === 'home') : emptySlot('Angreifer von ' + esc(S.opp));
     $('slot-you').innerHTML = youId ? duelCard(card('you', youId), false, cur.side === 'you') : emptySlot(cur.side === 'home' ? 'Dein Verteidiger' : 'Dein Angreifer');
   }
   function renderScore() {
     const g = S.g, sc = S.shown || g.score, pp = $('sc-pp');
     $('sc-you').textContent = sc.you; $('sc-home').textContent = sc.home; $('sc-club').textContent = S.opp;
-    $('keeper-you').className = 'keeper bot' + (g.cur && g.cur.pull ? ' off' : '');
+    const pulled = g.cur && g.cur.pull && !g.cur.so ? g.cur.side : null;   // wer ohne Goalie spielt
+    $('keeper-you').className = 'keeper bot' + (pulled === 'you' ? ' off' : ''); $('keeper-home').className = 'keeper top' + (pulled === 'home' ? ' off' : '');
     pp.className = 'sb-pp'; pp.textContent = '';
     if (g.pen) { $('sc-period').textContent = 'Penaltys'; $('sc-duel').textContent = g.pen.you + ' : ' + g.pen.home; return; }
     const d = Math.min(g.duel, 11);
@@ -257,8 +297,8 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
     $('tactics').hidden = !!g.pen;
     const t = [
       { id: 'timeout', name: 'Time-out', sub: 'Alle +30 Ausdauer', ok: live },
-      { id: 'pressing', name: 'Pressing', sub: 'Gegner −15 durch', ok: live && cur.side === 'home', active: cur && cur.pressing },
-      { id: 'pull', name: 'Ohne Goalie', sub: g.duel >= 8 ? 'Du +20, Tor leer' : 'Ab 3. Drittel', ok: live && cur.side === 'you' && g.duel >= 8, active: cur && cur.pull }
+      { id: 'pressing', name: 'Pressing', sub: 'Gegner −15 durch', ok: live && cur.side === 'home', active: cur && cur.side === 'home' && cur.pressing },
+      { id: 'pull', name: 'Ohne Goalie', sub: g.duel >= 8 ? 'Du +20, Tor leer' : 'Ab 3. Drittel', ok: live && cur.side === 'you' && g.duel >= 8, active: cur && cur.side === 'you' && cur.pull }
     ];
     $('tactics').innerHTML = t.map(x => `<button type="button" class="tac${x.active ? ' active' : ''}" data-tac="${x.id}"${x.ok && !used[x.id] ? '' : ' disabled'}><b>${x.name}</b><span>${x.active ? 'Aktiv' : (used[x.id] ? 'Gespielt' : x.sub)}</span></button>`).join('');
   }
@@ -266,11 +306,12 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
     const g = S.g, cur = g.cur, ph = S.phase, usable = E.usable(g, 'you');
     const showOpts = ph === 'option' || ph === 'pen-guess' || ph === 'pen-corner';
     $('hand').hidden = showOpts; $('hand-head').hidden = showOpts; $('opts').hidden = !showOpts;
-    $('btn-recard').hidden = !(ph === 'option' || (ph === 'pen-corner' && cur.so));
+    const shown = S.mode === 'friend' && cur && cur.side === 'home';   // der gezeigte Verteidiger lässt sich nicht mehr tauschen
+    $('btn-recard').hidden = !((ph === 'option' && !shown) || (ph === 'pen-corner' && cur.so));
     renderTactics();
     if (showOpts) { renderOptions(); return; }
     const picking = ph === 'card' || ph === 'pen-card';
-    $('hand-hint').textContent = !picking ? '' : (ph === 'pen-card' ? 'Wähle deinen Schützen' : (cur.side === 'home' ? 'Wähle deinen Verteidiger' : 'Wähle deinen Angreifer'));
+    $('hand-hint').textContent = !picking ? '' : (ph === 'pen-card' ? 'Wähle deinen Schützen' : (cur.side === 'home' ? (cur.wait ? 'Zeig deinen Verteidiger' : 'Wähle deinen Verteidiger') : 'Wähle deinen Angreifer'));
     $('hand').innerHTML = g.teams.you.cards.map(c => {
       if (cur && cur.so) {
         const used = E.soBlocked(g, c.id);
@@ -296,8 +337,9 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
       const A = card('home', cur.attacker), D = card('you', S.pick), t = tendency(A);
       el.innerHTML = STANCES.map(s => {
         const through = pct(E.stage1(g, 'home', A, E.move(s.stops), D, true));
-        return `<button type="button" class="opt" data-opt="${s.id}"><b>${s.name}</b><span class="big">${pct(t[s.stops])}%</span>
-<span class="sub">Stoppt ${s.against}: Liegst du richtig, kommt er zu ${through}% durch. Ballgewinn: ${pct(cfg.counter[s.id])}% Konter. Foul-Risiko ${pct(E.foulRisk(D, s, cfg))}%.</span><span class="sub2">Tendenz</span></button>`;
+        const friend = S.mode === 'friend';   // ein Mensch folgt keiner festen Tendenz, darum hier keine Anzeige
+        return `<button type="button" class="opt" data-opt="${s.id}"><b>${s.name}</b><span class="big">${friend ? '' : pct(t[s.stops]) + '%'}</span>
+<span class="sub">Stoppt ${s.against}: Liegst du richtig, kommt er zu ${through}% durch. Ballgewinn: ${pct(cfg.counter[s.id])}% Konter. Foul-Risiko ${pct(E.foulRisk(D, s, cfg))}%.</span><span class="sub2">${friend ? '' : 'Tendenz'}</span></button>`;
       }).join('');
     } else {
       const A = card('you', S.pick), D = card('home', cur.defender), finish = E.stage2(g, A) * E.stage3(g, 'you', A);
@@ -416,11 +458,13 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
 
   // --- match flow ---
   function startMatch() {
+    const friend = S.mode === 'friend', mine = S.squad.map(id => byId(COLLECTION, id));
     COLLECTION.forEach(c => { c.box = 0; c.cap = c.id === S.capId; });
-    S.opp = ownerOf(S.hall.id).short;
-    S.g = E.newMatch({ mode: 'hall', homeName: S.opp,
-      you: { goalie: USER.goalie, cards: S.squad.map(id => byId(COLLECTION, id)) },
-      home: { goalie: S.hall.goalie, cards: World.guard(W, S.hall.id) } }, S.rng);
+    S.opp = friend ? S.friend.name : ownerOf(S.hall.id).short;
+    // Freundschaftsspiel: kein Heimvorteil, beide Kader mit 100 Ausdauer, die Ausdauer für Hallenkämpfe bleibt unberührt.
+    S.g = E.newMatch({ mode: S.mode, homeName: S.opp,
+      you: { goalie: USER.goalie, cards: friend ? mine.map(c => Object.assign({}, c, { stam: 100 })) : mine },
+      home: friend ? { goalie: { val: E.CFG.goalie }, cards: World.friendSquad(S.friend.id) } : { goalie: S.hall.goalie, cards: World.guard(W, S.hall.id) } }, S.rng);
     S.pick = null; S.shown = null; S.penView = false; S.skip = false; S.phase = 'idle';
     $('btn-next').hidden = true;
     show('match'); announceDuel();
@@ -430,20 +474,30 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
     $('flash').hidden = true; $('rink').className = 'rink'; Scene.clear();
     S.pick = null; S.penView = false; S.skip = false; S.phase = 'card'; refresh();
     const pre = g.duel === 0 ? 'Anpfiff. ' : (g.duel % 4 === 0 ? period(g.duel) + '. Drittel. ' : '');
-    if (cur.side === 'home') { const a = card('home', cur.attacker); say(pre + a.first + ' ' + a.last + ' greift an. Mit wem verteidigst du?'); }
-    else say(pre + S.opp + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
+    const told = (cur.told || []).map(t => S.opp + ({ timeout: ' nimmt ein Time-out. ', pressing: ' spielt Pressing. ', pull: ' nimmt den Goalie raus. ' })[t]).join('');
+    if (cur.wait) say(pre + told + S.opp + ' greift an. Zeig zuerst deinen Verteidiger.');
+    else if (cur.side === 'home') { const a = card('home', cur.attacker); say(pre + a.first + ' ' + a.last + ' greift an. Mit wem verteidigst du?'); }
+    else say(pre + told + S.opp + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
   }
   function pickCard(id) {
     const g = S.g, c = card('you', id); if (!c) return;
     if (S.phase === 'pen-card') { if (E.soBlocked(g, id)) return; S.pick = id; S.phase = 'pen-corner'; refresh(); say(c.last + ' läuft an. Wohin schiesst du?'); return; }
     if (S.phase !== 'card' || E.usable(g, 'you').indexOf(c) === -1) return;
+    const hidden = S.mode === 'friend' ? 'Ihr wählt beide verdeckt. ' : '';
+    if (g.cur.wait === 'defender') {            // Freundschaftsspiel: Der Verteidiger zeigt zuerst, dann wählt der Angreifer.
+      const r = E.act(g, { type: 'card', card: id }, S.rng); if (!r.ok) return;
+      S.g = r.state; S.pick = id; S.phase = 'option'; refresh();
+      const a = card('home', S.g.cur.attacker);
+      say(S.opp + ' schickt ' + a.first + ' ' + a.last + ' vor. ' + hidden + 'Wie verteidigt ' + c.last + '?');
+      return;
+    }
     S.pick = id; S.phase = 'option'; refresh();
-    say(g.cur.side === 'home' ? 'Wie verteidigt ' + c.last + ' gegen ' + last('home', g.cur.attacker) + '?' : 'Welchen Spielzug macht ' + c.last + '?');
+    say(g.cur.side === 'home' ? 'Wie verteidigt ' + c.last + ' gegen ' + last('home', g.cur.attacker) + '?' : hidden + 'Welchen Spielzug macht ' + c.last + '?');
   }
   function recard() {
     const cur = S.g.cur;
     if (S.phase === 'pen-corner' && cur.so) { S.pick = null; S.phase = 'pen-card'; refresh(); say('Wer schiesst den Penalty?'); return; }
-    if (S.phase !== 'option') return;
+    if (S.phase !== 'option' || (S.mode === 'friend' && cur.side === 'home')) return;
     S.pick = null; S.phase = 'card'; refresh();
     say(cur.side === 'home' ? last('home', cur.attacker) + ' greift an. Mit wem verteidigst du?' : S.opp + ' verteidigt mit ' + last('home', cur.defender) + '. Wen schickst du nach vorne?');
   }
@@ -542,7 +596,28 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
       return head + steps;
     }).join('');
   }
+  // Freundschaftsspiel: Nur diese Matches zählen für die Elo. Die Ausdauer der Sammlung bleibt, wie sie war.
+  function finishFriend() {
+    const g = S.g, fr = S.friend, y = g.score.you, o = g.score.home, won = g.outcome === 'win' || g.outcome === 'penwin', max = World.CFG.eloPerDay;
+    const r = World.friendResult(W, fr.id, won, today()); W = r.world;
+    $('res-hall').textContent = 'Freundschaftsspiel';
+    $('res-title').textContent = (won ? 'Sieg' : 'Niederlage') + (g.pen ? ' nach Penaltys' : ''); $('res-title').className = 'res-title ' + (won ? 'win' : 'loss');
+    $('res-score').textContent = g.pen ? (y + (won ? 1 : 0)) + ':' + (o + (won ? 0 : 1)) : y + ':' + o;
+    $('res-sub').textContent = 'Du gegen ' + fr.name + (g.pen ? ', Penaltys ' + g.pen.you + ':' + g.pen.home : '');
+    $('res-hpwrap').hidden = true;
+    $('res-delta').textContent = r.counted ? (r.delta < 0 ? '−' + (-r.delta) : '+' + r.delta) + ' Elo' : 'Ohne Elo-Wertung';
+    $('res-text').textContent = r.counted
+      ? 'Deine Elo: ' + r.before + ' → ' + r.after + '. ' + fr.name + ': ' + r.oppBefore + ' → ' + r.oppAfter + '. Das war heute Spiel ' + r.played + ' von ' + max + ' mit Wertung gegen ' + fr.name + '.'
+      : 'Gegen ' + fr.name + ' zählen pro Tag nur ' + max + ' Spiele für die Elo. Das war heute Spiel ' + r.played + ', es bleibt ohne Wertung.';
+    $('reward').hidden = true; $('res-actions').hidden = false;
+    $('btn-again').textContent = 'Revanche'; $('btn-friends2').hidden = false;
+    $('log').innerHTML = logHtml();
+    S.phase = 'idle'; Scene.clear(); $('flash').hidden = true;
+    show('result');
+  }
   function finish() {
+    if (S.mode === 'friend') { finishFriend(); return; }
+    $('res-hpwrap').hidden = false; $('btn-friends2').hidden = true;
     const g = S.g, h = S.hall, y = g.score.you, o = g.score.home, outcome = g.outcome, won = outcome === 'win' || outcome === 'penwin';
     const r = World.applyResult(W, h.id, outcome, g.score), f = r.factor; W = r.world;
     const hp = hallState(h.id).hp;
@@ -607,7 +682,7 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
   $('sq-grid').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) toggleSquad(b.getAttribute('data-id')); });
   $('sq-cap').addEventListener('click', e => { const b = e.target.closest('button[data-cap]'); if (b) { S.capId = b.getAttribute('data-cap'); renderSquad(); } });
   $('btn-kickoff').addEventListener('click', () => { if (S.squad.length === 6) startMatch(); });
-  $('btn-back-map').addEventListener('click', () => { renderMap(); show('map'); });
+  $('btn-back-map').addEventListener('click', () => { if (S.mode === 'friend') openFriends(); else { renderMap(); show('map'); } });
   $('hand').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) pickCard(b.getAttribute('data-id')); });
   $('opts').addEventListener('click', e => { const b = e.target.closest('button[data-opt]'); if (b) pickOption(b.getAttribute('data-opt')); });
   $('tactics').addEventListener('click', e => { const b = e.target.closest('button[data-tac]'); if (b && !b.disabled) playTactic(b.getAttribute('data-tac')); });
@@ -617,7 +692,15 @@ ${isMine(h.id) ? `<button class="cta small" type="button" data-view="${h.id}">Ve
   $('dialog').addEventListener('click', e => { if (!e.target.closest('button')) skip(); });
   $('rw-dmg').addEventListener('click', () => takeReward('dmg'));
   $('rw-rest').addEventListener('click', () => takeReward('rest'));
-  $('btn-again').addEventListener('click', () => { if (isMine(S.hall.id)) openHall(S.hall.id); else openSquad(S.hall.id); });
+  $('btn-again').addEventListener('click', () => { if (S.mode === 'friend') challenge(S.friend.id); else if (isMine(S.hall.id)) openHall(S.hall.id); else openSquad(S.hall.id); });
+  $('btn-friends').addEventListener('click', openFriends);
+  $('btn-friends2').addEventListener('click', openFriends);
+  $('btn-friends-back').addEventListener('click', () => { renderMap(); show('map'); });
+  $('fr-list').addEventListener('click', e => { const b = e.target.closest('button[data-friend]'); if (b) challenge(b.getAttribute('data-friend')); });
+  $('btn-copy').addEventListener('click', copyCode);
+  $('btn-rank').addEventListener('click', openRank);
+  $('btn-rank-back').addEventListener('click', () => { renderMap(); show('map'); });
+  $('rank-filter').addEventListener('click', e => { const b = e.target.closest('button[data-filter]'); if (b) { S.filter = b.getAttribute('data-filter'); openRank(); } });
   $('btn-map').addEventListener('click', () => { renderMap(); show('map'); });
   $('btn-reset').addEventListener('click', () => {
     W = World.create();
