@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hallenkampf Prototyp</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{
+  /* Layout: one phone-width column. Map with three halls, squad pick, then scoreboard, rink, dialog and the action area. */
+  --ink:#050818;
+  --navy:#0e1b47;
+  --blue:#1a57ff;
+  --gold:#f7d774;
+  --ice:#e3ecff;
+  --mute:#9fb4e8;
+  --line:#24347a;
+  --goal:#10b981;
+  --against:#ef4444;
+  --foil:linear-gradient(135deg,#7a4d0b 0%,#f2c14e 16%,#fff3c4 30%,#d19a2a 46%,#7a4d0b 58%,#f0c75a 76%,#fff0b3 88%,#9c6a14 100%);
+  --display:'Saira Condensed','Arial Narrow',ui-sans-serif,system-ui,sans-serif;
+  --body:'Inter',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ink);background-image:radial-gradient(120% 70% at 50% 0%,#16224f 0%,#0a1030 48%,#050818 100%);background-attachment:fixed;color:var(--ice);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+#app{max-width:460px;margin:0 auto;min-height:100%;padding:14px 16px 28px}
+.screen{display:flex;flex-direction:column;gap:12px}
+.screen[hidden]{display:none}
+[hidden]{display:none !important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:default}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+h1,h2,p,ul{margin:0}
+ul{padding:0;list-style:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.brand{font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.2em}
+.mode{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.back{align-self:flex-start;height:44px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:transparent;font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.1em;text-transform:uppercase}
+.back:hover{border-color:var(--mute)}
+
+/* map */
+.map{position:relative;height:190px;border-radius:14px;overflow:hidden;background:#0b1437;border:1px solid var(--line)}
+.map svg{display:block;width:100%;height:100%}
+.pulse{transform-origin:86px 138px;animation:pulse 2.2s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+
+.panel{background:rgba(14,27,71,.72);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.hall-name{font-family:var(--display);font-weight:800;font-size:26px;line-height:1;letter-spacing:.03em;text-transform:uppercase}
+.hr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.tag{flex-shrink:0;padding:4px 9px 3px;font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.12em;text-transform:uppercase;line-height:1;background:var(--gold);color:#1a1203}
+.tag.far{background:transparent;color:var(--mute);border:1px solid var(--line)}
+.tag.mine{background:var(--blue);color:#fff}
+.holder{color:var(--mute);font-size:14px}
+.holder strong{color:var(--ice);font-weight:600}
+.hp{display:flex;flex-direction:column;gap:6px}
+.hp-row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-weight:700;font-size:14px}
+.hp-row b{font-weight:800;font-size:18px;color:var(--gold);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.hp-track{height:9px;background:#070b1f;border:1px solid var(--line);overflow:hidden}
+.hp-fill{height:100%;width:100%;background:var(--foil);transition:width .9s cubic-bezier(.2,.7,.2,1)}
+.group-label{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.group-label b{color:var(--gold);font-weight:800}
+.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.chip{display:flex;align-items:baseline;gap:6px;padding:5px 8px;background:#070b1f;border:1px solid var(--line);font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.chip b{font-weight:800;color:var(--gold)}
+.chip i{font-style:normal;margin-left:auto;font-weight:600;font-size:12px;letter-spacing:.08em;color:var(--mute)}
+button.chip{height:44px;align-items:center}
+.scout{display:flex;flex-direction:column;margin-top:4px}
+.scout li{display:grid;grid-template-columns:30px 1fr 34px 96px;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid rgba(36,52,122,.7);font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.04em;text-transform:uppercase;line-height:1.1}
+.scout b{font-weight:800;color:var(--gold)}
+.scout .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scout .ps{font-weight:600;font-size:13px;letter-spacing:.08em;color:var(--ice)}
+.scout i{font-style:normal;font-weight:600;font-size:13px;letter-spacing:.06em;color:var(--mute);text-align:right}
+button.chip.on{border-color:var(--gold);background:#1a1606}
+.cta{min-height:52px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:.1em;text-transform:uppercase}
+.cta:hover:not(:disabled){background:#1249e0}
+.cta:disabled{background:#1b2757;color:var(--mute)}
+.cta.small{min-height:46px;font-size:18px}
+.ghost{min-height:46px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ice);font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.1em;text-transform:uppercase}
+.ghost:hover{border-color:var(--mute)}
+.rules{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mute)}
+.rules b{color:var(--ice);font-weight:600}
+.note{font-size:12px;color:var(--mute)}
+
+/* scoreboard */
+.sb{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:#070b1f;border:1px solid var(--line);border-radius:12px;padding:5px 16px}
+.sb-side{display:flex;align-items:center;gap:12px;font-family:var(--display);text-transform:uppercase}
+.sb-side.right{justify-content:flex-end}
+.sb-lbl{font-weight:700;font-size:16px;letter-spacing:.14em;color:var(--mute)}
+.sb-num{font-weight:800;font-size:44px;line-height:1;font-variant-numeric:tabular-nums}
+.sb-mid{display:flex;flex-direction:column;align-items:center;gap:1px;font-family:var(--display);text-transform:uppercase}
+.sb-period{font-weight:700;font-size:16px;letter-spacing:.14em;color:var(--gold)}
+.sb-duel{font-weight:600;font-size:13px;letter-spacing:.1em;color:var(--mute)}
+.sb-pp{min-height:15px;margin-top:2px;padding:1px 6px 0;font-weight:800;font-size:12px;line-height:14px;letter-spacing:.08em;white-space:nowrap}
+.sb-pp.up{background:var(--goal);color:#03130c}
+.sb-pp.down{background:var(--against);color:#fff}
+.sb-pp.even{color:var(--mute)}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.dots{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.dots .gap{width:6px}
+.dot{width:13px;height:11px;background:#2a3970;clip-path:polygon(0 0,100% 0,50% 100%)}
+.dot.you{clip-path:polygon(50% 0,100% 100%,0 100%)}
+.dot.pen{clip-path:none;border-radius:50%;width:10px;height:10px}
+.dot.miss{background:#4a5a96}
+.dot.g-you{background:var(--goal)}
+.dot.g-home{background:var(--against)}
+.dot.now{background:var(--gold)}
+.mom{display:flex;align-items:center;gap:6px;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.mom-bar{display:flex;gap:2px}
+.mom-bar i{width:9px;height:9px;background:#2a3970}
+.mom-bar i.h{background:var(--against)}
+.mom-bar i.y{background:var(--goal)}
+.mom-bar .mid{width:2px;height:13px;background:var(--mute);align-self:center}
+
+/* rink */
+.rink{position:relative;height:372px;border-radius:30px;overflow:hidden;background:linear-gradient(180deg,#123aa8 0%,#0d2c86 100%);border:3px solid rgba(255,255,255,.82)}
+.rink::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,rgba(255,255,255,0) 1px 26px)}
+.r-mid{position:absolute;left:0;right:0;top:50%;height:2px;background:rgba(255,255,255,.5)}
+.r-spot{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:rgba(255,255,255,.7)}
+.r-crease{position:absolute;left:33%;width:34%;height:40px;border:2px solid rgba(255,255,255,.5);transition:background .2s}
+.r-crease.top{top:-2px}
+.r-crease.bot{bottom:-2px}
+.r-goal{position:absolute;left:43%;width:14%;height:6px;background:#fff}
+.r-goal.top{top:0}
+.r-goal.bot{bottom:0}
+.keeper{position:absolute;left:50%;width:24px;height:24px;margin-left:-12px;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;line-height:1;z-index:1}
+.keeper.top{top:9px;background:#1b2033;border-color:var(--gold);color:var(--gold)}
+.keeper.bot{bottom:9px;background:var(--blue);color:#fff}
+.keeper.off{background:transparent;border-style:dashed;color:rgba(255,255,255,.6)}
+.rink.hit-top-you .r-crease.top{background:rgba(16,185,129,.55)}
+.rink.hit-bot-home .r-crease.bot{background:rgba(239,68,68,.55)}
+.slot{position:absolute;display:flex;flex-direction:column;gap:6px;filter:drop-shadow(0 12px 14px rgba(0,0,0,.5))}
+.slot.home{top:12px;right:12px}
+.slot.you{bottom:12px;left:12px}
+.role{font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1}
+.role.atk{color:var(--gold)}
+.role.def{color:var(--ice)}
+.stam{height:5px;background:rgba(5,8,24,.7)}
+.stam i{display:block;height:100%;background:var(--ice);transition:width .5s}
+.stam.low i{background:var(--against)}
+.card{position:relative;width:150px;height:204px;background:var(--foil);clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+.card-in{position:absolute;inset:3px;clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);background:radial-gradient(95% 55% at 70% 22%,#3a74ff 0%,rgba(26,87,255,.62) 34%,rgba(14,27,71,0) 76%),linear-gradient(170deg,#0b1437 0%,#050818 100%);font-family:var(--display);text-transform:uppercase;color:#fff}
+.card.home .card-in{background:radial-gradient(95% 55% at 70% 22%,#b8862a 0%,rgba(150,104,24,.6) 34%,rgba(14,27,71,0) 76%),linear-gradient(170deg,#141006 0%,#050818 100%)}
+.c-rate{position:absolute;left:10px;top:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.c-rate b{font-weight:800;font-size:44px;line-height:.8;color:var(--gold);text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.c-rate span{font-weight:700;font-size:12px;letter-spacing:.1em}
+.jersey{position:absolute;right:-12px;top:5px;width:104px;height:auto;transform:rotate(-6deg)}
+.c-name{position:absolute;left:0;right:0;top:91px;padding:5px 10px 4px;display:flex;flex-direction:column;gap:1px;background:rgba(5,8,24,.78);border-top:1px solid rgba(247,215,116,.6);border-bottom:1px solid rgba(247,215,116,.6)}
+.c-name .f{display:flex;justify-content:space-between;gap:6px;font-weight:600;font-size:11px;letter-spacing:.12em;color:var(--gold);line-height:1;white-space:nowrap}
+.c-name .f span:last-child{color:#c9d8ff}
+.c-name .l{font-weight:800;font-size:23px;line-height:.95;letter-spacing:.02em;white-space:nowrap;text-align:center}
+.c-name .l.long{font-size:19px}
+.c-stats{position:absolute;left:10px;right:10px;bottom:9px;display:flex;flex-direction:column;gap:1px}
+.c-stats div{display:flex;justify-content:space-between;align-items:baseline;line-height:1}
+.c-stats span{font-weight:600;font-size:12px;letter-spacing:.12em;color:var(--gold)}
+.c-stats b{font-weight:800;font-size:16px}
+.c-tag{position:absolute;left:8px;top:70px;padding:2px 6px 1px;background:var(--gold);color:#1a1203;font-weight:800;font-size:11px;letter-spacing:.1em;line-height:1.1}
+.empty{width:150px;height:204px;border:2px dashed rgba(255,255,255,.55);background:rgba(5,8,24,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-family:var(--display);text-transform:uppercase;text-align:center}
+.empty b{font-weight:800;font-size:54px;line-height:.8;color:rgba(255,255,255,.75)}
+.empty span{font-weight:700;font-size:14px;letter-spacing:.12em;color:#fff}
+.ball{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,#fff 45%,#cfd8ee 100%);box-shadow:0 3px 6px rgba(0,0,0,.5),inset -2px -2px 0 rgba(0,0,0,.12);z-index:3}
+.ball::after{content:"";position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle,#5c6b96 0 1.3px,rgba(0,0,0,0) 1.6px);background-size:5px 5px}
+.flash{position:absolute;left:50%;top:50%;z-index:4;transform:translate(-50%,-50%) skewX(-8deg);padding:4px 20px 2px;font-family:var(--display);font-weight:800;font-size:52px;line-height:1;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;animation:pop .28s cubic-bezier(.2,1.4,.4,1)}
+.flash.you{background:var(--goal);color:#03130c}
+.flash.home{background:var(--against);color:#fff}
+.flash.save{background:var(--ice);color:var(--navy);font-size:38px}
+.flash.warn{background:var(--gold);color:#1a1203;font-size:38px}
+@keyframes pop{from{transform:translate(-50%,-50%) skewX(-8deg) scale(.6);opacity:0}to{transform:translate(-50%,-50%) skewX(-8deg) scale(1);opacity:1}}
+
+.dialog{min-height:78px;background:#070b1f;border:2px solid var(--ice);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dialog p{flex:1;font-size:15px;font-weight:500;line-height:1.4}
+.next{flex-shrink:0;height:44px;padding:0 18px;border:0;border-radius:8px;background:var(--gold);color:#1a1203;font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.1em;text-transform:uppercase}
+.next:hover{background:#ffe9a0}
+
+/* tactics */
+.tactics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tac{min-height:48px;padding:5px 6px;border:1px solid var(--gold);border-radius:8px;background:#141006;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:var(--display);text-transform:uppercase;line-height:1}
+.tac b{font-weight:800;font-size:15px;letter-spacing:.08em;color:var(--gold)}
+.tac span{font-weight:600;font-size:11px;letter-spacing:.06em;color:#e8dcae}
+.tac:hover:not(:disabled){background:#241c08}
+.tac:disabled{border-color:var(--line);background:#070b1f}
+.tac:disabled b,.tac:disabled span{color:#6f7fb3}
+.tac.active{background:var(--gold)}
+.tac.active b,.tac.active span{color:#1a1203}
+
+.hand-head{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);text-transform:uppercase;letter-spacing:.14em}
+.hand-head span:first-child{font-weight:700;font-size:15px;color:var(--mute)}
+.hand-head span:last-child{font-weight:700;font-size:15px;color:var(--gold)}
+.hand{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mini{position:relative;height:136px;padding:0;border:0;background:var(--foil);clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);text-align:left;transition:transform .12s}
+.mini-in{position:absolute;inset:2.5px;clip-path:polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);background:linear-gradient(170deg,#12235c 0%,#070b1f 100%);padding:8px 9px 8px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--display);text-transform:uppercase;color:#fff}
+.mini:not(:disabled):hover{transform:translateY(-3px)}
+.mini:not(:disabled):hover .mini-in{background:linear-gradient(170deg,#1b3384 0%,#0b1233 100%)}
+.mini.out{opacity:.42}
+.mini.off{background:#33406e}
+.mini.off .mini-in{background:#0a1030}
+.mini.off .m-top b{color:#a9b6e0}
+.m-top{display:flex;justify-content:space-between;align-items:flex-start;padding-left:6px}
+.m-top b{font-weight:800;font-size:32px;line-height:.8;color:var(--gold)}
+.m-top span{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-weight:600;font-size:12px;letter-spacing:.1em;color:var(--mute);line-height:1}
+.m-top em{font-style:normal;font-weight:800;color:#fff}
+.m-name{display:flex;align-items:center;justify-content:space-between;gap:4px;font-weight:800;font-size:16px;line-height:1;letter-spacing:.03em;white-space:nowrap}
+.m-name .nm{overflow:hidden;text-overflow:ellipsis}
+.m-name i{flex-shrink:0;font-style:normal;font-size:11px;letter-spacing:.06em;line-height:1.25;padding:1px 4px 0;background:var(--gold);color:#1a1203}
+.m-name.long{font-size:13.5px;letter-spacing:.01em}
+.m-lines{display:flex;flex-direction:column;gap:2px;font-weight:600;font-size:12px;letter-spacing:.08em;line-height:1;color:#c9d8ff}
+.m-lines div{display:flex;justify-content:space-between;align-items:baseline}
+.m-lines b{font-weight:800;font-size:15px;color:#fff}
+.m-status{font-weight:700;font-size:12px;letter-spacing:.1em;color:#ffb3b3;line-height:1}
+
+/* option buttons: move, stance, corner */
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{width:100%;min-height:62px;padding:9px 12px;border:1px solid var(--gold);border-radius:10px;background:#101a45;display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:baseline;text-align:left}
+.opt:hover{background:#1b2a6b}
+.opt b{font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.opt .big{font-family:var(--display);font-weight:800;font-size:21px;color:var(--gold);line-height:1;text-align:right;white-space:nowrap}
+.opt .sub{font-size:13px;color:var(--mute);line-height:1.25}
+.opt .sub2{font-size:13px;color:var(--mute);text-align:right;white-space:nowrap;line-height:1.25}
+.opts.row{flex-direction:row}
+.opts.row .opt{display:flex;justify-content:center;align-items:center;min-height:58px}
+.hint{font-size:13px;color:var(--mute)}
+
+/* result */
+.res-title{font-family:var(--display);font-weight:800;font-size:50px;line-height:.9;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding-top:10px}
+.res-title.win{color:var(--goal)}
+.res-title.loss{color:#ff8a8a}
+.res-score{font-family:var(--display);font-weight:800;font-size:88px;line-height:.9;text-align:center;font-variant-numeric:tabular-nums}
+.res-sub{text-align:center;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.res-delta{font-family:var(--display);font-weight:800;font-size:22px;color:var(--gold)}
+.res-text{font-size:15px}
+.actions{display:flex;flex-direction:column;gap:8px}
+.log{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute)}
+.log li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(36,52,122,.7)}
+.log li span:last-child{white-space:nowrap;flex-shrink:0}
+.log b{font-weight:600;color:var(--ice)}
+.log .gy{color:var(--goal);font-weight:600}
+.log .gh{color:#ff8a8a;font-weight:600}
+.log li.sub{padding:2px 0 2px 14px;border-bottom:0;font-size:12px}
+.log li.sub + li:not(.sub){border-top:1px solid rgba(36,52,122,.7);margin-top:3px;padding-top:6px}
+.log li:not(.sub){border-bottom:0;padding-bottom:1px}
+
+@media (max-width:380px){
+  .meta{gap:8px}
+  .dots{gap:3px}
+  .dot{width:11px;height:10px}
+  .mom{gap:5px;letter-spacing:.08em}
+  .mom-bar i{width:7px;height:8px}
+  .card,.empty{width:136px}
+  .jersey{width:92px}
+  .c-name .l{font-size:21px}
+  .c-name .l.long{font-size:17px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pulse,.flash{animation:none}
+  .hp-fill,.stam i,.mini{transition:none}
+}
+</style>
+</head>
+<body>
+<main id="app">
+
+<section id="screen-map" class="screen">
+  <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode">Hallenkampf</span></header>
+  <div class="map" id="map" role="img" aria-label="Schematische Karte: Du stehst 40 Meter neben den Sporthallen Weissenstein. Hardau und Grossmatt sind weiter weg."></div>
+  <div id="halls" class="screen"></div>
+  <div class="panel">
+    <p class="group-label">So läuft es</p>
+    <ul class="rules">
+      <li><b>Kader:</b> Du nimmst 6 deiner 10 Karten mit und bestimmst einen Captain.</li>
+      <li><b>Duell:</b> Du wählst die Karte und dazu den Spielzug oder die Abwehr. Danach läuft das Duell in drei Stufen ab: am Verteidiger vorbei, Schuss aufs Tor, Goalie geschlagen. Liest der Verteidiger den Zug, kommt der Angriff meist nicht durch.</li>
+      <li><b>Konter und Fouls:</b> Ein Ballgewinn kann zum Konter führen, am ehesten nach einem Zweikampf. Ein Foul gibt einen Freischlag, eine 2-Minuten-Strafe mit 4 Duellen Überzahl oder einen Penalty.</li>
+      <li><b>Taktik:</b> Time-out, Pressing und Ohne Goalie gibt es je einmal pro Match. Verteidiger wehren besser ab, Stürmer treffen besser.</li>
+      <li><b>Schaden:</b> Ein Sieg schwächt die Halle. Vor Ort zählt er voll, aus der Ferne halb.</li>
+    </ul>
+    <button class="ghost" id="btn-reset" type="button">Prototyp zurücksetzen</button>
+    <p class="note">Standort und Check-in sind simuliert. Die Kader und Werte stammen aus der Saison 2026/27, Stand 13.11.2026.</p>
+  </div>
+</section>
+
+<section id="screen-squad" class="screen" hidden>
+  <button class="back" id="btn-back-map" type="button">Zur Karte</button>
+  <div class="panel">
+    <div class="hr-head"><h1 class="hall-name" id="sq-hall"></h1><span class="tag" id="sq-mode"></span></div>
+    <p class="holder" id="sq-holder"></p>
+    <div class="hp">
+      <div class="hp-row"><span>Hallen-Stärke</span><b id="sq-hp"></b></div>
+      <div class="hp-track"><div class="hp-fill" id="sq-hp-fill"></div></div>
+    </div>
+    <div>
+      <p class="group-label">Hallenwache und ihr liebster Spielzug</p>
+      <ul class="scout" id="sq-guard"></ul>
+    </div>
+  </div>
+  <div class="hand-head"><span>Dein Kader</span><span id="sq-count"></span></div>
+  <div class="hand" id="sq-grid"></div>
+  <div class="panel">
+    <p class="group-label">Captain: <b>+4 auf alle Werte</b></p>
+    <div class="chips" id="sq-cap"></div>
+    <button class="cta" id="btn-kickoff" type="button">Match starten</button>
+  </div>
+</section>
+
+<section id="screen-match" class="screen" hidden>
+  <div class="sb">
+    <div class="sb-side"><span class="sb-lbl">Du</span><span class="sb-num" id="sc-you">0</span></div>
+    <div class="sb-mid"><span class="sb-period" id="sc-period">1. Drittel</span><span class="sb-duel" id="sc-duel">Duell 1 von 12</span><span class="sb-pp" id="sc-pp" aria-live="polite"></span></div>
+    <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club">Köniz</span></div>
+  </div>
+  <div class="meta">
+    <div class="dots" id="dots" aria-hidden="true"></div>
+    <div class="mom" id="mom"></div>
+  </div>
+  <div class="rink" id="rink">
+    <div class="r-mid"></div><div class="r-spot"></div>
+    <div class="r-crease top"></div><div class="r-crease bot"></div>
+    <div class="r-goal top"></div><div class="r-goal bot"></div>
+    <div class="keeper top" id="keeper-home" aria-hidden="true">G</div><div class="keeper bot" id="keeper-you" aria-hidden="true">G</div>
+    <div class="slot home" id="slot-home"></div>
+    <div class="slot you" id="slot-you"></div>
+    <div class="ball" id="ball" hidden></div>
+    <div class="flash" id="flash" hidden></div>
+  </div>
+  <div class="dialog" id="dialog">
+    <p id="say" aria-hidden="true"></p>
+    <p id="say-sr" class="sr" aria-live="polite"></p>
+    <button class="next" id="btn-next" type="button" hidden>Weiter</button>
+  </div>
+  <div class="tactics" id="tactics"></div>
+  <div class="hand-head" id="hand-head"><span>Deine Karten</span><span id="hand-hint"></span></div>
+  <div class="hand" id="hand"></div>
+  <div class="opts" id="opts" hidden></div>
+  <button class="ghost" id="btn-recard" type="button" hidden>Andere Karte wählen</button>
+  <p class="hint">Der Balken zeigt die Ausdauer. Müde Karten spielen schwächer, unter 20 setzen sie aus. Tippe aufs Feld, um eine laufende Sequenz zu überspringen.</p>
+</section>
+
+<section id="screen-result" class="screen" hidden>
+  <header class="top"><span class="brand">PLAYMAKERZ</span><span class="mode" id="res-hall"></span></header>
+  <h2 class="res-title" id="res-title">Sieg</h2>
+  <div class="res-score" id="res-score">0:0</div>
+  <p class="res-sub" id="res-sub"></p>
+  <div class="panel">
+    <div class="hp">
+      <div class="hp-row"><span>Hallen-Stärke</span><b id="res-hp">100 / 100</b></div>
+      <div class="hp-track"><div class="hp-fill" id="res-hp-fill"></div></div>
+    </div>
+    <p class="res-delta" id="res-delta"></p>
+    <p class="res-text" id="res-text"></p>
+    <div id="reward" class="actions" hidden>
+      <p class="group-label">Wähle deinen Bonus</p>
+      <div class="opts">
+        <button class="opt" id="rw-dmg" type="button"><b>Nachsetzen</b><span class="big" id="rw-dmg-val"></span><span class="sub">Die Halle verliert sofort weitere Stärke.</span><span class="sub2"></span></button>
+        <button class="opt" id="rw-rest" type="button"><b>Erholung</b><span class="big">100</span><span class="sub">Alle deine Karten starten das nächste Match ausgeruht.</span><span class="sub2">Ausdauer</span></button>
+      </div>
+    </div>
+    <div class="actions" id="res-actions">
+      <button class="cta" id="btn-again" type="button">Nochmals angreifen</button>
+      <button class="ghost" id="btn-map" type="button">Zur Karte</button>
+    </div>
+  </div>
+  <div class="panel">
+    <p class="group-label">Alle Duelle</p>
+    <ul class="log" id="log"></ul>
+  </div>
+</section>
+
+</main>
+<script id="hk-engine">
+/*__ENGINE__*/
+</script>
+<script id="hk-ui">
+/*__UI__*/
+</script>
+</body>
+</html>
