@@ -68,9 +68,11 @@
       svg('circle', { cx: 0, cy: -1.6, r: 6.2, fill: HAIR[h % HAIR.length], stroke: OUTL, 'stroke-width': 1.3 }, f);
       svg('path', { d: 'M-3.4 -6.4 Q0 -8.6 3.4 -6.4', fill: 'none', stroke: '#e9c3a2', 'stroke-width': 2, 'stroke-linecap': 'round' }, f);   // Stirn: zeigt die Blickrichtung
       const l = svg('text', { y: 33, 'text-anchor': 'middle', class: 'lab' }, el); l.textContent = c.last;
+      // Energie: kleiner Balken unter dem Namen, nur bei deinen Spielern
+      let en = null; if (side === 'you') { svg('rect', { x: -12, y: 36.5, width: 24, height: 5, rx: 2.5, fill: '#070b1f', stroke: OUTL, 'stroke-width': 1 }, el); en = svg('rect', { x: -11, y: 37.5, width: 22, height: 3, rx: 1.5, fill: '#34d399' }, el); }
       if (M.trait(c)) svg('path', { d: 'M16 -22 L20 -17 L16 -12 L12 -17 Z', fill: '#f7d774', stroke: OUTL, 'stroke-width': 1.2 }, el);   // Raute: Spezialfähigkeit
       els[c.id] = el; pos[c.id] = [180, 380];
-      fig[c.id] = { f, fl, fr, st, hand, a: side === 'you' ? 0 : 180, want: null, dist: 0, moved: 0, swing: 0, seed: (h % 628) / 100 };
+      fig[c.id] = { f, fl, fr, st, hand, en, a: side === 'you' ? 0 : 180, want: null, dist: 0, moved: 0, swing: 0, seed: (h % 628) / 100 };
     }));
     buildKeepers();
     cancelAnimationFrame(lifeRaf); lifeRaf = requestAnimationFrame(life);
@@ -204,8 +206,13 @@
     const dots = G.results.slice(-14).map(r => `<span class="dot ${r.goal ? 'g-' + r.goal : r.type === 'att' ? 'you' : 'home'}"></span>`);
     if (G.cur && !G.cur.done && !G.pen) dots.push('<span class="dot now"></span>');
     $('dots').innerHTML = dots.join('');
-    renderTac();
+    renderTac(); renderEnergy();
   }
+  // Energie: grün, gelb (unter 60) oder rot (unter 35). Müde Spieler haben einen schnelleren Strich.
+  const enLvl = v => (v > 60 ? '' : v > 35 ? 'mid' : 'low'), enCol = { '': '#34d399', mid: '#f7d774', low: '#ff6b6b' };
+  const enPill = c => `<i class="en ${enLvl(c.en)}" aria-hidden="true"><u style="width:${Math.round(c.en)}%"></u></i>`;
+  function renderEnergy() { if (G) G.teams.you.cards.forEach(c => { const f = fig[c.id]; if (f && f.en) { f.en.setAttribute('width', (22 * c.en / 100).toFixed(1)); f.en.setAttribute('fill', enCol[enLvl(c.en)]); } }); }
+  const tempoTxt = ms => (ms >= 1000 ? 'ruhig' : ms >= 800 ? 'normal' : ms >= 600 ? 'schnell' : 'sehr schnell');
   const clockText = m => Math.max(0, Math.min(G.cfg.periods * G.cfg.periodMin, Math.round(m))) + '. Minute';
   function renderTac() {
     document.querySelectorAll('[data-tac]').forEach(b => { const on = b.dataset.tac === (G ? G.tactic.you : tactic); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
@@ -245,19 +252,19 @@
     const last = sc.step >= sc.max - 1, xt = TR(X.id);
     setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
     say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : ' Je breiter das grüne Feld, desto leichter das Timing.'));
-    const sh = M.shotInfo(G, sc, X.id), cs = M.contest(G, { type: 'shoot' }), cd = M.contest(G, { type: 'dribble' }), mk = card('home', cd.by), bl = card('home', sh.by);
+    const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), mk = card('home', cd.by), bl = card('home', pv.by);
     let h = `<div class="actions2">
-<button type="button" class="act${M.trait(X) === 'kanone' ? ' fit' : ''}" data-a="shoot"><b>${ic('shoot')}Schuss</b><span class="pct">${cs.free ? 'frei' : fieldPct(cs)}</span>${mini(cs)}<small>Lage ${lage(sh.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val}${cs.free ? '' : `, Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}`}${trChip(X.id, 'kanone')}${cs.free ? '' : trChip(bl.id, 'wand', true)}</small></button>
+<button type="button" class="act${M.trait(X) === 'kanone' ? ' fit' : ''}" data-a="shoot"><b>${ic('shoot')}Schuss</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
 <button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><span class="pct">${fieldPct(cd)}</span>${mini(cd)}<small>${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
     if (!last) {
       h += '<p class="passes-head">Pass, tippe auch direkt auf dem Feld</p><div class="passes">' + G.teams.you.cards.filter(c => c.id !== X.id).map(c => {
         const cp = M.contest(G, { type: 'pass', to: c.id }), q = M.shotInfo(G, sc, c.id), by = card('home', cp.by);
         els[c.id].classList.add('pick');
-        return `<button type="button" class="pass" data-to="${c.id}"><span>${esc(c.last)}<small>${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))} · dort Lage ${lage(q.q)}</small>${mini(cp)}</span><em class="pct">${fieldPct(cp)}</em></button>`;
+        return `<button type="button" class="pass" data-to="${c.id}"><span><b class="nm">${esc(c.last)}${enPill(c)}</b><small>${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))} · dort Lage ${lage(q.q)}</small>${mini(cp)}</span><em class="pct">${fieldPct(cp)}</em></button>`;
       }).join('') + '</div>';
     }
     panel.innerHTML = h;
-    $('hist').innerHTML = xt && xt.off ? `<em>${esc(X.last)} ist <b class="tr">${xt.name}</b>: breiteres Feld beim ${xt.what}.</em>` : '<em>Die Zahl ist die Breite des Felds in Prozent.</em>';
+    $('hist').innerHTML = `<em>Energie ${esc(X.last)} ${enPill(X)} ${Math.round(X.en)} %${X.en <= 60 ? ': müde, sein Strich läuft schneller' : ''}. ${xt && xt.off ? `<b class="tr">${xt.name}</b>: breiteres Feld beim ${xt.what}.` : 'Die Zahl ist die Breite des grünen Felds in Prozent.'}</em>`;
     drawLanes();
   }
   // Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Der User trifft das Timing.
@@ -279,9 +286,9 @@
     const sc = G.cur, X = card('you', sc.carrier), c = M.contest(G, a), by = card('home', c.by);
     Object.keys(els).forEach(k => els[k].classList.remove('pick'));
     if (c.free) { run(a); return; }
-    if (a.type === 'shoot') { say(`${X.last} zieht ab, ${by.last} will blocken. Triff das Timing.`); openBar(a, { title: `Schuss ${esc(X.last)} ${r0(M.shotVal(X))}${trChip(X.id, 'kanone')}`, sub: `gegen Block ${esc(by.last)} ${r0(M.stanceVal(by, 'block'))}`, back: true }); }
-    else if (a.type === 'pass') { const T = card('you', a.to); say(`${X.last} passt zu ${T.last}. Triff das Timing.`); openBar(a, { title: `Pass zu ${esc(T.last)} · ${r0(M.passVal(X))}${trChip(X.id, 'passer')}`, sub: `gegen Antizipation ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))}`, back: true }); }
-    else { say(`${X.last} geht ins Dribbling gegen ${by.last}. Triff das Timing.`); openBar(a, { title: `Dribbling ${esc(X.last)} ${r0(M.dribVal(X))}${trChip(X.id, 'dribbler')}`, sub: `gegen Zweikampf ${esc(by.last)} ${r0(M.stanceVal(by, 'zwei'))}`, back: true }); }
+    const tr = X.en <= 60 ? ' · müde' : '';
+    if (a.type === 'pass') { const T = card('you', a.to); say(`${X.last} passt zu ${T.last}. Triff das Timing.`); openBar(a, { title: `Pass zu ${esc(T.last)} · ${r0(M.passVal(X))}${trChip(X.id, 'passer')}`, sub: `gegen Antizipation ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))}${tr}`, back: true }); }
+    else { say(`${X.last} geht ins Dribbling gegen ${by.last}. Triff das Timing.`); openBar(a, { title: `Dribbling ${esc(X.last)} ${r0(M.dribVal(X))}${trChip(X.id, 'dribbler')}`, sub: `gegen Zweikampf ${esc(by.last)} ${r0(M.stanceVal(by, 'zwei'))}${tr}`, back: true }); }
   }
 
   /* --- Timing-Balken ---
@@ -289,17 +296,17 @@
      Strichs im Moment der Berührung. Kein Zeitlimit. Die Engine bewertet die Stelle, hier wird sie nur gezeigt. */
   const GRADE = { perfect: 'Perfekt', good: 'Im Feld', near: 'Knapp daneben', bad: 'Daneben', gross: 'Weit daneben' };
   let bar = null;
-  const barX = now => { const u = ((((now - bar.t0) / (G.cfg.barSweep * 2) + bar.c.start) % 1) + 1) % 1; return u < 0.5 ? u * 2 : 2 - u * 2; };
+  const barX = now => { const u = ((((now - bar.t0) / (bar.c.sweep * 2) + bar.c.start) % 1) + 1) % 1; return u < 0.5 ? u * 2 : 2 - u * 2; };
   function openBar(action, o) {
-    const c = M.contest(G, action), panel = $('panel'), box = $('tbov');
+    const c = o.c || M.contest(G, action), panel = $('panel'), box = $('tbov');
     phase = 'bar'; panel.hidden = false; $('hint').hidden = true;
     // Der Balken liegt über dem Feld (im Angriff unten, in der Abwehr oben), getippt wird irgendwo: so verdeckt kein Finger den Strich
-    box.className = 'tbov ' + (G.cur.type === 'att' ? 'bot' : 'top'); box.hidden = false;
+    box.className = 'tbov ' + (o.at || (G.cur.type === 'att' ? 'bot' : 'top')) + (o.shot ? ' shot' : ''); box.hidden = false;
     box.innerHTML = `<p class="tb-t"><b>${o.title}</b><span>${o.sub}</span></p>
 <div class="tb-bar" id="tbb"><i class="tb-z" style="left:${((c.pos - c.w / 2) * 100).toFixed(2)}%;width:${(c.w * 100).toFixed(2)}%"><u style="width:${(G.cfg.barCore * 100).toFixed(0)}%"></u></i><em class="tb-m" id="tb-m"></em></div>`;
-    panel.innerHTML = `<div class="tb"><button type="button" class="tb-pad" id="tb">Tippen<small id="tb-h">wenn der Strich im grünen Feld ist</small></button>${o.back ? '<button type="button" class="link" id="tb-back">Andere Aktion</button>' : ''}</div>`;
+    panel.innerHTML = `<div class="tb"><button type="button" class="tb-pad" id="tb">Tippen<small id="tb-h">${o.shot ? 'wenn der Strich genau in der Mitte ist' : 'wenn der Strich im grünen Feld ist'}</small></button>${o.back ? `<button type="button" class="link" id="tb-back">${o.back === true ? 'Andere Aktion' : o.back}</button>` : ''}</div>`;
     const now = performance.now(), m = $('tb-m');
-    bar = { action, c, t0: now, armed: now + 280, raf: 0, done: false };
+    bar = { action, c, shot: !!o.shot, t0: now, armed: now + 280, raf: 0, done: false };
     (function loop(t) { if (!bar || bar.done) return; m.style.left = (barX(t) * 100).toFixed(2) + '%'; bar.raf = requestAnimationFrame(loop); })(now);
     $('tb').focus({ preventScroll: true });
   }
@@ -310,9 +317,10 @@
     if (t < bar.armed) return;
     const b = bar, x = barX(t), g = M.grade(G.cfg, x, b.c.pos, b.c.w);
     b.done = true; cancelAnimationFrame(b.raf);
-    $('tb-m').style.left = (x * 100).toFixed(2) + '%'; $('tbb').classList.add('g-' + g); $('tb').classList.add('g-' + g); $('tb').firstChild.textContent = GRADE[g]; $('tb-h').textContent = '';
+    if ($('tb-back')) $('tb-back').hidden = true;
+    $('tb-m').style.left = (x * 100).toFixed(2) + '%'; $('tbb').classList.add('g-' + g); $('tb').classList.add('g-' + g); $('tb').firstChild.textContent = b.shot && g !== 'perfect' && g !== 'good' ? (x < b.c.pos ? 'Zu weit links' : 'Zu weit rechts') : GRADE[g]; $('tb-h').textContent = '';
     phase = 'barhold';
-    setTimeout(() => { bar = null; $('tbov').hidden = true; phase = 'decide'; run(Object.assign({ hit: x }, b.action)); }, reduce ? 160 : 360);
+    setTimeout(() => { bar = null; $('tbov').hidden = true; phase = b.shot ? 'aim' : 'decide'; run(Object.assign({ hit: x }, b.action)); }, reduce ? 160 : 360);
   }
   async function run(action) {
     if (phase !== 'decide' && phase !== 'aim') return;
@@ -333,14 +341,6 @@
       const e = evs[i], nx = evs[i + 1];
       if (e.t === 'shootStart') {
         say(`${card(sideOf(e.x), e.x).last} zieht ab.`);
-        if (nx && nx.t === 'blocked') {
-          const b = ep(before.cur, nx.by);
-          await tween([{ id: nx.by, to: lerp(b, pos[e.x], 0.45) }, { id: 'ball', to: lerp(b, pos[e.x], 0.45) }], 520, true);
-          stamp('Geblockt', `${card(sideOf(nx.by), nx.by).last} wirft sich in den Schuss.`, 'bad');
-          addTick(`${card(sideOf(e.x), e.x).last} schiesst, ${card(sideOf(nx.by), nx.by).last} blockt.`);
-          await hold(1100); hideStamp(); i++;
-        } else if (e.grade === 'perfect') { stamp('Perfekt', 'Sauber abgezogen: der Schuss streut weniger.', 'good', 'low'); await hold(750); hideStamp(); }
-        else if (e.grade === 'near') { stamp('Gestört', 'Der Schuss kommt durch, streut aber stärker.', 'warn', 'low'); await hold(850); hideStamp(); }
       } else if (e.t === 'pass') {
         const side = sideOf(e.from), to = e.ok && G.cur && G.cur.pos[e.to] ? ep(G.cur, e.to) : pos[e.to], T = card(side, e.to);
         say(`${card(side, e.from).last} passt zu ${T.last}.`);
@@ -540,11 +540,11 @@
     [gv, $('keeper'), $('ball')].forEach(fresh);
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
     $('shooter').hidden = true; $('tell').hidden = true; $('power').hidden = true; $('zones').className = 'zones off'; $('aim').toggleAttribute('hidden', true);
-    stopSway(); clearTimeout(rx.timer); hideFree(); $('mark').hidden = true; drag = null;
+    clearTimeout(rx.timer); hideFree(); $('mark').hidden = true; drag = null; target = null;
   }
   const shotLabel = v => (v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach');
   /* Torsicht. Das Tor ist je nach Lage des Schützen gross (nah) oder klein und weiter oben (fern). Alles am Tor (Goalie,
-     freie Felder, Zonen, Landepunkt) liegt in einer Ebene, die mitskaliert. Ball und Zielkreis liegen darüber.
+     freie Felder, Zonen, Landepunkt) liegt in einer Ebene, die mitskaliert. Ball und Zielmarke liegen darüber.
      Ebene: Koordinaten wie toScene sie liefert. Sicht: was auf dem Bildschirm steht. */
   const gz = { s: 1, yb: 236 };
   const toView = L => [180 + (L[0] - 180) * gz.s, gz.yb + (L[1] - 236) * gz.s];
@@ -555,25 +555,15 @@
     $('gscale').style.transform = `translate(${((180 - 180 * gz.s) * k).toFixed(1)}px,${((gz.yb - 236 * gz.s) * k).toFixed(1)}px) scale(${gz.s.toFixed(3)})`;
     $('ggoal').setAttribute('transform', `translate(180 ${gz.yb.toFixed(1)}) scale(${gz.s.toFixed(3)}) translate(-180 -236)`);
   }
-  /* Dein Schuss: Der Goalie pendelt genau so, wie die Engine rechnet (keeperX). Grün ist, wo er nicht hinkommt: unten und,
-     etwas breiter, oben. Das Feld wächst auf der Seite, von der er wegpendelt. Gemessen wird der Moment des Loslassens. */
-  let sway = { raf: 0, t0: 0, kx: 0 }, drag = null;
+  /* Dein Schuss: Der Goalie steht leicht auf einer Seite. Grün ist, wo er nicht hinkommt: unten und, etwas breiter, oben.
+     Erst das Ziel setzen (tippen oder schieben), dann den Schuss-Balken stoppen. */
+  let drag = null, target = null;
   const rx = { timer: 0, t0: 0, flight: null, end: null, tok: 0 };   // tok: laufende Nummer des Schusses (der Zustand wird bei jeder Eingabe kopiert)
   const FREE = ['free-l', 'free-lt', 'free-r', 'free-rt'];
   function hideFree() { FREE.forEach(id => { $(id).hidden = true; }); }
-  function stopSway() { cancelAnimationFrame(sway.raf); sway.raf = 0; }
-  function startSway() {
-    const sh = G.shot, R = [M.reach(G, sh, false), M.reach(G, sh, true)], pc = g => (180 + g * 102) / 3.6; let last = null;
-    const F = FREE.map((id, i) => ({ el: $(id), R: R[i % 2], left: i < 2 }));
-    const tok = rx.tok;
-    stopSway(); sway.t0 = performance.now();
-    (function loop(now) {
-      if (phase !== 'aim' || rx.tok !== tok || !G.shot) return;
-      const kx = M.keeperX(sh.keeper, now - sway.t0), dir = last === null ? 0 : Math.sign(kx - last); sway.kx = kx; last = kx;
-      kpr.set(KP.shuffle(180 + kx * 102, dir, kx * 102 / 9));
-      F.forEach(f => { const a = f.left ? -1 : kx + f.R, b = f.left ? kx - f.R : 1, on = b > a + 0.01; f.el.hidden = !on; if (on) { f.el.style.left = pc(a).toFixed(2) + '%'; f.el.style.width = (pc(b) - pc(a)).toFixed(2) + '%'; } });
-      sway.raf = requestAnimationFrame(loop);
-    })(sway.t0);
+  function showFree() {
+    const sh = G.shot, kx = sh.keeper.x, pc = g => (180 + g * 102) / 3.6;
+    FREE.forEach((id, i) => { const el = $(id), R = M.reach(G, sh, i % 2 === 1), left = i < 2, a = left ? -1 : kx + R, b = left ? kx - R : 1, on = b > a + 0.01; el.hidden = !on; if (on) { el.style.left = pc(a).toFixed(2) + '%'; el.style.width = (pc(b) - pc(a)).toFixed(2) + '%'; } });
   }
   async function toGoal() {
     const sh = G.shot, mine = sh.side === 'you', X = card(sh.side, sh.x), gv = $('goalview');
@@ -596,9 +586,8 @@
     const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Parade ') + ZNAME[b.getAttribute('data-z')]); });
     z.className = 'zones off';
     if (mine) {
-      say('Finger aufs Tor, Zielkreis ins grüne Feld schieben, loslassen.');
-      $('hist').innerHTML = `<em>Der Ball landet irgendwo im Kreis, nie ausserhalb. Je besser der Schütze, desto kleiner der Kreis; je näher am Tor, desto mehr Grün.${sh.perfect ? ' Perfekt abgezogen: kleinerer Kreis.' : sh.rushed ? ' Gestört: grösserer Kreis.' : ''}</em>`;
-      phase = 'aim'; startSway();
+      kpr.set(KP.ready(180 + sh.keeper.x * 102)); kpr.idle(); showFree();
+      phase = 'aim'; reAim();
       return;
     }
     // Schuss des Gegners: erst ein kurzer, unterschiedlich langer Anlauf, dann fliegt der Ball. Die Flugzeit ist dein Zeitfenster.
@@ -632,7 +621,19 @@
     aimAt({ zone: z, rt: Math.max(0, t - rx.t0) });
   }
   async function shotSeq(e) {
-    const mine = e.side === 'you', ball = $('ball'), L = toScene(e.land), X = card(e.side, e.x), bs = 0.95 * gz.s;
+    const mine = e.side === 'you', ball = $('ball'), X = card(e.side, e.x), bs = 0.95 * gz.s, dirT = e.dir < 0 ? 'links' : 'rechts';
+    if (e.result === 'blocked') {
+      // Unter Druck klar neben dem Feld gestoppt: der Gegner wirft sich in den Schuss
+      const B = card('home', e.by), stop = [START[0] + e.target[0] * 34, START[1] - 78];
+      $('shooter').hidden = true; hideFree(); $('aim').toggleAttribute('hidden', true);
+      say(`${X.last} schiesst.`);
+      await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(stop, 1.8) }], { duration: 170, easing: 'ease-out' });
+      anim(ball, [{ transform: ballTf(stop, 1.8), opacity: 1 }, { transform: ballTf([stop[0] + (e.target[0] < 0 ? 70 : -70), START[1] + 4], 2.2), opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      stamp('Geblockt', `Strich zu weit ${dirT}: ${B.last} wirft sich in den Schuss.`, 'bad', 'top');
+      addTick(`${X.last} schiesst, ${B.last} blockt.`);
+      await hold(1400); return;
+    }
+    const L = toScene(e.land);
     let endL = L, outL = null, fadeOut = false;
     if (e.result === 'save') outL = [endL[0] + (endL[0] < 180 ? -95 : 95), Math.max(30, endL[1] - 110)];
     else if (e.result === 'miss' && e.miss === 'post') { endL = postPt(e.land, L); outL = [endL[0] + (endL[0] < 180 ? -60 : 60), 252]; }
@@ -663,10 +664,10 @@
     const goal = e.result === 'goal', saved = e.result === 'save' || e.result === 'catch';
     let main, sub;
     if (mine) {
-      const edge = Math.abs(Math.abs(e.land[0] - e.kx) - e.reach) < 0.08;
-      if (goal) { main = 'Tor'; sub = edge ? 'Knapp an den Fingerspitzen vorbei.' : 'Ins freie Feld.'; }
-      else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = edge ? 'Er kommt gerade noch hin.' : 'Der Ball landete in seiner Reichweite.'; }
-      else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = 'Der Zielkreis ragte über das Tor hinaus.'; }
+      const off = e.grade !== 'perfect' && e.grade !== 'good', aimedOut = Math.abs(e.target[0]) >= 1 || e.target[1] >= 1, aimedIn = Math.abs(e.target[0] - e.kx) <= e.reach;
+      if (goal) { main = 'Tor'; sub = e.grade === 'perfect' ? 'Perfekt gestoppt: genau ins Ziel.' : off ? 'Nicht sauber gestoppt, aber er passt.' : 'Ins freie Feld.'; }
+      else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = aimedIn ? 'Dein Ziel lag in seiner Reichweite.' : off ? `Strich zu weit ${dirT}: der Ball kam dem Goalie zu nah.` : 'Knapp: der Ball kam dem Goalie zu nah.'; }
+      else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = aimedOut ? 'Dein Ziel lag neben dem Tor.' : `Strich zu weit ${dirT}: der Ball zog am Tor vorbei.`; }
     } else if (goal) { main = 'Tor'; sub = !e.guess ? 'Zu spät: der Ball war schon drin.' : !e.inTime ? `Zu spät um ${Math.max(1, Math.round((e.rt - e.window) / 10) * 10)} ms.` : 'Falsche Ecke.'; }
     else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = `Reagiert in ${e.rt} ms, Zeit waren ${e.window} ms.`; }
     else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = 'Der Schuss ging nicht aufs Tor.'; }
@@ -677,25 +678,43 @@
   }
 
   /* --- Eingaben in der Torsicht ---
-     Eigener Schuss: Finger aufs Tor, der Zielkreis erscheint. Schieben verschiebt ihn, loslassen schiesst. Wer hält oder
-     schiebt, sieht den Kreis etwas über dem Finger, damit er nicht verdeckt ist; ein kurzes Antippen schiesst genau dorthin.
+     Eigener Schuss: ins Tor tippen setzt das Ziel. Wer hält oder schiebt, sieht die Zielmarke etwas über dem Finger, damit
+     sie nicht verdeckt ist. Beim Loslassen steht das Ziel, und der Schuss-Balken läuft: stoppen wie beim Timing-Balken.
      Parade: die Ecke antippen. */
   const scenePt = ev => { const r = $('goalview').getBoundingClientRect(); return [(ev.clientX - r.left) / r.width * 360, (ev.clientY - r.top) / r.height * 260]; };
   const zoneAt = g => M.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1])));
-  function aimPreview() {
-    const d = drag, p = [Math.max(14, Math.min(346, d.x)), Math.max(14, Math.min(252, d.y - d.lift))];
-    d.p = p;
+  function aimDraw(p) {
     $('aim').toggleAttribute('hidden', false);
     $('aim-line').setAttribute('x2', p[0].toFixed(1)); $('aim-line').setAttribute('y2', p[1].toFixed(1));
-    $('aim-dot').setAttribute('cx', p[0].toFixed(1)); $('aim-dot').setAttribute('cy', p[1].toFixed(1));
-    const sp = $('aim-spread'); sp.setAttribute('cx', p[0].toFixed(1)); sp.setAttribute('cy', p[1].toFixed(1)); sp.setAttribute('r', (M.rad(G, G.shot) * 102 * gz.s).toFixed(1));
+    ['aim-dot', 'aim-spread'].forEach(id => { $(id).setAttribute('cx', p[0].toFixed(1)); $(id).setAttribute('cy', p[1].toFixed(1)); });
+  }
+  function aimPreview() {
+    const d = drag, p = [Math.max(14, Math.min(346, d.x)), Math.max(14, Math.min(252, d.y - d.lift))];
+    d.p = p; aimDraw(p);
+  }
+  // Zurück zum Zielen: am Anfang des Schusses und über «Ziel ändern»
+  function reAim() {
+    target = null; drag = null; phase = 'aim';
+    $('aim').toggleAttribute('hidden', true); $('panel').hidden = true;
+    say('Tippe ins Tor: Wohin soll der Schuss?');
+    $('hist').innerHTML = '<em>Grün ist frei: dort kommt der Goalie nicht hin. Ziele in die Mitte des grünen Felds. Danach stoppst du den Schuss-Balken.</em>';
+  }
+  // Ziel steht (g in Torkoordinaten): Jetzt läuft der Schuss-Balken. Schwacher oder müder Schütze: der Strich läuft schneller.
+  function setTarget(g) {
+    if (phase !== 'aim' || !G.shot || G.shot.side !== 'you') return;
+    const sh = G.shot, X = card('you', sh.x), b = M.shotBar(G), by = b.pressed && sh.by ? card('home', sh.by) : null;
+    target = [Math.max(-1.15, Math.min(1.15, g[0])), Math.max(0.04, Math.min(1.15, g[1]))]; drag = null;
+    aimDraw(toView(toScene(target)));
+    say(by ? `${by.last} ist nah: Stoppe den Strich im grünen Feld, sonst blockt er.` : 'Stoppe den Strich in der Mitte des grünen Felds.');
+    $('hist').innerHTML = '<em>Genau in der Mitte geht der Ball genau ins Ziel. Je weiter der Strich links oder rechts davon steht, desto weiter weicht der Ball nach links oder rechts ab.</em>';
+    openBar({ type: 'aim', target }, { c: b, shot: true, at: 'top', title: `Schuss ${esc(X.last)} ${r0(M.shotVal(X))}${trChip(X.id, 'kanone')}`, sub: `Strich ${tempoTxt(b.sweep)} · Energie ${Math.round(X.en)} %${by ? ` · Block ${esc(by.last)}` : ''}`, back: 'Ziel ändern' });
   }
   function aimAt(input) {
     if (phase !== 'aim' && phase !== 'react') return;
     const z = $('zones'), sz = input.zone || null;
     z.className = 'zones off'; if (sz) z.querySelector(`[data-z="${sz}"]`).classList.add('sel');
     $('aim').toggleAttribute('hidden', true); $('hist').innerHTML = '';
-    stopSway(); drag = null; phase = 'aim';
+    drag = null; phase = 'aim';
     run(Object.assign({ type: 'aim' }, input));
   }
   const stage = $('stage');
@@ -717,14 +736,14 @@
   stage.addEventListener('pointerup', () => {
     if (!drag || phase !== 'aim') return;
     const d = drag; clearTimeout(d.timer);
-    aimAt({ target: toGoalXY(toLayer(d.p)), t: performance.now() - sway.t0 });
+    setTarget(toGoalXY(toLayer(d.p)));
   });
   stage.addEventListener('pointercancel', () => { if (drag) clearTimeout(drag.timer); drag = null; $('aim').toggleAttribute('hidden', true); });
   // Tastatur: die Zonen sind Knöpfe
   $('zones').addEventListener('click', e => {
     const b = e.target.closest('.zone'); if (!b || e.detail !== 0) return;
     const z = b.getAttribute('data-z');
-    if (phase === 'react') saveAt(z, 0); else if (phase === 'aim') aimAt({ target: M.ZC[z], t: performance.now() - sway.t0 });
+    if (phase === 'react') saveAt(z, 0); else if (phase === 'aim') setTarget(M.ZC[z]);
   });
 
   // --- Start und Resultat ---
@@ -780,7 +799,7 @@
   $('btn-other').addEventListener('click', () => { renderIntro(); show('intro'); });
   $('panel').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.disabled) return;
-    if (b.id === 'tb-back') { if (phase === 'bar') { closeBar(); renderDecision(); } return; }
+    if (b.id === 'tb-back') { if (phase === 'bar') { const shot = bar && bar.shot; closeBar(); if (shot) reAim(); else renderDecision(); } return; }
     if (phase !== 'decide') return;
     if (b.dataset.a) choose({ type: b.dataset.a }); else if (b.dataset.to) choose({ type: 'pass', to: b.dataset.to });
   });

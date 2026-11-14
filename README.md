@@ -26,24 +26,26 @@ Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Sh
 **Spielfluss und Taktik.** Ein Match läuft über drei Drittel zu 20 Minuten, die Uhr läuft mit. Die Zahl der Chancen steht nicht fest (im Schnitt etwa 12, in der Simulation zwischen 2 und 21):
 
 - **Chancen aus den Karten:** Jede Seite bekommt Chancen nach ihrem Angriffswert (die drei Stürmer: Schuss, Pass, Dribbling) gegen den Abwehrwert des Gegners (die zwei Verteidiger: Block, Antizipation, Zweikampf). Gute Stürmer bringen mehr eigene Chancen, schwache Verteidiger mehr Chancen für den Gegner.
-- **Taktik:** Defensiv, Normal oder Offensiv, vor dem Match und jederzeit während des Spiels wählbar, mit Hinweis in jeder Drittelspause. Offensiv bringt mehr eigene Chancen (Faktor 1.35), öffnet aber hinten (1.38 für den Gegner, dazu mehr Konter). Defensiv senkt beides (0.72 und 0.68), die eigenen Chancen kommen öfter aus Kontern. Der Gegner stellt selbst um: im Rückstand offensiv, mit Vorsprung defensiv.
+- **Taktik:** Defensiv, Normal oder Offensiv, vor dem Match und jederzeit während des Spiels wählbar, mit Hinweis in jeder Drittelspause. Offensiv bringt mehr eigene Chancen (Faktor 1.35), öffnet aber hinten (1.3 für den Gegner, dazu mehr Konter) und kostet etwas mehr Energie. Defensiv senkt beides (0.72 und 0.68), die eigenen Chancen kommen öfter aus Kontern. Der Gegner stellt selbst um: im Rückstand offensiv, mit Vorsprung defensiv.
 - **Arten von Chancen:** Positionsangriff, Konter 3 gegen 2, Konter 2 gegen 1 und selten ein Alleingang. Ein Konter nach einem groben Fehler ist ebenfalls meist eine Überzahl, nur selten ein Alleingang.
 - **Feld von oben:** Die Spieler sind Figuren mit Schultern, Kopf, Armen, Beinen und Stock. Sie drehen sich in Laufrichtung oder zum Ball, die Beine laufen mit, der Stock schwingt bei Pass und Schuss, der Ball liegt an der Schaufel. Die Goalies knien im Torraum und rutschen mit dem Ball mit.
 
-Wirkung der Taktik für den mittleren Modell-Spieler (Team um 81 gegen WASA, 600 Matches je Feld, Siegquote):
+Wirkung der Taktik für den mittleren Modell-Spieler (Team um 81 gegen WASA, 800 Matches je Feld, Siegquote):
 
 | Karten | Defensiv | Normal | Offensiv |
 |---|---|---|---|
-| 6 schwächer | 25 % | 18 % | 15 % |
-| gleich | 60 % | 58 % | 57 % |
-| 6 stärker | 86 % | 89 % | 92 % |
+| 6 schwächer | 20 % | 16 % | 13 % |
+| gleich | 54 % | 49 % | 48 % |
+| 6 stärker | 83 % | 81 % | 87 % |
 
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
 
-- **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss unter Druck und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
+- **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
 - **Noten:** Mitte = perfekt (Vorteil: freier Mitspieler, mehr Raum, genauerer Schuss), im Feld = gelungen, knapp daneben = halb gelungen, daneben = Ball weg, grob daneben = Konter für den Gegner.
 - **Abwehr:** Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Nur die Mitte gewinnt den Ball (und gibt einen Konter). Sonst gilt: Je besser getroffen, desto mehr Zeit bekommt der Goalie beim Schuss.
-- **Eigener Schuss:** Finger aufs Tor, der Zielkreis erscheint; schieben, loslassen. Der Ball landet irgendwo im Kreis, nie ausserhalb. Der Kreis hängt vor allem am Abschlusswert (guter Schütze, kleiner Kreis). Der gegnerische Goalie pendelt sichtbar, grün ist, wo er nicht hinkommt; wie viel Grün es gibt, hängt vor allem an der Distanz. Das Tor ist aus der Nähe gross und aus der Distanz klein dargestellt. Dieser Kreis ist der einzige Zufall, der bleibt, und er ist vor dem Schuss zu sehen.
+- **Eigener Schuss:** wie ein Penalty in einem Fussballspiel. Erst ins Tor tippen, wohin der Schuss gehen soll (schieben geht auch, die Zielmarke steht dann über dem Finger). Der gegnerische Goalie steht leicht auf einer Seite; grün ist, wo er nicht hinkommt, und aus der Distanz bleibt weniger Grün. Dann läuft der Schuss-Balken: Genau in der Mitte geht der Ball genau ins Ziel. Steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab, am Rand des grünen Felds um die halbe Breite des freien Felds. Wer in die Mitte des freien Felds zielt und den Strich im Feld stoppt, trifft also. Das Feld auf dem Balken ist aus der Nähe breit (bis 17 %) und aus der Distanz schmal (ab 3 %). Steht ein Gegner nah, wird es schmaler, und ein klar verpasster Stopp wird geblockt. Gewürfelt wird beim eigenen Schuss nichts mehr.
+- **Tempo des Strichs:** Der Abschlusswert bestimmt, wie schnell der Strich auf dem Schuss-Balken läuft: 0.95 Sekunden pro Durchlauf bei Abschluss 90, 0.68 bei 80, 0.45 bei 70. Ein schwacher Schütze muss also viel genauer tippen.
+- **Energie:** Jeder Spieler startet mit 100. Jede Chance kostet alle etwas (offensiv mehr, defensiv weniger), dazu kosten Pass (4), Annahme (2), Dribbling (10), Schuss (7) und Abwehraktion (7). Jede Drittelspause bringt 15 zurück. Je müder ein Spieler, desto schneller läuft sein Strich auf jedem Balken, bei leerer Energie in 60 % der normalen Zeit. Die Energie steht als kleiner Balken unter jedem eigenen Spieler und bei jedem Pass-Ziel. Wer alles über denselben Star spielt, hat ihn im letzten Drittel müde. Müde Schützen des Gegners streuen stärker.
 - **Goalie-Figur:** In der Torsicht ist der Goalie eine Figur mit Gelenken (`src/lab/keeper.js`): kniend, Gitterhelm, Trikot mit farbigen Ärmeln, schwarze Handschuhe. Becken, Oberkörper, Kopf, Arme und Beine bewegen sich einzeln: seitlich rutschen mit Schritt und Abstoss, Handparade mit geneigtem Oberkörper, Beinparade am Boden, Hechtsprung.
 - **Parade:** Der Schuss des Gegners ist ehrlich zu sehen (goldener Ring am Landepunkt). Gehalten ist, wenn die richtige Ecke angetippt wird, bevor der Ball da ist. Bessere Verteidiger und gestörte Schützen geben mehr Zeit.
 
@@ -51,18 +53,20 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 
 | Abschluss | weit weg | mittlere Distanz | nah | direkt vor dem Tor |
 |---|---|---|---|---|
-| 70 | 0 % | 3 % | 14 % | 32 % |
-| 80 | 0 % | 6 % | 38 % | 56 % |
-| 90 | 14 % | 35 % | 56 % | 76 % |
-| 97 | 22 % | 46 % | 70 % | 83 % |
+| 70 | 9 % | 22 % | 34 % | 43 % |
+| 80 | 14 % | 32 % | 49 % | 65 % |
+| 90 | 20 % | 45 % | 65 % | 79 % |
+| 97 | 24 % | 51 % | 72 % | 87 % |
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), normale Taktik, 600 Matches je Feld, Siegquote:
+Ein müder Schütze (Energie 30) trifft aus der Nähe statt 34, 49, 65 und 72 % noch 29, 36, 48 und 58 %.
+
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), normale Taktik, 800 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 20 % | 66 % | 92 % | 99 % | 100 % |
-| mittel | 1 % | 18 % | 56 % | 88 % | 98 % |
-| schwach | 0 % | 2 % | 11 % | 43 % | 75 % |
+| stark | 25 % | 64 % | 93 % | 99 % | 100 % |
+| mittel | 3 % | 17 % | 50 % | 84 % | 98 % |
+| schwach | 0 % | 1 % | 11 % | 39 % | 71 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

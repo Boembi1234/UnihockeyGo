@@ -7,9 +7,11 @@
    läuft hin und her, der User tippt, wenn er im grünen Feld ist. Die Karten bestimmen, wie breit das Feld ist.
    Angriff: Der Ballführende kann schiessen, passen oder dribbeln.
    Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst, der User trifft das Timing.
-   Eigener Schuss: Zielkreis halten, schieben, loslassen. Der Ball landet irgendwo im Kreis, nie ausserhalb. Der Kreis ist
-   klein für gute Schützen und gross für schwache. Der Goalie pendelt sichtbar und hält, was in seiner Reichweite landet;
-   aus der Nähe reicht er weniger weit.
+   Eigener Schuss: ins Tor tippen (Ziel), dann den Schuss-Balken stoppen. Genau in der Mitte geht der Ball genau ins Ziel;
+   steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab. Bei einem schwachen oder müden Schützen läuft der Strich
+   schneller. Der Goalie hält, was in seiner Reichweite landet; aus der Nähe reicht er weniger weit.
+   Energie: Jeder Spieler wird im Lauf des Matchs müde (Aktionen kosten Energie, die Pause bringt etwas zurück). Je müder,
+   desto schneller läuft sein Strich auf jedem Balken.
    Schuss des Gegners: Die Flugbahn ist ehrlich zu sehen, der User muss die richtige Ecke antippen, bevor der Ball da ist.
    Spielfeld: Koordinaten 0 bis 360 (Breite) und 0 bis 400 (Länge). Angegriffen wird immer das Tor oben bei (180, 40).
    Reine Funktionen: Zustand rein, Ergebnis raus, Zufall nur aus rng. Karten und Grundwerte kommen aus HK. */
@@ -34,12 +36,21 @@
     blockFree: 0.08,                                                  // darunter ist der Schuss frei, ohne Balken
     defScale: 0.8, defBlock: 0.7,                                     // Feld in der Abwehr, gegen Schüsse etwas schmaler
     pressGood: 130, pressNear: 60,                                    // gestörter Gegner: so viele ms mehr Zeit für die Parade
-    // Schuss: Radius des Zielkreises (Tor von -1 bis 1), vor allem nach dem Abschlusswert. Der Ball landet gleichmässig im Kreis.
-    sdBase: 0.1, sdSkill: 0.22, sdDist: 0.06, sdPerfect: 0.75, sdRushed: 1.4, post: 0.07,
-    // Goalie des Gegners pendelt: Dauer einer Runde in ms, Ausschlag. Reichweite um seine Stelle beim Abschluss:
-    // vor allem nach der Distanz (aus der Nähe reicht er weniger weit), etwas kleiner bei hohen Bällen
-    kPeriod: 1700, kSlope: 15, kMin: 1200, kMax: 2200, kAmp: 0.65,
-    reach: 1.3, reachDist: 0.43, reachVal: 0.003, reachTrait: 0.07, reachTop: 0.93, reachMin: 0.9, reachMax: 1.62,
+    // Streuung der Schüsse des Gegners (Radius um sein Ziel, Tor von -1 bis 1), vor allem nach dem Abschlusswert
+    sdBase: 0.1, sdSkill: 0.22, sdDist: 0.06, post: 0.07,
+    /* Dein Schuss: Balken wie beim Penalty. Breite des grünen Felds nach der Lage: shotW von ganz weit, shotWq dazu direkt
+       vor dem Tor; unter Druck bis shotPress schmaler. Tempo des Strichs nach dem Abschlusswert: 88 ist normal, jeder Punkt
+       darunter macht ihn 3 % schneller. Am Rand des grünen Felds weicht der Ball um die halbe Breite des freien Felds ab. */
+    shotW: -0.01, shotWq: 0.175, shotWMin: 0.03, shotPress: 0.5, shotTempo: 0.03, tempoMin: 0.5, tempoMax: 1.3, sweepMin: 380,
+    /* Goalie des Gegners steht leicht auf einer Seite (kOff). Auf der anderen Seite bleibt ein freies Feld. Seine Breite
+       (Tor von -1 bis 1) hängt vor allem von der Lage ab: free bei einem Schuss von ganz weit, freeDist dazu direkt vor dem
+       Tor, freeVal pro Punkt Abschluss über dem Goalie, freeTop dazu bei hohen Bällen. */
+    kOffMin: 0.3, kOffMax: 0.55,
+    free: 0.05, freeDist: 0.45, freeVal: 0.003, freeTrait: 0.07, freeTop: 0.05, freeMin: 0.06, freeMax: 0.75,
+    enSpread: 0.5,                                                    // müder Schütze des Gegners streut bis so viel mehr
+    // Energie: Kosten pro Chance (für alle; mal enTacOff bei offensiver, mal enTacDef bei defensiver Taktik), Pass, Annahme, Dribbling, Schuss, Abwehraktion; Erholung in der Pause;
+    // bei leerer Energie läuft der Strich mit diesem Anteil der normalen Dauer
+    enChance: 1.5, enTacOff: 1.1, enTacDef: 0.9, enPass: 4, enRecv: 2, enDrib: 10, enShot: 7, enDef: 7, enBreak: 15, enFloor: 0.6,
     // Reaktionsparade: Zeit in ms, bis der Ball im Tor ist
     aiPowMin: 0.1, rxBase: 355, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
     blockBase: 0.65,                                                  // Schuss geblockt, wenn ein Gegner ganz nah steht
@@ -71,6 +82,9 @@
   const shotVal = c => E.eff(c.sco, c);
   const passVal = c => E.eff(c.ply, c);
   const strength = cards => cards.reduce((a, c) => a + E.eff(c.ovr, c), 0) / cards.length;
+  // Energie 0 bis 100. Müde Spieler haben einen schnelleren Strich: Dauer eines Durchlaufs mal diesen Faktor.
+  const tired = (cfg, c) => cfg.enFloor + (1 - cfg.enFloor) * clamp(c.en === undefined ? 100 : c.en, 0, 100) / 100;
+  const drain = (c, v) => { if (c) c.en = clamp((c.en === undefined ? 100 : c.en) - v, 0, 100); };
   // Angriff: was die drei Stürmer mit dem Ball können. Abwehr: was die zwei Verteidiger gegen den Ball können.
   const FWD = ['C', 'LW', 'RW'], BACK = ['LD', 'RD'];
   const avg = l => l.reduce((a, v) => a + v, 0) / Math.max(1, l.length);
@@ -81,7 +95,7 @@
   const TACTICS = {
     def: { name: 'Defensiv', own: 0.72, open: 0.68 },
     bal: { name: 'Normal', own: 1, open: 1 },
-    off: { name: 'Offensiv', own: 1.35, open: 1.38 }
+    off: { name: 'Offensiv', own: 1.35, open: 1.3 }
   };
   const KINDS = { set: 'Angriff', rush32: 'Konter 3 gegen 2', rush21: 'Konter 2 gegen 1', solo: 'Alleingang' };
 
@@ -235,12 +249,12 @@
      free: freier Schuss ohne Balken. a: { type: 'shoot' | 'pass' | 'dribble', to }, in der Abwehr egal. */
   function contest(s, a) {
     const sc = s.cur, X = sc.carrier, c = s.cfg;
-    if (sc.type === 'def') { const d = defInfo(s, sc); return { p: d.p, w: d.w, pos: sc.bar.pos, start: sc.bar.start, by: d.D.id, free: false }; }
+    if (sc.type === 'def') { const d = defInfo(s, sc); return { p: d.p, w: d.w, pos: sc.bar.pos, start: sc.bar.start, by: d.D.id, free: false, sweep: Math.round(c.barSweep * tired(c, d.D)) }; }
     let p, by, free = false;
-    if (a.type === 'shoot') { const sh = shotInfo(s, sc, X); p = 1 - sh.block; by = sh.by; free = sh.block < c.blockFree; }
+    if (a.type === 'shoot') { const sh = shotInfo(s, sc, X); p = 1 - sh.block; by = sh.by; free = true; }      // der Schuss hat seinen eigenen Balken
     else if (a.type === 'pass') { const pi = passInfo(s, sc, X, a.to); p = 1 - pi.risk; by = pi.by; }
     else { const di = dribInfo(s, sc, X); p = di.p; by = di.by; }
-    return { p, w: free ? 1 : zone(c, p), pos: sc.bar.pos, start: sc.bar.start, by, free };
+    return { p, w: free ? 1 : zone(c, p), pos: sc.bar.pos, start: sc.bar.start, by, free, sweep: Math.round(c.barSweep * tired(c, card(s, 'you', X))) };
   }
 
   // --- Schuss auf das Tor ---
@@ -250,12 +264,10 @@
     const x = land[0], y = land[1], col = z[1] === 'l' ? x < -0.34 + e : z[1] === 'r' ? x > 0.34 - e : x > -0.34 - e && x < 0.34 + e;
     return col && (z[0] === 't' ? y >= 0.5 - e * 0.8 : y < 0.5 + e * 0.8);
   }
-  // Radius des Zielkreises für einen Schützen aus einer Lage q (ohne Zu- und Abschläge)
-  function spread(s, X, q) { const c = s.cfg; return c.sdBase + c.sdSkill * clamp((99 - shotVal(X)) / 27, 0, 1) + c.sdDist * (1 - q); }
+  // Streuung eines gegnerischen Schützen aus einer Lage q: Radius um sein Ziel
+  function spread(s, X, q) { const c = s.cfg; return (c.sdBase + c.sdSkill * clamp((99 - shotVal(X)) / 27, 0, 1) + c.sdDist * (1 - q)) * (1 + c.enSpread * (1 - clamp(X.en === undefined ? 100 : X.en, 0, 100) / 100)); }
   // Zufälliger Punkt im Kreis, gleichmässig verteilt. Die Höhe ist gestaucht, damit der Kreis auf dem Bildschirm rund ist.
   function inDisc(rng, rad) { const r = rad * Math.sqrt(rng()), a = 2 * Math.PI * rng(); return [r * Math.cos(a), r * Math.sin(a) * 0.69]; }
-  // Radius für deinen laufenden Schuss: Kanone kleiner, perfekt abgezogen kleiner, gestört grösser
-  function rad(s, sh) { const c = s.cfg, X = card(s, sh.side, sh.x); return spread(s, X, sh.q) * (has(X, 'kanone') ? c.traitShot : 1) * (sh.perfect ? c.sdPerfect : sh.rushed ? c.sdRushed : 1); }
   function missOf(c, land) {
     const ax = Math.abs(land[0]);
     if (ax < 1 && land[1] < 1) return null;
@@ -263,16 +275,29 @@
     return post ? 'post' : land[1] >= 1 ? 'high' : 'wide';
   }
   function favZone(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['tl', 'br', 'tr', 'bl', 'bm'][h % 5]; }
-  // Der gegnerische Goalie pendelt sichtbar hin und her (Dreieckswelle). t in ms seit Beginn der Schussphase.
-  function keeperX(k, t) { const u = (((t / k.period + k.phase) % 1) + 1) % 1; return k.amp * (u < 0.5 ? 4 * u - 1 : 3 - 4 * u); }
-  // Reichweite des Goalies links und rechts von seiner Stelle beim Abschluss. top: hoher Ball (über 0.62), schwerer zu halten.
-  function reach(s, sh, top) {
+  // Breite des freien Felds neben dem Goalie für deinen Schuss. top: hoher Ball (über 0.62), dort ist etwas mehr frei.
+  function freeW(s, sh, top) {
     const c = s.cfg, X = card(s, 'you', sh.x);
-    const r = clamp(c.reach + c.reachDist * (1 - sh.q) - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0), c.reachMin, c.reachMax);
-    return top ? r * c.reachTop : r;
+    return clamp(c.free + c.freeDist * sh.q + (shotVal(X) - s.teams.home.goalie.val) * c.freeVal + (has(X, 'kanone') ? c.freeTrait : 0) + (sh.ctx === 'counter' ? 0.05 : 0) + (top ? c.freeTop : 0), c.freeMin, c.freeMax);
+  }
+  // Reichweite des Goalies links und rechts von seiner Stelle: Was näher bei ihm landet, hält er.
+  function reach(s, sh, top) { return 1 + Math.abs(sh.keeper.x) - freeW(s, sh, top); }
+  /* Schuss-Balken für deinen laufenden Schuss. Das Feld liegt in der Mitte: breit aus der Nähe, schmal aus der Distanz und
+     unter Druck (Gegner nah).
+     sweep ist die Dauer eines Durchlaufs in ms: kürzer, also schneller, bei schwachem Abschluss und bei wenig Energie. */
+  function shotBar(s) {
+    const c = s.cfg, sh = s.shot, X = card(s, 'you', sh.x);
+    const tempo = clamp(1 + (shotVal(X) - 88) * c.shotTempo, c.tempoMin, c.tempoMax) * (has(X, 'kanone') ? 1.15 : 1) * tired(c, X);
+    return { w: clamp((c.shotW + c.shotWq * sh.q) * (1 - c.shotPress * clamp(sh.block / 0.75, 0, 1)), c.shotWMin, c.barMax), pos: 0.5, start: sh.start, sweep: Math.round(Math.max(c.sweepMin, c.barSweep * tempo)), pressed: sh.block >= c.blockFree, by: sh.by };
+  }
+  // Vorschau für einen Schuss von Spieler id aus der laufenden Szene: Lage, Druck, freies Feld (hoch) und Schuss-Balken
+  function shotPreview(s, id) {
+    const sc = s.cur, si = shotInfo(s, sc, id), sh = { side: 'you', x: id, q: si.q, ctx: sc.counter ? 'counter' : 'attack', block: si.block, by: si.by, start: 0 };
+    const b = shotBar(Object.assign({}, s, { shot: sh }));
+    return { q: si.q, block: si.block, by: si.by, free: freeW(s, sh, true), sweep: b.sweep, w: b.w, pressed: b.pressed };
   }
   /* Bereitet einen Schuss vor.
-     Dein Schuss: Der Goalie pendelt (keeper), du zielst. opt.perfect: perfekt abgezogen, der Zielkreis ist kleiner.
+     Dein Schuss: Der Goalie steht leicht auf einer Seite (keeper.x). block und by: Druck des nächsten Gegners.
      Schuss des Gegners: Ziel, Härte und Streuung stehen sofort fest, damit die Flugbahn ehrlich gezeigt werden kann.
      window ist die Zeit in ms, bis der Ball im Tor ist. Deine Verteidiger (Block) geben dir mehr Zeit. */
   function setShot(s, rng, side, x, q, ctx, opt) {
@@ -282,14 +307,15 @@
       const zc = ZC[sample(w, rng)], power = c.aiPowMin + rng() * (0.95 - c.aiPowMin), target = [zc[0] + (rng() - 0.5) * 0.24, zc[1] + (rng() - 0.5) * 0.2];
       const off = inDisc(rng, spread(s, X, q) * (has(X, 'kanone') ? c.traitShot : 1));
       const land = [target[0] + off[0], Math.max(0.03, target[1] + off[1])];
+      drain(X, c.enShot);
       const defs = players(s, 'you').filter(d => d.role === 'LD' || d.role === 'RD'), dv = ctx === 'so' ? 93 : defs.reduce((a, d) => a + stanceVal(d, 'block'), 0) / defs.length;
       sh.power = power; sh.land = land; sh.miss = missOf(c, land); sh.zone = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])); sh.dv = dv;
       sh.window = Math.round(clamp(c.rxBase - c.rxPow * (power - 0.5) - (shotVal(X) - 88) * c.rxVal + (dv - 93) * c.rxVal + c.rxDist * (1 - q)
         - (ctx === 'counter' ? c.rxCounter : 0) - (has(X, 'kanone') ? c.rxTrait : 0) + (o.press || 0), c.rxMin, c.rxMax));
       sh.press = o.press || 0;
     } else {
-      sh.perfect = !!o.perfect; sh.rushed = !!o.rushed;
-      sh.keeper = { period: Math.round(clamp(c.kPeriod + (shotVal(X) - s.teams.home.goalie.val) * c.kSlope, c.kMin, c.kMax)), amp: c.kAmp, phase: rng() };
+      sh.block = o.block || 0; sh.by = o.by || null; sh.start = rng();
+      sh.keeper = { x: (rng() < 0.5 ? -1 : 1) * (c.kOffMin + rng() * (c.kOffMax - c.kOffMin)) };
     }
     s.shot = sh; s.phase = 'aim';
   }
@@ -300,7 +326,7 @@
     const byOvr = (x, y) => y.ovr - x.ovr, def = cards.filter(c => c.pos === 'DEF').sort(byOvr).slice(0, 2), att = cards.filter(c => c.pos !== 'DEF').sort(byOvr).slice(0, 3);
     while (def.length < 2) def.push(att.pop());
     const r = ['LD', 'RD'], a = ['C', 'LW', 'RW'];
-    return def.map((c, i) => Object.assign({}, c, { role: r[i] })).concat(att.map((c, i) => Object.assign({}, c, { role: a[i] })));
+    return def.map((c, i) => Object.assign({}, c, { role: r[i], en: 100 })).concat(att.map((c, i) => Object.assign({}, c, { role: a[i], en: 100 })));
   }
   function newMatch(setup, rng) {
     const cfg = setup.cfg || CFG;
@@ -332,6 +358,7 @@
   function startChance(s, rng, side, kind, carrier, quiet) {
     const type = side === 'you' ? 'att' : 'def';
     s.chances[side]++; if (type === 'att') s.stats.att++; else s.stats.def++;
+    ['you', 'home'].forEach(sd => { const k = s.cfg.enChance * (s.tactic[sd] === 'off' ? s.cfg.enTacOff : s.tactic[sd] === 'def' ? s.cfg.enTacDef : 1); players(s, sd).forEach(c => drain(c, k)); });
     makeScene(s, rng, type, { kind, carrier });
     s.cur.open = quiet ? [] : openPlay(s, rng, side, s.cur.carrier);
     if (kind === 'solo') setShot(s, rng, side, s.cur.carrier, Math.max(0.8, shotInfo(s, s.cur, s.cur.carrier).q), 'counter');
@@ -414,12 +441,11 @@
     if (!c.free) tally(s, g);
     if (a.type === 'shoot') {
       const sh = shotInfo(s, sc, X);
-      ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, free: c.free, grade: g, w: c.w, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
-      if (!ok) { ev.push({ t: 'blocked', x: X, by: sh.by, grade: g }); return lost(s, rng, ev, sh.by, g === 'gross'); }
-      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', { perfect: g === 'perfect', rushed: g === 'near' }); return;
+      ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
+      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', { block: sh.block, by: sh.by }); return;
     }
     if (a.type === 'pass') {
-      s.stats.passes++;
+      s.stats.passes++; drain(me, s.cfg.enPass); drain(card(s, 'you', a.to), s.cfg.enRecv);
       ev.push({ t: 'pass', from: X, to: a.to, ok, grade: g, w: c.w, risk: 1 - c.p, by: c.by, av: passVal(me), dv: stanceVal(D, 'pass'), trait: has(me, 'passer') ? 'passer' : null, dtrait: has(D, 'anti') ? 'anti' : null });
       if (!ok) { sc.pos[c.by] = lerp(P(sc, X), P(sc, a.to), 0.5); return lost(s, rng, ev, c.by, g === 'gross'); }
       s.stats.passOk++;
@@ -427,7 +453,7 @@
       const m = sc.mark[a.to]; sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), g === 'perfect' ? -0.7 : g === 'near' ? 0.92 : 0.4);
       sc.carrier = a.to; shift(s, sc, rng); sc.step++; sc.bar = newBar(rng); return;
     }
-    s.stats.dribbles++;
+    s.stats.dribbles++; drain(me, s.cfg.enDrib);
     ev.push({ t: 'dribble', x: X, by: c.by, ok, grade: g, w: c.w, p: c.p, av: dribVal(me), dv: stanceVal(D, 'zwei'), trait: has(me, 'dribbler') ? 'dribbler' : null, dtrait: has(D, 'kampf') ? 'kampf' : null });
     if (!ok) return lost(s, rng, ev, c.by, g === 'gross');
     if (g !== 'near') {
@@ -448,7 +474,7 @@
     if (!hitOk(a)) return false;
     const d = defInfo(s, sc), D = d.D, g = grade(c, a.hit, sc.bar.pos, d.w), won = g === 'perfect';
     const gain = g === 'good' ? c.pressGood : g === 'near' ? c.pressNear : g === 'gross' ? -c.rxLate : 0;
-    tally(s, g);
+    tally(s, g); drain(D, c.enDef);
     sc.press = (sc.press || 0) + gain;
     ev.push({ t: 'defend', action: d.action, target: it.to || null, intent: it, by: D.id, x: X.id, stopped: won, grade: g, gain, w: d.w, av: d.atkV, dv: d.dv, trait: d.trait });
     if (won) {
@@ -465,17 +491,31 @@
     aiIntent(s, rng);
   }
   /* Schuss auflösen.
-     Dein Schuss { target, t }: Der Ball landet irgendwo im Zielkreis um target. Der Goalie hält, was innerhalb seiner
-     Reichweite um die Stelle landet, an der er beim Loslassen (t ms nach Beginn) stand.
+     Dein Schuss { target, hit }: hit ist die Stelle des Strichs auf dem Schuss-Balken (siehe shotBar). Daraus ergibt sich,
+     wie weit der Ball vom Ziel abweicht. Der Goalie hält, was innerhalb seiner Reichweite um seine Stelle landet.
      Schuss des Gegners { zone, rt }: gehalten, wenn du rechtzeitig (rt ms nach dem Abschluss) die richtige Zone antippst. */
   function shoot(s, rng, ev, a) {
     const sh = s.shot, c = s.cfg, X = card(s, sh.side, sh.x); let r;
     if (sh.side === 'you') {
-      if (!a.target || !isFinite(a.target[0]) || !isFinite(a.target[1])) return false;
-      const target = [clamp(+a.target[0], -1.5, 1.5), clamp(+a.target[1], 0, 1.5)], t = Math.max(0, +a.t || 0), R0 = rad(s, sh), off = inDisc(rng, R0);
-      const land = [target[0] + off[0], Math.max(0.03, target[1] + off[1])], miss = missOf(c, land);
-      const kx = keeperX(sh.keeper, t), R = reach(s, sh, land[1] > 0.62), dx = Math.abs(land[0] - kx);
-      r = { land, zone: zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])), target, power: 0.6, kx, reach: R, rad: R0, miss, result: miss ? 'miss' : dx <= R ? (dx <= R * 0.35 ? 'catch' : 'save') : 'goal' };
+      if (!a.target || !isFinite(a.target[0]) || !isFinite(a.target[1]) || !hitOk(a)) return false;
+      const target = [clamp(+a.target[0], -1.2, 1.2), clamp(+a.target[1], 0.03, 1.2)], b = shotBar(s), e = a.hit - b.pos, d = Math.abs(e), g = grade(c, a.hit, b.pos, b.w);
+      tally(s, g); drain(X, c.enShot);
+      // Unter Druck und klar daneben: der Gegner blockt den Schuss
+      if (b.pressed && (g === 'bad' || g === 'gross')) {
+        ev.push({ t: 'shot', side: 'you', x: sh.x, ctx: sh.ctx, q: sh.q, result: 'blocked', grade: g, dir: e < 0 ? -1 : 1, by: sh.by, target, kx: sh.keeper.x });
+        s.stats.shots++; s.shot = null; s.phase = 'decide';
+        if (sh.ctx === 'so') { const P_ = s.pen; P_.shots.you++; P_.results.push({ side: 'you', goal: false }); s.phase = 'done'; return; }
+        return lost(s, rng, ev, sh.by, g === 'gross');
+      }
+      /* Abweichung vom Ziel: keine im Kern, am Rand des grünen Felds die halbe Breite des freien Felds, ausserhalb im selben
+         Mass weiter. Wer in die Mitte des freien Felds zielt und den Strich im Feld stoppt, trifft also. Der Ball weicht auf
+         die Seite ab, auf der der Strich neben der Mitte stand: Strich links, Ball weiter links. Dabei folgt er der Linie von
+         der Tormitte zum Ziel: nach aussen steigt ein hoher Ball, nach innen kommt er dem Goalie näher. */
+      const core = b.w * c.barCore / 2, dev = d <= core ? 0 : (d - core) / (b.w / 2 - core) * freeW(s, sh, target[1] > 0.62) / 2;
+      const tx = target[0], ty = (target[1] - 0.45) / 0.69, tl = Math.hypot(tx, ty) || 1, hx = Math.max(Math.abs(tx) / tl, 0.6), hy = (tx < 0 ? -1 : 1) * ty / tl, hl = Math.hypot(hx, hy);
+      const sg = e < 0 ? -1 : 1, land = [tx + sg * dev * hx / hl, Math.max(0.03, target[1] + sg * dev * hy / hl * 0.69)], miss = missOf(c, land);
+      const kx = sh.keeper.x, R = reach(s, sh, land[1] > 0.62), dx = Math.abs(land[0] - kx);
+      r = { land, zone: zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])), target, power: 0.6, kx, reach: R, grade: g, dir: sg, dev, miss, result: miss ? 'miss' : dx <= R ? (dx <= R * 0.35 ? 'catch' : 'save') : 'goal' };
     } else {
       const zn = ZONES.indexOf(a.zone) !== -1 ? a.zone : null, rt = typeof a.rt === 'number' && isFinite(a.rt) ? Math.max(0, a.rt) : Infinity;
       const right = !!zn && inZone(sh.land, zn, c.rxEdge), inTime = rt <= sh.window;
@@ -501,7 +541,7 @@
   }
   function next(s, rng, ev) {
     if (s.pen) { if (penOver(s.pen)) finish(s); else penShot(s, rng); return; }
-    if (s.phase === 'break') { s.period++; s.perChances = 0; }
+    if (s.phase === 'break') { s.period++; s.perChances = 0; ['you', 'home'].forEach(sd => players(s, sd).forEach(c => drain(c, -s.cfg.enBreak))); }
     advance(s, rng, ev);
   }
   function finish(s) { s.outcome = s.pen ? (s.pen.you > s.pen.home ? 'penwin' : 'penloss') : (s.score.you > s.score.home ? 'win' : 'loss'); s.phase = 'end'; }
@@ -510,7 +550,7 @@
      hit ist die Stelle des Strichs auf dem Timing-Balken beim Tippen (0 bis 1), siehe contest().
      Angriff:  { type: 'shoot', hit } | { type: 'pass', to, hit } | { type: 'dribble', hit }   freier Schuss: ohne hit
      Abwehr:   { type: 'defend', hit }
-     Schuss:   { type: 'aim', target: [x, y], t } eigener Schuss, t in ms seit Beginn der Schussphase
+     Schuss:   { type: 'aim', target: [x, y], hit } eigener Schuss: Ziel im Tor und Stelle des Strichs auf dem Schuss-Balken
                { type: 'aim', zone, rt } Parade, rt in ms seit dem Abschluss des Gegners
      Taktik:   { type: 'tactic', value: 'def' | 'bal' | 'off' } jederzeit, gilt ab der nächsten Chance
      Weiter:   { type: 'next' } nach einer Chance oder in der Drittelspause: die Uhr läuft bis zur nächsten Chance */
@@ -526,5 +566,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TACTICS, KINDS, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, keeperX, reach, rad, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TACTICS, KINDS, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, tired, reach, freeW, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);
