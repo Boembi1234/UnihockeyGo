@@ -1,7 +1,7 @@
 /* Match mit Schlüsselszenen: Oberfläche. Rechnet nichts selbst aus, sondern zeigt, was HKMatch zurückgibt. */
 (function () {
   'use strict';
-  const E = window.HK, W = window.HKWorld, M = window.HKMatch, C = window.HKClub, S = window.HKStore;
+  const E = window.HK, W = window.HKWorld, M = window.HKMatch, C = window.HKClub, S = window.HKStore, KP = window.HKKeeper;
   const $ = id => document.getElementById(id), NS = 'http://www.w3.org/2000/svg';
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
@@ -435,26 +435,13 @@
 
   // --- Tor von vorne: wie im Testduell ---
   const START = [180, 290];
-  const POSE = { tl: [-56, -44, -40, 1], tr: [56, -44, 40, 1], bl: [-64, -4, -66, 1], br: [64, -4, 66, 1], tm: [0, -34, 0, 1.04], bm: [0, 4, 0, 1.14] };
   const toScene = g => [180 + g[0] * 102, 236 - g[1] * 148];
   const toGoalXY = p => [(p[0] - 180) / 102, (236 - p[1]) / 148];
   const K = () => $('goalview').clientWidth / 360;
   const ballTf = (p, s) => { const k = K(); return `translate(${((p[0] - 12) * k).toFixed(1)}px,${((p[1] - 12) * k).toFixed(1)}px) scale(${s})`; };
-  const poseTf = (p, sq) => { const k = K(); return `translate(${(p[0] * k).toFixed(1)}px,${(p[1] * k).toFixed(1)}px) rotate(${p[2]}deg) scale(${p[3] * (sq || 1)})`; };
   function placeAt(el, p, sizePct) { const k = K(), w = 360 * sizePct / 100, tr = `translate(${((p[0] - w / 2) * k).toFixed(1)}px,${((p[1] - w / 2) * k).toFixed(1)}px)`; el.style.transform = tr; return tr; }
   function burst(id, p, size, from, to, ms) { const el = $(id), tr = placeAt(el, p, size); fresh(el); el.hidden = false; anim(el, [{ transform: tr + ` scale(${from})`, opacity: 1 }, { transform: tr + ` scale(${to})`, opacity: 0 }], { duration: ms, easing: 'ease-out' }); }
-  function keeperSvg(team) {
-    const you = team === 'you', body = you ? '#1a57ff' : '#e0ad35', trim = you ? '#ffffff' : '#1a1203', pad = you ? '#e3ecff' : '#fff6dc', helm = you ? '#dfe7fb' : '#2a2f42', cage = you ? '#0e1b47' : '#f7d774';
-    return `<svg viewBox="0 0 120 92" aria-hidden="true"><g stroke="#050818" stroke-width="2" stroke-linejoin="round">
-<path d="M8 72 Q6 86 20 89 L56 89 Q60 81 53 73 Z" fill="${pad}"/><path d="M112 72 Q114 86 100 89 L64 89 Q60 81 67 73 Z" fill="${pad}"/>
-<path d="M41 33 Q60 27 79 33 L86 74 Q60 82 34 74 Z" fill="${body}"/>
-<path d="M42 36 L17 49 L21 57 L46 46 Z" fill="${body}"/><path d="M78 36 L103 49 L99 57 L74 46 Z" fill="${body}"/>
-<circle cx="15" cy="55" r="8" fill="${pad}"/><circle cx="105" cy="55" r="8" fill="${pad}"/>
-<circle cx="60" cy="20" r="14" fill="${helm}"/></g>
-<path d="M50 20 H70 M50 25.5 H70 M54.5 14 V31 M60 13 V33 M65.5 14 V31" stroke="${cage}" stroke-width="1.6" stroke-linecap="round"/>
-<path d="M36 64 Q60 70 84 64" fill="none" stroke="${trim}" stroke-width="3"/>
-<text x="60" y="57" text-anchor="middle" font-family="'Saira Condensed','Arial Narrow',sans-serif" font-weight="800" font-size="17" fill="${trim}">1</text></svg>`;
-  }
+  let kpr = null;   // Goalie-Figur mit Gelenken (keeper.js)
   function leaveGoal() {
     const gv = $('goalview'); if (gv.hidden) return;
     [gv, $('keeper'), $('ball')].forEach(fresh);
@@ -483,13 +470,13 @@
   function hideFree() { FREE.forEach(id => { $(id).hidden = true; }); }
   function stopSway() { cancelAnimationFrame(sway.raf); sway.raf = 0; }
   function startSway() {
-    const sh = G.shot, kp = $('keeper'), R = [M.reach(G, sh, false), M.reach(G, sh, true)], pc = g => (180 + g * 102) / 3.6;
+    const sh = G.shot, R = [M.reach(G, sh, false), M.reach(G, sh, true)], pc = g => (180 + g * 102) / 3.6; let last = null;
     const F = FREE.map((id, i) => ({ el: $(id), R: R[i % 2], left: i < 2 }));
     stopSway(); sway.t0 = performance.now();
     (function loop(now) {
       if (phase !== 'aim' || G.shot !== sh) return;
-      const kx = M.keeperX(sh.keeper, now - sway.t0); sway.kx = kx;
-      kp.style.transform = poseTf([kx * 102, 0, 0, 1]);
+      const kx = M.keeperX(sh.keeper, now - sway.t0), dir = last === null ? 0 : Math.sign(kx - last); sway.kx = kx; last = kx;
+      kpr.set(KP.shuffle(180 + kx * 102, dir, kx * 102 / 9));
       F.forEach(f => { const a = f.left ? -1 : kx + f.R, b = f.left ? kx - f.R : 1, on = b > a + 0.01; f.el.hidden = !on; if (on) { f.el.style.left = pc(a).toFixed(2) + '%'; f.el.style.width = (pc(b) - pc(a)).toFixed(2) + '%'; } });
       sway.raf = requestAnimationFrame(loop);
     })(sway.t0);
@@ -504,7 +491,7 @@
     setZoom(sh.q);
     const kp = $('keeper'), ball = $('ball');
     [kp, ball].forEach(fresh);
-    kp.innerHTML = keeperSvg(mine ? 'home' : 'you'); kp.style.transform = '';
+    kp.style.transform = ''; kpr = KP.create(kp, mine ? 'home' : 'you'); kpr.set(KP.ready(180));
     ball.hidden = false; ball.style.opacity = '1'; ball.style.transform = ballTf(START, 2.1);
     $('ripple').hidden = true; $('spark').hidden = true; $('mark').hidden = true; hideFree(); $('tell').hidden = true;
     const sco = Math.round(M.shotVal(X)), far = sh.q < 0.4 ? 'aus der Distanz' : sh.q < 0.75 ? 'aus mittlerer Distanz' : 'aus der Nähe';
@@ -522,7 +509,7 @@
     // Schuss des Gegners: erst ein kurzer, unterschiedlich langer Anlauf, dann fliegt der Ball. Die Flugzeit ist dein Zeitfenster.
     say(`${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`);
     $('hist').innerHTML = `<em>${sh.press > 0 ? 'Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? 'Freie Bahn für den Schützen: du hast weniger Zeit.' : 'Der goldene Ring zeigt, wo der Ball hinfliegt.'}</em>`;
-    phase = 'wait';
+    phase = 'wait'; kpr.idle();
     const pulse = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf([START[0], START[1] + 5], 2.3) }], { duration: 300, iterations: Infinity, direction: 'alternate' });
     clearTimeout(rx.timer);
     rx.timer = setTimeout(() => { pulse.cancel(); if (G.shot === sh && phase === 'wait') react(sh); }, 650 + Math.random() * 900);
@@ -546,17 +533,10 @@
     if (phase !== 'react') return;
     const now = performance.now(), t = ts && ts <= now && now - ts < 250 ? ts : now;
     clearTimeout(rx.timer);
-    anim($('keeper'), [{ transform: 'none' }, { transform: poseTf(POSE[z]) }], { duration: 170, easing: 'cubic-bezier(.2,.8,.3,1)' });
     aimAt({ zone: z, rt: Math.max(0, t - rx.t0) });
   }
-  // Sprung des gegnerischen Goalies: von seiner Stelle zum Ball. Reicht er nicht hin, bleibt er deutlich davor.
-  function dive(e) {
-    const dir = Math.sign(e.land[0] - e.kx) || 1, gap = Math.abs(e.land[0] - e.kx), top = e.land[1] > 0.55;
-    const to = e.result === 'goal' ? e.kx + dir * Math.max(0, gap - 0.8) : e.land[0], move = to - e.kx;   // bei einem Tor bleibt er sichtbar vor dem Ball
-    return poseTf([to * 102, top ? -40 : Math.abs(move) < 0.12 ? 4 : -4, Math.max(-66, Math.min(66, move * (top ? 70 : 110))), Math.abs(move) < 0.12 && !top ? 1.12 : 1]);
-  }
   async function shotSeq(e) {
-    const mine = e.side === 'you', ball = $('ball'), kp = $('keeper'), L = toScene(e.land), X = card(e.side, e.x), bs = 0.95 * gz.s;
+    const mine = e.side === 'you', ball = $('ball'), L = toScene(e.land), X = card(e.side, e.x), bs = 0.95 * gz.s;
     let endL = L, outL = null, fadeOut = false;
     if (e.result === 'save') outL = [endL[0] + (endL[0] < 180 ? -95 : 95), Math.max(30, endL[1] - 110)];
     else if (e.result === 'miss' && e.miss === 'post') { endL = postPt(e.land, L); outL = [endL[0] + (endL[0] < 180 ? -60 : 60), 252]; }
@@ -565,15 +545,18 @@
     $('shooter').hidden = true; hideFree();
     if (mine) {
       say(`${X.last} schiesst.`);
-      const pre = [START[0], START[1] + 6], mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24], from = poseTf([e.kx * 102, 0, 0, 1]);
-      kp.style.transform = from;
+      const pre = [START[0], START[1] + 6], mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24];
       await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(pre, 2.25) }], { duration: 130, easing: 'ease-out' });
       const fly = anim(ball, [{ transform: ballTf(pre, 2.25) }, { transform: ballTf(mid, (2.25 + bs) / 2), offset: 0.5 }, { transform: ballTf(end, bs) }], { duration: 400, easing: 'cubic-bezier(.3,.6,.4,1)' });
-      await wait(60);
-      anim(kp, [{ transform: from }, { transform: dive(e) }], { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
+      await wait(40);
+      // Parade: Hand oder Bein geht zum Ball. Bei einem Tor bleibt er sichtbar davor.
+      const short = e.result === 'goal' ? Math.max(16, Math.min(46, (Math.abs(e.land[0] - e.kx) - e.reach) * 102 + 16)) : 0;
+      kpr.to(KP.save(180 + e.kx * 102, e.miss ? [L[0], Math.min(L[1], 200)] : L, { short }), 300);
       await fly;
     } else {
       say(e.guess ? `Du springst ${ZNAME[e.guess]}.` : 'Keine Reaktion.');
+      // Dein Goalie: bei einer Parade genau an den Ball, sonst in die gewählte Ecke
+      if (e.result === 'save' || e.result === 'catch') kpr.to(KP.save(180, L, {}), 190); else if (e.guess) kpr.to(KP.save(180, toScene(M.ZC[e.guess]), {}), 190); else kpr.stop();
       await rx.flight; rx.flight = null; fresh($('mark')); $('mark').hidden = true;
     }
     if (e.result === 'goal') { anim(ball, [{ transform: ballTf(end, bs) }, { transform: ballTf([end[0], end[1] + 6 * gz.s], bs * 0.82) }], { duration: 160 }); burst('ripple', endL, 22, 0.3, 1.25, 520); scored(e.side, e.ctx); }

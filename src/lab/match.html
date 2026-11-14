@@ -96,6 +96,7 @@
 .pass .pct{font-size:18px}
 /* Torsicht: freie Felder neben dem Goalie (dein Schuss) und Landepunkt (Schuss des Gegners) */
 .gscale{position:absolute;inset:0;transform-origin:0 0}
+.stage.match .keeper{left:0;top:0;width:100%;height:100%;transform:none;pointer-events:none}
 .free{position:absolute;top:55.46%;height:35.31%;z-index:1;background:rgba(16,185,129,.4);box-shadow:inset 0 0 0 2px #34d399;pointer-events:none}
 .free.top{top:33.846%;height:21.62%}
 
@@ -303,6 +304,9 @@
 </script>
 <script id="hk-club">
 /*__CLUB__*/
+</script>
+<script id="hk-keeper">
+/*__KEEPER__*/
 </script>
 <script id="hk-store">
 /*__STORE__*/
