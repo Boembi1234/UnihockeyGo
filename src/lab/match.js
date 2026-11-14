@@ -26,11 +26,12 @@
     blockBase: 0.65,                                                  // Schuss geblockt, wenn ein Gegner ganz nah steht
     // Pass und Dribbling
     laneRange: 40, intercept: 0.55, passLong: 700,
-    drib: 0.52, dribSlope: 0.025, dribMin: 0.15, dribMax: 0.85,
+    drib: 0.52, dribSlope: 0.04, dribMin: 0.12, dribMax: 0.9,
     // Ballverlust und Konter
     counterLoss: 0.3, counterWin: 0.35,
     // Abwehrszene: richtige Abwehr stoppt so oft, verschoben um den Wertevergleich
-    stopRight: 0.5, stopSlope: 0.02, stopMin: 0.3, stopMax: 0.9, stopHalf: 0.15,
+    stopRight: 0.5, stopSlope: 0.035, stopMin: 0.25, stopMax: 0.92, stopHalf: 0.15,
+    traitBonus: 0.15,                                                 // Spezialfähigkeit im passenden Einsatz
     keeperMemory: 6, tellTrue: 0.65
   };
 
@@ -55,6 +56,23 @@
   const passVal = c => E.eff(c.ply, c);
   const strength = cards => cards.reduce((a, c) => a + E.eff(c.ovr, c), 0) / cards.length;
 
+  /* Spezialfähigkeiten aus den Ratings. Jede Karte hat höchstens eine: Stürmer zuerst eine Angriffs-, Verteidiger zuerst eine
+     Abwehrfähigkeit, jeweils die, deren Wert die Schwelle am weitesten übertrifft. Im passenden Einsatz gibt sie einen grossen Bonus. */
+  const TRAITS = {
+    kanone: { name: 'Kanone', what: 'Schuss', off: true, val: c => c.sco, min: 98 },
+    passer: { name: 'Passmaschine', what: 'Pass', off: true, val: c => c.ply, min: 98 },
+    dribbler: { name: 'Dribbelkönig', what: 'Dribbling', off: true, val: c => (c.frm + c.clu) / 2, min: 95.5 },
+    wand: { name: 'Wand', what: 'Block', off: false, val: c => 0.6 * c.exp + 0.4 * c.clu + (c.pos === 'DEF' ? 5 : 0), min: 97 },
+    anti: { name: 'Antizipation', what: 'Passweg', off: false, val: c => 0.6 * c.ply + 0.4 * c.exp + (c.pos === 'DEF' ? 5 : 0), min: 97 },
+    kampf: { name: 'Zweikämpfer', what: 'Druck', off: false, val: c => 0.7 * c.frm + 0.3 * c.fai + (c.pos === 'DEF' ? 5 : 0), min: 98 }
+  };
+  function trait(c) {
+    const pick = off => { let b = null, m = 0; Object.keys(TRAITS).forEach(k => { const t = TRAITS[k]; if (t.off !== off) return; const x = t.val(c) - t.min; if (x >= 0 && x >= m) { m = x; b = k; } }); return b; };
+    const first = c.pos === 'DEF' ? false : true;
+    return pick(first) || pick(!first);
+  }
+  const has = (c, t) => !!c && trait(c) === t;
+
   // --- Lage auf dem Feld ---
   const atkSide = sc => (sc.type === 'att' ? 'you' : 'home');
   const P = (sc, id) => sc.pos[id];
@@ -65,25 +83,28 @@
     const side = atkSide(sc), X = card(s, side, id), p = P(sc, id), d = dist(p, GOAL);
     const q = clamp(1 - (d - 55) / 250, 0.12, 1) * clamp(1 - Math.abs(p[0] - 180) / 280, 0.5, 1);
     const n = nearest(s, sc, other(side), p), press = clamp(1 - n.d / 55, 0, 1);
-    const block = clamp(press * s.cfg.blockBase * clamp(1 + (stanceVal(n.c, 'block') - shotVal(X)) * 0.02, 0.5, 1.5), 0, 0.7);
-    return { q, block, by: n.c.id };
+    const block = clamp(press * s.cfg.blockBase * clamp(1 + (stanceVal(n.c, 'block') - shotVal(X)) * 0.02, 0.5, 1.5) * (has(n.c, 'wand') ? 1.4 : 1), 0, 0.75);
+    // Grobe Torchance für die Anzeige, bei einem guten Schuss in eine freie Ecke
+    const est = (1 - block) * clamp(0.5 + (shotVal(X) - 88) * 0.012 + (q - 0.6) * 0.7 + (has(X, 'kanone') ? 0.1 : 0), 0.05, 0.9);
+    return { q, block, by: n.c.id, est };
   }
   // Risiko, dass der Pass abgefangen wird: Gegner nahe der Passlinie, Länge des Passes, Vorlagen des Passgebers
   function passInfo(s, sc, from, to) {
     const side = atkSide(sc), a = P(sc, from), b = P(sc, to), X = card(s, side, from);
     let keep = 1, by = null, worst = 0;
     players(s, other(side)).forEach(d => {
-      const r = clamp(1 - distSeg(P(sc, d.id), a, b) / s.cfg.laneRange, 0, 1) * clamp(s.cfg.intercept + (stanceVal(d, 'pass') - 88) * 0.015, 0.2, 0.95);
+      const r = clamp(1 - distSeg(P(sc, d.id), a, b) / s.cfg.laneRange, 0, 1) * clamp(s.cfg.intercept + (stanceVal(d, 'pass') - 88) * 0.025, 0.15, 0.95) * (has(d, 'anti') ? 1.35 : 1);
       keep *= 1 - r; if (r > worst) { worst = r; by = d.id; }
     });
-    const risk = (1 - keep) * clamp(1.25 - (passVal(X) - 70) / 100, 0.6, 1.2) + Math.max(0, dist(a, b) - 160) / s.cfg.passLong;
+    const risk = ((1 - keep) * clamp(1.4 - (passVal(X) - 70) / 60, 0.5, 1.3) + Math.max(0, dist(a, b) - 160) / s.cfg.passLong) * (has(X, 'passer') ? 0.5 : 1);
     if (!by) by = nearest(s, sc, other(side), lerp(a, b, 0.5)).c.id;   // langer Pass ohne Gegner in der Linie: der nächste läuft ihn ab
     return { risk: clamp(risk, 0.03, 0.9), by };
   }
   function dribInfo(s, sc, id) {
     const side = atkSide(sc), X = card(s, side, id), M = card(s, other(side), sc.mark[id]);
     const space = (dist(P(sc, id), P(sc, M.id)) - 40) / 200;
-    return { p: clamp(s.cfg.drib + (dribVal(X) - stanceVal(M, 'zwei')) * s.cfg.dribSlope + space, s.cfg.dribMin, s.cfg.dribMax), by: M.id, edge: dribVal(X) - stanceVal(M, 'zwei') };
+    const bonus = (has(X, 'dribbler') ? s.cfg.traitBonus : 0) - (has(M, 'kampf') ? s.cfg.traitBonus : 0);
+    return { p: clamp(s.cfg.drib + (dribVal(X) - stanceVal(M, 'zwei')) * s.cfg.dribSlope + space + bonus, s.cfg.dribMin, s.cfg.dribMax), by: M.id, edge: dribVal(X) - stanceVal(M, 'zwei'), av: dribVal(X), dv: stanceVal(M, 'zwei') };
   }
 
   // Laufwege: Nach jeder gelungenen Aktion bewegen sich die anderen Angreifer, ihre Gegenspieler folgen ihnen.
@@ -157,7 +178,7 @@
     s.shot = sh; s.phase = 'aim';
   }
   function resolveShot(s, rng, sh, target, power, guess) {
-    const c = s.cfg, X = card(s, sh.side, sh.x), sd = spread(s, X, power, sh.q);
+    const c = s.cfg, X = card(s, sh.side, sh.x), sd = spread(s, X, power, sh.q) * (has(X, 'kanone') ? 0.6 : 1);
     const land = [target[0] + gauss(rng) * sd, Math.max(0.03, target[1] + gauss(rng) * sd * 0.8)];
     const ax = Math.abs(land[0]), lz = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1]));
     const base = { land, zone: lz, guess, right: lz === guess, near: adjacent(lz, guess), power, target };
@@ -169,6 +190,7 @@
     let ps = lz === guess ? c.saveSame - power * c.savePow - d * c.saveSco - edge : adjacent(lz, guess) ? c.saveAdj - power * 0.3 - d * 0.01 - edge : 0;
     if (ax < 0.3 && land[1] < 0.6) ps = Math.max(ps, c.saveBody - power * 0.2 - d * 0.01);
     ps += c.saveDist * (1 - sh.q);
+    if (has(X, 'kanone')) ps -= 0.12;
     if (sh.ctx === 'counter') ps -= 0.1;
     ps = clamp(ps, 0, 0.95);
     if (rng() < ps) return Object.assign(base, { result: power < 0.5 && lz === guess ? 'catch' : 'save' });
@@ -259,7 +281,7 @@
     const sc = s.cur, X = sc.carrier;
     if (a.type === 'shoot') {
       const sh = shotInfo(s, sc, X);
-      ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block });
+      ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, av: shotVal(card(s, 'you', X)), dv: stanceVal(card(s, 'home', sh.by), 'block'), trait: has(card(s, 'you', X), 'kanone') ? 'kanone' : null, btrait: has(card(s, 'home', sh.by), 'wand') ? 'wand' : null });
       if (rng() < sh.block) { ev.push({ t: 'blocked', x: X, by: sh.by }); return lost(s, rng, ev, sh.by); }
       setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack'); return;
     }
@@ -268,7 +290,7 @@
       if (!card(s, 'you', a.to) || a.to === X) return false;
       const pi = passInfo(s, sc, X, a.to), ok = rng() >= pi.risk;
       s.stats.passes++;
-      ev.push({ t: 'pass', from: X, to: a.to, ok, risk: pi.risk, by: pi.by });
+      ev.push({ t: 'pass', from: X, to: a.to, ok, risk: pi.risk, by: pi.by, av: passVal(card(s, 'you', X)), dv: stanceVal(card(s, 'home', pi.by), 'pass'), trait: has(card(s, 'you', X), 'passer') ? 'passer' : null, dtrait: has(card(s, 'home', pi.by), 'anti') ? 'anti' : null });
       if (!ok) { sc.pos[pi.by] = lerp(P(sc, X), P(sc, a.to), 0.5); return lost(s, rng, ev, pi.by); }
       s.stats.passOk++;
       // Der Empfänger hat kurz Luft: sein Gegenspieler kommt einen Schritt zu spät
@@ -278,7 +300,7 @@
     if (a.type === 'dribble') {
       const di = dribInfo(s, sc, X), ok = rng() < di.p;
       s.stats.dribbles++;
-      ev.push({ t: 'dribble', x: X, by: di.by, ok, p: di.p });
+      ev.push({ t: 'dribble', x: X, by: di.by, ok, p: di.p, av: di.av, dv: di.dv, trait: has(card(s, 'you', X), 'dribbler') ? 'dribbler' : null, dtrait: has(card(s, 'home', di.by), 'kampf') ? 'kampf' : null });
       if (!ok) return lost(s, rng, ev, di.by);
       s.stats.dribOk++;
       const p = P(sc, X), to = lerp(p, GOAL, clamp(70 / dist(p, GOAL), 0.2, 0.55));
@@ -288,22 +310,29 @@
     }
     return false;
   }
+  // Wer abwehrt und wie gut, wenn du richtig liest. Für Anzeige und Auflösung.
+  function defChoice(s, sc, action, target) {
+    const X = card(s, 'home', sc.carrier);
+    let D, kind, stat, tr;
+    if (action === 'press') { D = nearest(s, sc, 'you', P(sc, X.id)).c; kind = 'dribble'; stat = 'zwei'; tr = 'kampf'; }
+    else if (action === 'block') { let b = null, bd = Infinity; players(s, 'you').forEach(c => { const d = distSeg(P(sc, c.id), P(sc, X.id), GOAL); if (d < bd) { bd = d; b = c; } }); D = b; kind = 'shoot'; stat = 'block'; tr = 'wand'; }
+    else { D = card(s, 'you', sc.mark[target]) || nearest(s, sc, 'you', P(sc, target)).c; kind = 'pass'; stat = 'pass'; tr = 'anti'; }
+    const atkV = kind === 'shoot' ? shotVal(X) : kind === 'pass' ? passVal(X) : dribVal(X), dv = stanceVal(D, stat), c = s.cfg;
+    const bonus = (has(D, tr) ? c.traitBonus : 0) - (kind === 'shoot' && has(X, 'kanone') || kind === 'pass' && has(X, 'passer') || kind === 'dribble' && has(X, 'dribbler') ? c.traitBonus : 0);
+    return { D, kind, atkV, dv, trait: has(D, tr) ? tr : null, p: clamp(c.stopRight + (dv - atkV) * c.stopSlope + bonus, c.stopMin, c.stopMax) };
+  }
   function defAction(s, rng, ev, a) {
     const sc = s.cur, X = card(s, 'home', sc.carrier), it = sc.intent;
     if (['press', 'block', 'lane'].indexOf(a.action) === -1) return false;
     if (a.action === 'lane' && !card(s, 'home', a.target)) return false;
-    const atkV = it.kind === 'shoot' ? shotVal(X) : it.kind === 'pass' ? passVal(X) : dribVal(X);
-    let D, right;
-    if (a.action === 'press') { D = nearest(s, sc, 'you', P(sc, X.id)).c; right = it.kind === 'dribble'; }
-    else if (a.action === 'block') { let b = null, bd = Infinity; players(s, 'you').forEach(c => { const d = distSeg(P(sc, c.id), P(sc, X.id), GOAL); if (d < bd) { bd = d; b = c; } }); D = b; right = it.kind === 'shoot'; }
-    else { D = card(s, 'you', sc.mark[a.target]) || nearest(s, sc, 'you', P(sc, a.target)).c; right = it.kind === 'pass' && it.to === a.target; }
-    const val = stanceVal(D, a.action === 'press' ? 'zwei' : a.action === 'block' ? 'block' : 'pass'), c = s.cfg;
+    const ch = defChoice(s, sc, a.action, a.target), D = ch.D, c = s.cfg;
+    const right = it.kind === ch.kind && (it.kind !== 'pass' || it.to === a.target);
     let stop;
-    if (right) stop = clamp(c.stopRight + (val - atkV) * c.stopSlope, c.stopMin, c.stopMax);
+    if (right) stop = ch.p;
     else if (it.kind === 'pass') stop = Math.max(passInfo(s, sc, X.id, it.to).risk * 0.8, a.action === 'press' ? c.stopHalf : 0.1);
     else stop = (a.action === 'press' && it.kind === 'shoot') || (a.action === 'block' && it.kind === 'dribble') ? c.stopHalf : 0.1;
     const ok = rng() < stop;
-    ev.push({ t: 'defend', action: a.action, target: a.target || null, intent: it, by: D.id, x: X.id, right, stopped: ok, p: stop });
+    ev.push({ t: 'defend', action: a.action, target: a.target || null, intent: it, by: D.id, x: X.id, right, stopped: ok, p: stop, av: ch.atkV, dv: ch.dv, trait: right ? ch.trait : null });
     if (ok) {
       s.stats.stops++;
       // Ballgewinn: manchmal wird daraus ein Konter für dich
@@ -374,5 +403,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, keeperWeights, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TRAITS, trait, defChoice, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, keeperWeights, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

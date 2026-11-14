@@ -52,6 +52,7 @@
       svg('circle', { r: 15, fill: t.fill, stroke: t.ring, 'stroke-width': 2.5, class: 'body' }, el);
       const n = svg('text', { y: 5.5, 'text-anchor': 'middle', class: 'num', fill: t.text }, el); n.textContent = c.no === null || c.no === undefined ? c.last.slice(0, 2).toUpperCase() : c.no;
       const l = svg('text', { y: 29, 'text-anchor': 'middle', class: 'lab' }, el); l.textContent = c.last;
+      if (M.trait(c)) svg('path', { d: 'M12 -18 L16 -13 L12 -8 L8 -13 Z', fill: '#f7d774', stroke: '#050818', 'stroke-width': 1.2 }, el);   // Raute: Spezialfähigkeit
       els[c.id] = el; pos[c.id] = [180, 380];
     }));
   }
@@ -156,46 +157,61 @@
   }
 
   // --- Entscheidung ---
+  // Prozent, Rating-Duell und Spezialfähigkeit pro Aktion
+  const pctOf = p => Math.round(p * 100) + '%';
+  const TR = id => { const c = card(sideOf(id), id), t = c && M.trait(c); return t ? M.TRAITS[t] : null; };
+  const trChip = (id, want, bad) => { const c = card(sideOf(id), id), t = c && M.trait(c); return t === want ? `<i class="tr${bad ? ' bad' : ''}">${M.TRAITS[t].name}</i>` : ''; };
+  const r0 = v => Math.round(v);
   function renderDecision() {
     phase = 'decide';
     const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), panel = $('panel');
     $('hint').hidden = true; panel.hidden = false;
     Object.keys(els).forEach(k => els[k].classList.remove('pick'));
-    const last = sc.step >= sc.max - 1;
+    const last = sc.step >= sc.max - 1, xt = TR(X.id);
     if (att) {
       setTag(sc.counter ? 'Konter' : 'Angriff', 'you');
-      say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : ' Schiessen, passen oder dribbeln?'));
-      const sh = M.shotInfo(G, sc, X.id), cw = chanceWord(sh.q), di = M.dribInfo(G, sc, X.id), mk = card('home', di.by), dw = dribWord(di.p);
-      const arrows = di.edge >= 6 ? '▲▲' : di.edge >= 2 ? '▲' : di.edge > -2 ? '=' : di.edge > -6 ? '▼' : '▼▼';
+      say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : ' Wähle die Aktion mit der besten Chance.'));
+      const sh = M.shotInfo(G, sc, X.id), di = M.dribInfo(G, sc, X.id), mk = card('home', di.by), bl = card('home', sh.by);
       let h = `<div class="actions2">
-<button type="button" class="act" data-a="shoot">${'<b>' + ic('shoot') + 'Schuss</b>'}<small>Chance <em class="${cw[1]}">${cw[0]}</em>${sh.block > 0.25 ? ', ein Gegner steht nah: Block-Gefahr' : ''}</small></button>
-<button type="button" class="act" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>gegen ${esc(mk.last)} ${arrows}: <em class="${dw[1]}">${dw[0]}</em></small></button></div>`;
+<button type="button" class="act${M.trait(X) === 'kanone' ? ' fit' : ''}" data-a="shoot"><b>${ic('shoot')}Schuss</b><span class="pct">${pctOf(sh.est)}</span><small>${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val}${sh.block > 0.2 ? `, Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${sh.block > 0.2 ? trChip(bl.id, 'wand', true) : ''}</small></button>
+<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><span class="pct">${pctOf(di.p)}</span><small>${r0(di.av)} gegen ${esc(mk.last)} ${r0(di.dv)}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
       if (!last) {
         h += '<p class="passes-head">Pass, tippe auch direkt auf dem Feld</p><div class="passes">' + G.teams.you.cards.filter(c => c.id !== X.id).map(c => {
-          const pi = M.passInfo(G, sc, X.id, c.id), rw = riskWord(pi.risk), q = chanceWord(M.shotInfo(G, sc, c.id).q);
+          const pi = M.passInfo(G, sc, X.id, c.id), rw = riskWord(pi.risk), q = M.shotInfo(G, sc, c.id), by = card('home', pi.by);
           els[c.id].classList.add('pick');
-          return `<button type="button" class="pass" data-to="${c.id}"><i class="${rw[1]}"></i><span>${esc(c.last)}<small>${rw[0]}, Chance dort ${q[0]}</small></span></button>`;
+          return `<button type="button" class="pass" data-to="${c.id}"><i class="${rw[1]}"></i><span>${esc(c.last)}<small>${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))} · dort Schuss ${pctOf(q.est)}</small></span><em class="pct">${pctOf(1 - pi.risk)}</em></button>`;
         }).join('') + '</div>';
       }
       panel.innerHTML = h;
-      $('hist').innerHTML = `<em>${esc(X.last)}: Abschluss ${Math.round(M.shotVal(X))}, Vorlagen ${Math.round(M.passVal(X))}, Dribbling ${Math.round(M.dribVal(X))}.</em>`;
+      $('hist').innerHTML = xt && xt.off ? `<em>${esc(X.last)} ist <b class="tr">${xt.name}</b>: Bonus beim ${xt.what}.</em>` : `<em>${esc(X.last)}: Abschluss ${r0(M.shotVal(X))}, Vorlagen ${r0(M.passVal(X))}, Dribbling ${r0(M.dribVal(X))}.</em>`;
     } else {
       setTag('Abwehr', 'home');
       say(`${X.last} hat den Ball. Was hat er vor?`);
-      const sh = M.shotInfo(G, sc, X.id), cw = chanceWord(sh.q);
+      const pr = M.defChoice(G, sc, 'press'), bk = M.defChoice(G, sc, 'block'), sh = M.shotInfo(G, sc, X.id);
       let h = `<div class="actions2">
-<button type="button" class="act" data-d="press"><b>${ic('press')}Druck</b><small>auf ${esc(X.last)}, stoppt ein Dribbling</small></button>
-<button type="button" class="act" data-d="block"><b>${ic('block')}Block</b><small>stoppt einen Schuss. Seine Chance: <em class="${cw[1]}">${cw[0]}</em></small></button></div>`;
-      h += '<p class="passes-head">Passweg zustellen, tippe auch direkt auf dem Feld</p><div class="passes">' + G.teams.home.cards.filter(c => c.id !== X.id).map(c => {
-        const v = (1 - M.passInfo(G, sc, X.id, c.id).risk) * M.shotInfo(G, sc, c.id).q, w = v > 0.45 ? ['gefährlich', 'r-high'] : v > 0.25 ? ['mittel', 'r-mid'] : ['harmlos', 'r-low'];
+<button type="button" class="act${pr.trait ? ' fit' : ''}" data-d="press"><b>${ic('press')}Druck</b><span class="pct">${pctOf(pr.p)}</span><small>wenn er dribbelt · ${esc(pr.D.last)} ${r0(pr.dv)} gegen ${r0(pr.atkV)}${pr.trait ? `<i class="tr">${M.TRAITS[pr.trait].name}</i>` : ''}</small></button>
+<button type="button" class="act${bk.trait ? ' fit' : ''}" data-d="block"><b>${ic('block')}Block</b><span class="pct">${pctOf(bk.p)}</span><small>wenn er schiesst · ${esc(bk.D.last)} ${r0(bk.dv)} gegen ${r0(bk.atkV)}${bk.trait ? `<i class="tr">${M.TRAITS[bk.trait].name}</i>` : ''}</small></button></div>`;
+      h += '<p class="passes-head">Passweg zustellen, wenn er dorthin passt</p><div class="passes">' + G.teams.home.cards.filter(c => c.id !== X.id).map(c => {
+        const ln = M.defChoice(G, sc, 'lane', c.id), v = (1 - M.passInfo(G, sc, X.id, c.id).risk) * M.shotInfo(G, sc, c.id).q, w = v > 0.45 ? ['gefährlich', 'r-high'] : v > 0.25 ? ['mittel', 'r-mid'] : ['harmlos', 'r-low'];
         els[c.id].classList.add('pick');
-        return `<button type="button" class="pass" data-lane="${c.id}"><i class="${w[1]}"></i><span>${esc(c.last)}<small>${w[0]}</small></span></button>`;
+        return `<button type="button" class="pass" data-lane="${c.id}"><i class="${w[1]}"></i><span>${esc(c.last)}<small>${w[0]} · ${esc(ln.D.last)} ${r0(ln.dv)} gegen ${r0(ln.atkV)}${ln.trait ? ' · ' + M.TRAITS[ln.trait].name : ''}</small></span><em class="pct">${pctOf(ln.p)}</em></button>`;
       }).join('') + '</div>';
       panel.innerHTML = h;
-      $('hist').innerHTML = `<em>${esc(X.last)}: Abschluss ${Math.round(M.shotVal(X))}, Vorlagen ${Math.round(M.passVal(X))}, Dribbling ${Math.round(M.dribVal(X))}. Seine Schusschance hier: ${cw[0]}.</em>`;
+      $('hist').innerHTML = `<em>${esc(X.last)}: Abschluss ${r0(M.shotVal(X))}, Vorlagen ${r0(M.passVal(X))}, Dribbling ${r0(M.dribVal(X))}${xt ? ', ' + xt.name : ''}. Schusschance hier ${pctOf(sh.est)}. Die Prozente gelten, wenn du seinen Plan richtig liest.</em>`;
     }
     drawLanes();
   }
+  // Rating-Duell: zwei Werte gegeneinander, der Gewinner leuchtet auf. win: 'a', 'd' oder null.
+  async function duelPop(a, d, win) {
+    const box = $('duel'), A = $('dl-a'), Dd = $('dl-d');
+    const fill = (el, x) => { el.className = 'dl ' + sideOf(x.id); el.querySelector('span').textContent = card(sideOf(x.id), x.id).last + ' · ' + x.stat; el.querySelector('b').textContent = Math.round(x.v); el.querySelector('i').textContent = x.trait ? M.TRAITS[x.trait].name : ''; };
+    fill(A, a); fill(Dd, d); box.className = 'duel' + (G.cur && G.cur.type === 'att' ? ' bot' : ''); box.hidden = false; fresh(box);
+    anim(box, [{ opacity: 0, transform: 'translateX(-50%) scale(.8)' }, { opacity: 1, transform: 'translateX(-50%) scale(1)' }], { duration: 200 });
+    await hold(420);
+    if (win) { (win === 'a' ? A : Dd).classList.add('win'); (win === 'a' ? Dd : A).classList.add('lose'); }
+    await hold(520);
+  }
+  const hideDuel = () => { $('duel').hidden = true; };
   async function run(action) {
     if (phase !== 'decide' && phase !== 'aim') return;
     const r = M.act(G, action, rng);
@@ -216,6 +232,8 @@
       const e = evs[i], nx = evs[i + 1];
       if (e.t === 'shootStart') {
         say(`${card(sideOf(e.x), e.x).last} zieht ab.`);
+        if (e.block > 0.2 || (nx && nx.t === 'blocked')) await duelPop({ id: e.x, stat: 'Schuss', v: e.av, trait: e.trait }, { id: e.by, stat: 'Block', v: e.dv, trait: e.btrait }, nx && nx.t === 'blocked' ? 'd' : 'a');
+        hideDuel();
         if (nx && nx.t === 'blocked') {
           const b = ep(before.cur, nx.by);
           await tween([{ id: nx.by, to: lerp(b, pos[e.x], 0.45) }, { id: 'ball', to: lerp(b, pos[e.x], 0.45) }], 520, true);
@@ -226,6 +244,7 @@
       } else if (e.t === 'pass') {
         const side = sideOf(e.from), to = e.ok && G.cur && G.cur.pos[e.to] ? ep(G.cur, e.to) : pos[e.to];
         say(`${card(side, e.from).last} passt zu ${card(side, e.to).last}.`);
+        await duelPop({ id: e.from, stat: 'Vorlage', v: e.av, trait: e.trait }, { id: e.by, stat: 'Antizipation', v: e.dv, trait: e.dtrait }, e.ok ? 'a' : 'd'); hideDuel();
         if (e.ok) {
           const m = before.cur.mark[e.to], moves = [{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.to, to }];
           if (m && G.cur && G.cur.pos[m]) moves.push({ id: m, to: ep(G.cur, m) });
@@ -241,6 +260,7 @@
       } else if (e.t === 'dribble') {
         const side = sideOf(e.x), X = card(side, e.x), mk = card(sideOf(e.by), e.by);
         say(`${X.last} geht ins Dribbling gegen ${mk.last}.`);
+        await duelPop({ id: e.x, stat: 'Dribbling', v: e.av, trait: e.trait }, { id: e.by, stat: 'Zweikampf', v: e.dv, trait: e.dtrait }, e.ok ? 'a' : 'd'); hideDuel();
         if (e.ok) {
           const to = ep(G.cur, e.x), via = [pos[e.by][0] + (pos[e.x][0] < 180 ? 34 : -34), pos[e.by][1]];
           await tween([{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
@@ -259,7 +279,8 @@
         const X = card('home', e.x), Dc = card('you', e.by), c = pos[e.x];
         const spot = e.action === 'press' ? lerp(pos[e.by], c, 0.7) : e.action === 'block' ? lerp(c, goalOf('home'), 0.3) : lerp(c, pos[e.target], 0.5);
         say(`${Dc.last} ${e.action === 'press' ? 'geht auf ' + X.last : e.action === 'block' ? 'stellt sich in die Schusslinie' : 'stellt den Pass zu ' + card('home', e.target).last + ' zu'}.`);
-        const it = e.intent, moves = [{ id: e.by, to: spot }];
+        const it = e.intent, moves = [{ id: e.by, to: spot }], stat = { shoot: 'Schuss', pass: 'Vorlage', dribble: 'Dribbling' }[it.kind], dstat = { press: 'Zweikampf', block: 'Block', lane: 'Antizipation' }[e.action];
+        if (e.right) { await duelPop({ id: e.by, stat: dstat, v: e.dv, trait: e.trait }, { id: e.x, stat, v: e.av }, e.stopped ? 'a' : 'd'); hideDuel(); }
         if (e.stopped) {
           moves.push({ id: 'ball', to: [spot[0] + 8, spot[1] - 10] });
           await tween(moves, 640, true);

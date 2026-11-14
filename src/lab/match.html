@@ -53,6 +53,25 @@
 .lineup li span{font-weight:800;font-size:12.5px;letter-spacing:.02em;line-height:1.05;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .lineup li i{font-style:normal;font-weight:700;font-size:11px;letter-spacing:.1em;color:var(--mute)}
 .stage.match .goalview{width:min(126%,450px)}
+.act{position:relative;justify-content:flex-start}
+.act b{padding-right:58px}
+.act .pct,.pass .pct{position:absolute;right:12px;top:9px;font-family:var(--display);font-weight:800;font-size:24px;line-height:1;color:var(--gold);font-variant-numeric:tabular-nums;font-style:normal}
+.pass{position:relative;align-items:flex-start}
+.pass span{padding-right:44px}
+.pass .pct{font-size:18px;right:9px;top:8px}
+.tr{display:inline-block;margin-left:6px;padding:2px 6px 1px;border-radius:4px;background:var(--gold);color:#1a1203;font-family:var(--display);font-style:normal;font-weight:800;font-size:11px;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;vertical-align:middle}
+.tr.bad{background:var(--bad);color:#fff}
+.act.fit{border-width:2px;box-shadow:0 0 0 3px rgba(247,215,116,.25)}
+.duel{position:absolute;left:50%;top:12px;z-index:9;transform:translateX(-50%);display:flex;align-items:center;gap:8px;pointer-events:none}
+.duel.bot{top:auto;bottom:12px}
+.duel em{font-style:normal;font-family:var(--display);font-weight:800;font-size:18px;color:var(--gold);text-shadow:0 2px 0 rgba(0,0,0,.5)}
+.dl{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:104px;padding:7px 10px 6px;border-radius:10px;background:rgba(5,8,24,.92);border:2px solid var(--line);font-family:var(--display);text-transform:uppercase;transition:transform .2s,border-color .2s,opacity .2s}
+.dl span{font-weight:700;font-size:12px;letter-spacing:.1em;color:var(--mute);white-space:nowrap}
+.dl b{font-weight:800;font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.dl i{font-style:normal;font-weight:800;font-size:11px;letter-spacing:.08em;color:var(--gold);min-height:12px}
+.dl.you b{color:#8fb0ff}.dl.home b{color:var(--gold)}
+.dl.win{border-color:var(--good);transform:scale(1.12)}
+.dl.lose{opacity:.55;transform:scale(.92)}
 </style>
 </head>
 <body>
@@ -142,6 +161,7 @@
     <div class="tell" id="tell" hidden></div>
     <div class="power" id="power" hidden><span>Härte</span><b><i id="power-bar"></i></b></div>
     <div class="stamp" id="stamp" hidden><b></b><span></span></div>
+    <div class="duel" id="duel" hidden><div class="dl" id="dl-a"><span></span><b></b><i></i></div><em>VS</em><div class="dl" id="dl-d"><span></span><b></b><i></i></div></div>
   </div>
   <div class="prompt">
     <div class="row"><span class="tag you" id="tag">Angriff</span><p class="say" id="say"></p></div>
