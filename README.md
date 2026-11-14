@@ -24,11 +24,14 @@ Code in `src/lab/`, Simulation mit `node sim/lab.js`, Browser-Test mit `node tes
 Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Shop:
 
 - **Team aus Packs:** Du startest mit fünf Bronze-Karten (Linie um 74) und 1500 Münzen. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.
-- **Pool:** alle 271 Feldspieler der Herren L-UPL 2026/27 aus dem Fantasy-Pool (`src/lab/pool.js`). Die 28 bekannten Karten behalten ihre Werte, die übrigen werden aus dem Fantasy-Preis abgeleitet.
+- **Pool:** alle 271 Feldspieler der Herren L-UPL 2026/27 aus dem Fantasy-Pool (`src/lab/pool.js`), mit Nation, Rückennummer, Jahrgang und Porträt. Die 28 bekannten Karten behalten ihre Werte, die übrigen werden aus dem Fantasy-Preis abgeleitet.
+- **Karte:** ein Wappen mit Metallrand in Bronze, Silber oder Gold. Oben links hängt ein Wimpel mit Gesamtwert, Position, Flagge und dem Zeichen der Spezialfähigkeit. Das Porträt ist auf das Metall «gedruckt» (der weisse Studiohintergrund verschwindet), darunter steht der Name auf einem dunklen Feld. Die volle Karte zeigt die sechs Werte, mit denen das Match rechnet: Schuss, Pass, Dribbling, Zweikampf, Block, Antizipation. Unter 150 px Breite erscheint die Kurzform ohne Werte. Ohne Bild zeigt die Karte geprägte Initialen.
+- **Porträts:** 190 Bilder kommen von swiss unihockey (Cloudinary), 17 von hcrychenberg.ch, 10 sind Google-Vorschaubilder, 1 liegt bei fliiga.com. Die Seite lädt sie direkt von dort. 53 Spieler haben kein Bild.
+- **Pack öffnen:** Reisskante wischen oder antippen, die Karten steigen aus dem Beutel und werden einzeln aufgedeckt, die beste zuletzt. Das Licht unter der Reisskante hat die Farbe der besten Karte. Silber und Gold als beste Karte bekommen eine Ankündigung (Position, bei Gold auch der Verein). Aufgedeckte Karten lassen sich mit Finger oder Maus kippen, Gold schillert dabei. Mit «Bewegung reduzieren» erscheint direkt die Übersicht.
 - **Münzen:** Sieg 400 (WASA) bis 900 (GC), Niederlage 120, dazu 30 pro eigenes Tor. Doppelte Karten geben 60, 200 oder 600.
 - **Speichern:** Karten, Linie und Münzen liegen im `localStorage` dieses Browsers. «Neu beginnen» im Shop setzt alles zurück.
 
-Logik in `src/lab/club.js`, Oberfläche in `src/lab/store-ui.js`. Simulation mit `node sim/club.js`, Browser-Test mit `node test/store.js`.
+Logik in `src/lab/club.js`, Oberfläche in `src/lab/store-ui.js`, Aussehen in `src/lab/store.css`. Simulation mit `node sim/club.js`, Browser-Test mit `node test/store.js`.
 
 ## Aufbau
 

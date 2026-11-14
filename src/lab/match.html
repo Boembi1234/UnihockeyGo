@@ -49,9 +49,9 @@
 .opp i{grid-row:1 / span 2;grid-column:2;font-style:normal;font-family:var(--display);font-weight:800;font-size:28px;color:var(--gold)}
 .lineup{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .lineup li{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:10px;background:#070b1f;border:1px solid var(--line);font-family:var(--display);text-transform:uppercase;text-align:center}
-.lineup li b{font-weight:800;font-size:22px;color:var(--gold);line-height:1}
-.lineup li span{font-weight:800;font-size:12.5px;letter-spacing:.02em;line-height:1.05;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.lineup li i{font-style:normal;font-weight:700;font-size:11px;letter-spacing:.1em;color:var(--mute)}
+.lineup li>b{font-weight:800;font-size:22px;color:var(--gold);line-height:1}
+.lineup li>span{font-weight:800;font-size:12.5px;letter-spacing:.02em;line-height:1.05;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lineup li>i{font-style:normal;font-weight:700;font-size:11px;letter-spacing:.1em;color:var(--mute)}
 .stage.match .goalview{width:min(126%,450px)}
 .act{position:relative;justify-content:flex-start}
 .act{min-width:0;overflow:hidden}
@@ -75,126 +75,7 @@
 .dl.win{border-color:var(--good);transform:scale(1.12)}
 .dl.lose{opacity:.55;transform:scale(.92)}
 
-/* Shop, Team, Karten und Packs */
-body.lock{overflow:hidden}
-.topbar{display:flex;align-items:center;gap:8px}
-.topbar .brand{margin-right:auto}
-.coins{display:inline-flex;align-items:center;gap:5px;padding:5px 10px 4px 7px;border-radius:999px;background:#1a1606;border:1px solid #6b5418;font-family:var(--display);font-weight:800;font-size:17px;letter-spacing:.04em;color:var(--gold);font-variant-numeric:tabular-nums}
-.coin{width:17px;height:17px;flex-shrink:0}
-.nav2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.navb{min-height:52px;border:1px solid var(--gold);border-radius:12px;background:#1a1606;display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--display);font-weight:800;font-size:19px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
-.navb.alt{border-color:var(--line);background:#101a45;color:var(--ice)}
-.navb svg{width:22px;height:22px}
-.backb{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px 0 8px;border:1px solid var(--line);border-radius:10px;background:transparent;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:var(--ice)}
-.title2{font-family:var(--display);font-weight:800;font-size:44px;line-height:.9;letter-spacing:.02em;text-transform:uppercase}
-.title2 small{display:block;font-size:15px;letter-spacing:.16em;color:var(--mute);margin-top:6px}
-.reward{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--display);font-weight:800;font-size:28px;color:var(--gold)}
-.reward .coin{width:26px;height:26px}
-.reward span{font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);font-weight:700}
-
-/* Spielerkarte: skaliert mit ihrer Breite */
-.hc{container-type:inline-size;position:relative;width:100%;aspect-ratio:5/7;border-radius:8%/5.7%;padding:3px;color:#1a1203;text-align:center;font-family:var(--display);text-transform:uppercase;box-shadow:0 6px 16px rgba(0,0,0,.35)}
-.hc.bronze{background:linear-gradient(150deg,#5a3215,#d29a5f 30%,#8a5228 55%,#e0ad74 80%,#6b3f1d)}
-.hc.silver{background:linear-gradient(150deg,#6f7a8e,#f4f7fc 30%,#9aa3b3 55%,#eef2f8 80%,#7d8799)}
-.hc.gold{background:var(--foil)}
-.hc-in{position:relative;height:100%;border-radius:7%/5%;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:6cqw 6cqw 5cqw}
-.hc.bronze .hc-in{background:linear-gradient(170deg,#e9b98a,#b9773f 60%,#8f5527)}
-.hc.silver .hc-in{background:linear-gradient(170deg,#ffffff,#cfd6e2 60%,#a9b2c2)}
-.hc.gold .hc-in{background:linear-gradient(170deg,#fff3c4,#f2c14e 55%,#c48a1c)}
-.hc.gold .hc-in::after{content:"";position:absolute;inset:-40% -60%;background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.55) 50%,transparent 58%);animation:shine 3.2s ease-in-out infinite;pointer-events:none}
-@keyframes shine{0%{transform:translateX(-60%)}55%,100%{transform:translateX(60%)}}
-.hc-top{position:absolute;left:7cqw;top:5cqw;display:flex;flex-direction:column;align-items:center;line-height:.9}
-.hc-top b{font-weight:800;font-size:26cqw;letter-spacing:-.02em}
-.hc-top span{font-weight:700;font-size:10cqw;letter-spacing:.06em}
-.hc-face{width:62cqw;margin:5cqw 0 0 18cqw;fill:rgba(26,18,3,.28)}
-.hc-name{width:100%;margin-top:1cqw;padding-top:3cqw;border-top:1.5px solid rgba(26,18,3,.35);font-weight:800;font-size:15cqw;line-height:1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hc-team{font-weight:700;font-size:9.5cqw;letter-spacing:.12em;opacity:.75;margin-top:1.5cqw}
-.hc-st{display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin-top:auto;gap:1cqw}
-.hc-st span{display:flex;flex-direction:column;font-weight:700;font-size:8.5cqw;letter-spacing:.06em;line-height:1.05;opacity:.85}
-.hc-st b{font-weight:800;font-size:14cqw;letter-spacing:0;opacity:1}
-.hc-tr{position:absolute;right:5cqw;top:6cqw;padding:1.5cqw 3cqw 1cqw;border-radius:3cqw;background:#0e1b47;color:var(--gold);font-style:normal;font-weight:800;font-size:7.5cqw;letter-spacing:.04em;max-width:62cqw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hc-flag{position:absolute;z-index:2;left:50%;bottom:-6%;transform:translateX(-50%);padding:1.5cqw 4cqw 1cqw;border-radius:3cqw;box-shadow:0 2px 6px rgba(0,0,0,.4);background:#0e1b47;color:var(--ice);font-style:normal;font-weight:800;font-size:8.5cqw;letter-spacing:.08em;white-space:nowrap}
-.hc-flag.new{background:var(--good);color:#04130d}
-.hc-flag.dupe{background:#0e1b47;color:var(--gold)}
-
-/* Packs */
-.pack{position:relative;width:96px;aspect-ratio:5/7.4;flex-shrink:0;filter:drop-shadow(0 8px 14px rgba(0,0,0,.45))}
-.pack.big{width:min(56vw,210px)}
-.pack-top,.pack-body{position:absolute;left:0;right:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--display);text-transform:uppercase;color:#fff}
-.pack-top{top:0;height:20%;border-radius:10px 10px 2px 2px;clip-path:polygon(0 0,100% 0,100% 88%,94% 100%,88% 88%,82% 100%,76% 88%,70% 100%,64% 88%,58% 100%,52% 88%,46% 100%,40% 88%,34% 100%,28% 88%,22% 100%,16% 88%,10% 100%,4% 88%,0 100%)}
-.pack-top span{font-weight:800;font-size:.62em;letter-spacing:.2em;opacity:.85}
-.pack-body{top:18.5%;bottom:0;border-radius:2px 2px 10px 10px;gap:2px;clip-path:polygon(0 6%,4% 0,10% 6%,16% 0,22% 6%,28% 0,34% 6%,40% 0,46% 6%,52% 0,58% 6%,64% 0,70% 6%,76% 0,82% 6%,88% 0,94% 6%,100% 0,100% 100%,0 100%)}
-.pack-body b{font-weight:800;font-size:1.5em;letter-spacing:.06em;line-height:1}
-.pack-body span{font-weight:700;font-size:.7em;letter-spacing:.14em;opacity:.85}
-.pack{font-size:14px}.pack.big{font-size:min(8vw,30px)}
-.pk-basis .pack-top,.pk-basis .pack-body{background:linear-gradient(160deg,#2a6bff,#0f2f8f 70%,#1a57ff)}
-.pk-premium .pack-top,.pk-premium .pack-body{background:linear-gradient(160deg,#c9d2e3,#5b6884 45%,#2b3550 75%,#a8b3c9);}
-.pk-star .pack-top,.pk-star .pack-body{background:var(--foil);color:#1a1203}
-.pack-body::before{content:"";position:absolute;inset:14% 18% auto;height:26%;border-radius:50%;border:2px solid currentColor;opacity:.35}
-.pack.crack1 .pack-body{box-shadow:inset 0 0 22px rgba(255,255,255,.25)}
-.pack.crack2 .pack-body{box-shadow:inset 0 0 36px rgba(255,255,255,.45)}
-.shop-row{display:flex;gap:14px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:14px;background:#101a45}
-.shop-info{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
-.shop-info b{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:.04em;text-transform:uppercase;line-height:1}
-.shop-info span{font-size:13px;color:var(--ice)}
-.shop-info .odds{font-size:12px;color:var(--mute)}
-.buy{margin-top:6px;align-self:flex-start;min-height:44px;padding:0 16px 0 12px;border:0;border-radius:10px;background:var(--gold);color:#1a1203;display:inline-flex;align-items:center;gap:7px;font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:.04em}
-.buy .coin{width:20px;height:20px}
-.buy:disabled{background:#2a2f45;color:#7c87a8;cursor:not-allowed}
-.buy:disabled .coin{opacity:.5}
-
-/* Overlay beim Öffnen */
-.packov{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;background:radial-gradient(circle at 50% 38%,#16245e,#050818 70%);overflow-y:auto;padding:16px}
-.packov[hidden]{display:none}
-.po-inner{width:100%;max-width:460px;min-height:100%;display:flex;flex-direction:column;align-items:center;gap:14px}
-.po-stage{position:relative;flex:1;min-height:320px;width:100%;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.po-stage:empty{display:none}
-.po-glow{position:absolute;width:300px;height:300px;border-radius:50%;opacity:0;pointer-events:none;background:radial-gradient(circle,rgba(255,255,255,.35),transparent 65%)}
-.po-glow.silver{background:radial-gradient(circle,rgba(220,230,255,.6),transparent 65%)}
-.po-glow.gold{background:radial-gradient(circle,rgba(247,215,116,.85),transparent 65%)}
-.po-glow.bronze{background:radial-gradient(circle,rgba(210,150,90,.5),transparent 65%)}
-.po-flash{position:fixed;inset:0;pointer-events:none;opacity:0;background:#fff;z-index:51}
-.po-flash.gold{background:radial-gradient(circle at 50% 40%,#fff6cf,#f7d774 50%,rgba(247,215,116,.2))}
-.po-flash.silver{background:radial-gradient(circle at 50% 40%,#fff,#dfe6f5 60%,rgba(220,230,255,.2))}
-.po-flash.bronze{background:radial-gradient(circle at 50% 40%,#fff,rgba(230,180,120,.5))}
-.po-say{min-height:44px;text-align:center;font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:.06em;text-transform:uppercase;color:var(--ice);padding-top:8px}
-.po-cards{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;width:100%;padding-top:10px;perspective:900px}
-.po-cards[hidden]{display:none}
-.flip{position:relative;width:calc((100% - 20px) / 3);max-width:132px;aspect-ratio:5/7;border:0;padding:0;background:none}
-.po-cards.n4 .flip{width:calc((100% - 30px) / 2);max-width:170px}
-.po-cards{row-gap:18px}
-.flip-in{position:absolute;inset:0;transform-style:preserve-3d;display:block}
-.flip .back,.flip .front{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:block}
-.flip .front{transform:rotateY(180deg)}
-.flip .back{border-radius:8%/5.7%;background:repeating-linear-gradient(135deg,#13225e 0 8px,#0e1b47 8px 16px);border:3px solid #2b3d8f;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,.4)}
-.flip .back b{font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.16em;color:var(--mute);transform:rotate(-90deg);white-space:nowrap}
-.flip.tease .back{border-color:var(--gold);box-shadow:0 0 0 3px rgba(247,215,116,.4),0 0 34px rgba(247,215,116,.9)}
-.flip.open .flip-in{transform:rotateY(180deg)}
-.burst{position:absolute;inset:-40%;border-radius:50%;pointer-events:none;background:repeating-conic-gradient(rgba(255,255,255,.75) 0 6deg,transparent 6deg 24deg);-webkit-mask:radial-gradient(circle,transparent 22%,#000 36%,transparent 70%);mask:radial-gradient(circle,transparent 22%,#000 36%,transparent 70%)}
-.burst.gold{background:repeating-conic-gradient(rgba(247,215,116,.95) 0 7deg,transparent 7deg 20deg)}
-.po-done{display:flex;flex-direction:column;gap:8px;width:100%;padding-bottom:12px}
-.po-done[hidden],.po-all[hidden]{display:none}
-.po-done .cta small{display:block;font-size:14px;letter-spacing:.08em;opacity:.85}
-.po-again{display:inline-flex;gap:6px}
-.po-again .coin{width:18px;height:18px}
-
-/* Team */
-.team-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
-.tovr{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--display);text-transform:uppercase}
-.tovr b{font-weight:800;font-size:44px;line-height:.9;color:var(--gold)}
-.tovr span{font-weight:700;font-size:12px;letter-spacing:.14em;color:var(--mute)}
-.team-line{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
-.slot{grid-column:span 2;border:0;padding:0;background:none;border-radius:10px;transition:transform .15s;width:100%;min-width:0;display:block}
-.slot:nth-child(4){grid-column:2 / span 2}
-.slot.on{transform:translateY(-4px)}
-.slot.on .hc{box-shadow:0 0 0 3px var(--ice),0 10px 20px rgba(0,0,0,.5)}
-.chips{display:flex;gap:6px;flex-wrap:wrap}
-.chipb{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:transparent;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
-.chipb.on{background:var(--ice);border-color:var(--ice);color:#050818}
-.team-all{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 8px}
-.pick-card{border:0;padding:0;background:none;width:100%;min-width:0;display:block}
-.pick-card.inline{opacity:.55}
-.lineup li.bronze b{color:#e0ad74}.lineup li.silver b{color:#e9eef6}.lineup li.gold b{color:var(--gold)}
+/*__STORECSS__*/
 </style>
 </head>
 <body>
@@ -206,7 +87,7 @@ body.lock{overflow:hidden}
   <p class="lead">Ein ganzes Match mit deinen 5 Feldspielern. Das Spiel läuft, und in 12 Schlüsselszenen entscheidest du: schiessen, passen, dribbeln, und in der Abwehr, wie du stehst.</p>
   <div class="panel">
     <p class="group-label">Deine Linie <span id="intro-ovr"></span></p>
-    <ul class="lineup" id="lineup"></ul>
+    <ul class="lineup cards" id="lineup"></ul>
     <div class="nav2">
       <button type="button" class="navb" data-go="store" data-from="intro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 H19 L18 21 H6 Z M9 8 V6 a3 3 0 0 1 6 0 V8"/></svg>Shop</button>
       <button type="button" class="navb alt" data-go="team" data-from="intro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="8" height="12" rx="1.5"/><rect x="13" y="7" width="8" height="12" rx="1.5"/></svg>Team</button>
@@ -320,45 +201,63 @@ body.lock{overflow:hidden}
 </section>
 
 <section id="screen-store" class="screen" hidden>
-  <div class="topbar"><button type="button" class="backb" data-go="back">&larr; Zurück</button><span class="brand"></span><span class="coins" data-coins></span></div>
-  <h2 class="title2">Shop<small>Packs öffnen, Team verbessern</small></h2>
-  <div class="screen" id="packs"></div>
-  <p class="note">Gold ab 92, Silber ab 85. Jede Gold-Karte hat eine Spezialfähigkeit. Doppelte Karten werden zu Münzen: Bronze 60, Silber 200, Gold 600. Münzen gibt es für jedes Match.</p>
+  <div class="topbar"><button type="button" class="backb" data-go="back">&larr; Zurück</button><span class="coins" data-coins></span></div>
+  <h2 class="title2">Shop<small>Packs aufreissen, Team verbessern</small></h2>
+  <div class="shelf" id="packs"></div>
+  <p class="legend"><span><i class="gold"></i><b>Gold</b> ab 92</span><span><i class="silver"></i><b>Silber</b> 85–91</span><span><i class="bronze"></i><b>Bronze</b> bis 84</span></p>
+  <p class="note">Die Prozente gelten pro Karte. Jede Gold-Karte hat eine Spezialfähigkeit. Doppelte Karten werden zu Münzen: Bronze 60, Silber 200, Gold 600.</p>
   <button type="button" class="navb alt" data-go="team">Zum Team</button>
   <p class="note" id="store-own"></p>
   <button type="button" class="link" id="btn-reset">Neu beginnen</button>
 </section>
 
 <section id="screen-team" class="screen" hidden>
-  <div class="topbar"><button type="button" class="backb" data-go="back">&larr; Zurück</button><span class="brand"></span><span class="coins" data-coins></span></div>
+  <div class="topbar"><button type="button" class="backb" data-go="back">&larr; Zurück</button><span class="coins" data-coins></span></div>
   <div class="team-head"><h2 class="title2">Team<small>3 Stürmer, 2 Verteidiger</small></h2><div class="tovr"><b id="team-ovr"></b><span>Linie</span></div></div>
   <div class="team-line" id="team-line"></div>
   <p class="note" id="team-hint"></p>
   <button type="button" class="ghost" id="btn-best">Beste Linie setzen</button>
-  <div class="panel">
-    <div class="team-head"><p class="group-label">Sammlung</p><span class="note" id="team-count"></span></div>
-    <div class="chips" id="team-filter"><button type="button" class="chipb" data-f="all">Alle</button><button type="button" class="chipb" data-f="ATT">Stürmer</button><button type="button" class="chipb" data-f="DEF">Verteidiger</button></div>
-    <div class="team-all" id="team-all"></div>
-  </div>
+  <div class="team-head"><p class="group-label">Sammlung</p><span class="note" id="team-count"></span></div>
+  <div class="chips" id="team-filter"><button type="button" class="chipb" data-f="all">Alle</button><button type="button" class="chipb" data-f="ATT">Stürmer</button><button type="button" class="chipb" data-f="DEF">Verteidiger</button></div>
+  <div class="team-all" id="team-all"></div>
   <button type="button" class="navb" data-go="store">Zum Shop</button>
 </section>
 
 </main>
+
 <div class="packov" id="packov" role="dialog" aria-modal="true" aria-label="Pack öffnen" hidden>
-  <div class="po-inner">
-    <p class="po-say" id="po-say" aria-live="polite"></p>
-    <div class="po-stage" id="po-stage"></div>
-    <div class="po-cards" id="po-cards" hidden></div>
-    <button type="button" class="ghost po-all" id="po-all" hidden>Alle aufdecken</button>
-    <div class="po-done" id="po-done" hidden>
-      <button type="button" class="cta" id="po-take">In die Linie</button>
-      <button type="button" class="navb po-again" id="po-again"></button>
-      <button type="button" class="ghost" id="po-team">Zum Team</button>
-      <button type="button" class="ghost" id="po-close">Zurück zum Shop</button>
-    </div>
+  <div class="po-top"><span class="po-count" id="po-count"></span><button type="button" class="po-skip" id="po-skip">Überspringen</button></div>
+  <div class="po-head"><b id="po-title"></b><span id="po-sum"></span></div>
+  <div class="po-stage" id="po-stage" tabindex="0">
+    <div class="po-rays" id="po-rays"></div>
+    <div class="po-light" id="po-light"></div>
+    <div class="po-floor"></div>
+    <div class="po-deck" id="po-deck"></div>
+    <div class="po-holder" id="po-holder"></div>
+    <div class="po-hints" id="po-hints"></div>
+  </div>
+  <p class="po-cap" id="po-cap"></p>
+  <div class="po-tray" id="po-tray"></div>
+  <p class="po-say" id="po-say" aria-live="polite"></p>
+  <div class="po-done" id="po-done" hidden>
+    <button type="button" class="cta" id="po-take"></button>
+    <button type="button" class="navb" id="po-again"></button>
+    <button type="button" class="ghost" id="po-team">Zum Team</button>
+    <button type="button" class="ghost" id="po-close">Zurück zum Shop</button>
   </div>
 </div>
-<div class="po-flash" id="po-flash"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Karte" hidden>
+  <div class="sheet-in">
+    <button type="button" class="sheet-x" id="sheet-x" aria-label="Schliessen">&times;</button>
+    <div class="sheet-card" id="sheet-card"></div>
+    <h3 class="sheet-name" id="sheet-name"></h3>
+    <p class="sheet-meta" id="sheet-meta"></p>
+    <ul class="bars" id="sheet-bars"></ul>
+    <p class="sheet-trait" id="sheet-trait" hidden></p>
+    <button type="button" class="cta" id="sheet-do"></button>
+  </div>
+</div>
 <script id="hk-engine">
 /*__ENGINE__*/
 </script>

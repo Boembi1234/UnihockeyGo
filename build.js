@@ -17,6 +17,7 @@ console.log('dist/lab/index.html', labOut.length, 'Zeichen');
 const labCss = lab('page.html').match(/<style>([\s\S]*?)<\/style>/)[1];
 const matchOut = lab('match.html').replace('/*__LABCSS__*/', () => labCss).replace('/*__ENGINE__*/', () => r('engine.js').trim()).replace('/*__WORLD__*/', () => r('world.js').trim())
   .replace('/*__MATCH__*/', () => lab('match.js').trim())
+  .replace('/*__STORECSS__*/', () => lab('store.css').trim())
   .replace('/*__POOL__*/', () => lab('pool.js').trim()).replace('/*__CLUB__*/', () => lab('club.js').trim()).replace('/*__STORE__*/', () => lab('store-ui.js').trim()).replace('/*__MUI__*/', () => lab('match-ui.js').trim());
 fs.mkdirSync(path.join(__dirname, 'dist', 'lab', 'match'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'lab', 'match', 'index.html'), matchOut);

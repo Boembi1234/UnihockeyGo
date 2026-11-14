@@ -5,6 +5,7 @@
   'use strict';
   const E = root.HK, W = root.HKWorld;
   const TEAMS = { Z: 'Zug', K: 'Köniz', U: 'Uster', W: 'Wiler', R: 'Rychenberg', T: 'Thurgau', M: 'Malans', L: 'Tigers', G: 'GC', C: 'Chur', J: 'Kloten', S: 'WASA' };
+  const CLUB = { Z: 'Zug United', K: 'Floorball Köniz Bern', U: 'UHC Uster', W: 'SV Wiler-Ersigen', R: 'HC Rychenberg Winterthur', T: 'Floorball Thurgau', M: 'UHC Alligator Malans', L: 'Tigers Langnau', G: 'Grasshopper Club Zürich', C: 'Floorball Chur United', J: 'Kloten-Dietlikon Jets', S: 'WASA St. Gallen' };
   const RAR = [{ id: 'gold', name: 'Gold', min: 92 }, { id: 'silver', name: 'Silber', min: 85 }, { id: 'bronze', name: 'Bronze', min: 0 }];
   const rarity = c => RAR.find(r => c.ovr >= r.min).id;
   const RNAME = { gold: 'Gold', silver: 'Silber', bronze: 'Bronze' };
@@ -21,17 +22,29 @@
     while (i > 1 && /^[a-z]/.test(p[i - 1])) i--;   // «von Pritzbuer»
     return { first: p.slice(0, i).join(' '), last: p.slice(i).join(' ') };
   }
-  function build(line) {
-    const [name, tp, price] = line.split('|'), team = TEAMS[tp[0]], pos = tp[1] === 'D' ? 'DEF' : 'ATT', k = known[plain(name)];
-    if (k) return Object.assign({}, k, { short: team, team: tp[0], price: +price, base: k.id });
+  // Porträt: Adresse und Quelle. Die Quelle steuert den Bildausschnitt auf der Karte.
+  function photo(spec) {
+    if (!spec) return null;
+    if (/^[a-z0-9]{20}$/.test(spec)) return { src: 'c', url: 'https://res.cloudinary.com/swiss-unihockey/image/upload/t_player_portrait_01/' + spec + '.jpg' };
+    if (spec.indexOf('g:') === 0) return { src: 'g', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:' + spec.slice(2) };
+    if (spec.indexOf('r:') === 0) return { src: 'r', url: 'https://www.hcrychenberg.ch/fileadmin/_processed_/' + spec.slice(2) };
+    return /^https:\/\//.test(spec) ? { src: 'x', url: spec } : null;
+  }
+  function build(line, i) {
+    const [name, tp, price, nat, no, yob, img] = line.split('|'), team = TEAMS[tp[0]], pos = tp[1] === 'D' ? 'DEF' : 'ATT', k = known[plain(name)];
+    const extra = { short: team, team: tp[0], price: +price, nat: nat || 'SUI', yob: yob ? +yob : null, photo: photo(img), serial: i + 1 };
+    if (k) return Object.assign({}, k, extra, { base: k.id, no: k.no || (no ? +no : null) });
     const r = E.makeRng(hash(name)), { first, last } = split(name);
     const ovr = Math.round(clamp(70 + 27 * Math.pow((+price - 4) / 16.5, 0.6) + (r() * 4 - 2), 64, 97));
     const bias = pos === 'DEF' ? [-5, 0, 0, 3, 0, 5] : [3, 1, 0, -2, 1, -3];
     const st = bias.map(b => Math.round(clamp(ovr + b + (r() + r() + r() - 1.5) * 8, 55, 99)));
     const id = 'x' + plain(name).replace(/[^a-z]/g, '');
-    return { id, first, last, short: team, team: tp[0], pos, no: null, ovr, sco: st[0], ply: st[1], clu: st[2], fai: st[3], frm: st[4], exp: st[5], stam: 100, box: 0, home: false, cap: false, price: +price };
+    return Object.assign({ id, first, last, pos, no: no ? +no : null, ovr, sco: st[0], ply: st[1], clu: st[2], fai: st[3], frm: st[4], exp: st[5], stam: 100, box: 0, home: false, cap: false }, extra);
   }
   const POOL = String(root.HKPool || '').trim().split('\n').map(build);
+  // Gleiche Nachnamen (Graf, Fitzi, Hocevar ...) bekommen auf der Karte die Initiale dazu
+  const lastCount = {}; POOL.forEach(c => { lastCount[c.last] = (lastCount[c.last] || 0) + 1; });
+  POOL.forEach(c => { c.label = (lastCount[c.last] > 1 ? c.first[0] + '. ' : '') + c.last; });
   const byId = {}; POOL.forEach(c => { byId[c.id] = c; });
   const get = id => byId[id] || null;
   const BUCKET = { gold: [], silver: [], bronze: [] }; POOL.forEach(c => BUCKET[rarity(c)].push(c));
@@ -124,5 +137,5 @@
   }
   function save(store, st) { try { store.setItem(KEY, JSON.stringify(st)); } catch (e) { /* kein Speicher: gilt nur bis zum Neuladen */ } }
 
-  root.HKClub = { POOL, get, rarity, RNAME, DUPE, PACKS, BUCKET, open, best, setLine, swapIn, teamOvr, lineCards, fresh, OPPS, oppCards, reward, earn, load, save, KEY };
+  root.HKClub = { POOL, get, rarity, RNAME, CLUB, DUPE, PACKS, BUCKET, open, best, setLine, swapIn, teamOvr, lineCards, fresh, OPPS, oppCards, reward, earn, load, save, KEY };
 })(typeof window !== 'undefined' ? window : globalThis);

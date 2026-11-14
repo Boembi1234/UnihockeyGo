@@ -550,7 +550,7 @@
     const sq = squad(), m = M.newMatch({ you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(opp) } }, E.makeRng(1));
     $('intro-ovr').textContent = '· ' + C.teamOvr(S.state().lineup);
     $('lineup').innerHTML = m.teams.you.cards.slice().sort((a, b) => ['LW', 'C', 'RW', 'LD', 'RD'].indexOf(a.role) - ['LW', 'C', 'RW', 'LD', 'RD'].indexOf(b.role))
-      .map(c => `<li class="${C.rarity(c)}"><b>${c.ovr}</b><span>${esc(c.last)}</span><i>${ROLE[c.role]}</i></li>`).join('');
+      .map(c => `<li>${S.cardHtml(c.id, { eager: 1 })}<i>${ROLE[c.role]}</i></li>`).join('');
     $('opps').innerHTML = OPPS.map(id => {
       const mm = M.newMatch({ you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(id) } }, E.makeRng(1));
       const str = Math.round(M.strength(mm.teams.home.cards)), atts = Math.round(mm.attShare * 12), o = C.OPPS.find(x => x.id === id);
