@@ -28,16 +28,25 @@ Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Sh
 - **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss unter Druck und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
 - **Noten:** Mitte = perfekt (Vorteil: freier Mitspieler, mehr Raum, genauerer Schuss), im Feld = gelungen, knapp daneben = halb gelungen, daneben = Ball weg, grob daneben = Konter für den Gegner.
 - **Abwehr:** Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Nur die Mitte gewinnt den Ball (und gibt einen Konter). Sonst gilt: Je besser getroffen, desto mehr Zeit bekommt der Goalie beim Schuss.
-- **Eigener Schuss:** Der gegnerische Goalie pendelt sichtbar. Grün ist, wo er nicht hinkommt. Wischen wie bisher (Richtung = Ziel, Tempo = Härte); der Ball streut um das Ziel, der Kreis zeigt wie stark. Das ist der einzige Zufall, der bleibt.
+- **Eigener Schuss:** Finger aufs Tor, der Zielkreis erscheint; schieben, loslassen. Der Ball landet irgendwo im Kreis, nie ausserhalb. Der Kreis hängt vor allem am Abschlusswert (guter Schütze, kleiner Kreis). Der gegnerische Goalie pendelt sichtbar, grün ist, wo er nicht hinkommt; wie viel Grün es gibt, hängt vor allem an der Distanz. Das Tor ist aus der Nähe gross und aus der Distanz klein dargestellt. Dieser Kreis ist der einzige Zufall, der bleibt, und er ist vor dem Schuss zu sehen.
 - **Parade:** Der Schuss des Gegners ist ehrlich zu sehen (goldener Ring am Landepunkt). Gehalten ist, wenn die richtige Ecke angetippt wird, bevor der Ball da ist. Bessere Verteidiger und gestörte Schützen geben mehr Zeit.
 
-Abgestimmt ist das so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), 800 Matches je Feld, Siegquote:
+Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert und Distanz (`node sim/shots.js`):
+
+| Abschluss | weit weg | mittlere Distanz | nah | direkt vor dem Tor |
+|---|---|---|---|---|
+| 70 | 0 % | 3 % | 14 % | 32 % |
+| 80 | 0 % | 6 % | 38 % | 56 % |
+| 90 | 14 % | 35 % | 56 % | 76 % |
+| 97 | 22 % | 46 % | 70 % | 83 % |
+
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), 800 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 23 % | 65 % | 94 % | 99 % | 100 % |
-| mittel | 2 % | 25 % | 53 % | 87 % | 100 % |
-| schwach | 0 % | 3 % | 15 % | 43 % | 92 % |
+| stark | 23 % | 80 % | 99 % | 100 % | 100 % |
+| mittel | 2 % | 16 % | 61 % | 95 % | 99 % |
+| schwach | 0 % | 0 % | 6 % | 33 % | 72 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

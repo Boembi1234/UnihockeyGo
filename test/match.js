@@ -25,7 +25,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
-          if (document.getElementById('zones').classList.contains('armed')) return /pendelt/.test(document.getElementById('say').textContent) ? 'aim' : 'react';
+          if (/Zielkreis/.test(document.getElementById('say').textContent) && !document.getElementById('free-l').closest('#goalview').hidden && document.getElementById('shooter').hidden === false) return 'aim';
+          if (document.getElementById('zones').classList.contains('armed')) return 'react';
           const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
           return 'wait';
         });
@@ -53,13 +54,18 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           await p.waitForTimeout(260); continue;
         }
         if (st === 'aim') {
-          await p.waitForTimeout(300 + Math.random() * 900); await snap('06-schuss'); await over('schuss'); n++;
-          const bb = await p.locator('#goalview').boundingBox(), k = bb.width / 360;
-          const from = [180, 262], to = [100 + Math.random() * 160, 95 + Math.random() * 130], steps = Math.random() < 0.5 ? 4 : 14;
-          await p.mouse.move(bb.x + from[0] * k, bb.y + from[1] * k); await p.mouse.down();
-          for (let i = 1; i <= steps; i++) await p.mouse.move(bb.x + (from[0] + (to[0] - from[0]) * i / steps) * k, bb.y + (from[1] + (to[1] - from[1]) * i / steps) * k);
-          await p.mouse.up();
-          if (!run.reduce) { await p.waitForTimeout(700); await snap('07-schuss-ende'); }
+          await p.waitForTimeout(300 + Math.random() * 700); await over('schuss'); n++;
+          // Halten, schieben, loslassen: mal ins grüne Feld, mal irgendwohin, mal nur antippen
+          const bb = await p.locator('#goalview').boundingBox(), k = bb.width / 360, r = Math.random();
+          const free = await p.evaluate(() => { const f = [...document.querySelectorAll('.free')].filter(e => !e.hidden).map(e => e.getBoundingClientRect()).sort((a, b) => b.width - a.width)[0]; return f ? [f.left + f.width / 2, f.top + f.height / 2] : null; });
+          const to = r < 0.6 && free ? free : [bb.x + (100 + Math.random() * 160) * k, bb.y + (95 + Math.random() * 130) * k];
+          if (r > 0.9) { await p.mouse.click(to[0], to[1]); }
+          else {
+            await p.mouse.move(bb.x + 180 * k, bb.y + 200 * k); await p.mouse.down();
+            await p.mouse.move(to[0], to[1], { steps: 6 }); await p.waitForTimeout(120); await snap('06-schuss');
+            await p.mouse.up();
+          }
+          if (!run.reduce) { await p.waitForTimeout(650); await snap('07-schuss-ende'); }
           continue;
         }
         if (st === 'react') {

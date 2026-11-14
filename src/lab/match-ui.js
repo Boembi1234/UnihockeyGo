@@ -460,23 +460,37 @@
     [gv, $('keeper'), $('ball')].forEach(fresh);
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
     $('shooter').hidden = true; $('tell').hidden = true; $('power').hidden = true; $('zones').className = 'zones off'; $('aim').toggleAttribute('hidden', true);
-    stopSway(); clearTimeout(rx.timer); $('free-l').hidden = true; $('free-r').hidden = true; $('mark').hidden = true;
+    stopSway(); clearTimeout(rx.timer); hideFree(); $('mark').hidden = true; drag = null;
   }
   const shotLabel = v => (v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach');
-  /* Dein Schuss: Der Goalie pendelt genau so, wie die Engine rechnet (keeperX). Grün ist, wo er bei mittlerer Härte nicht
-     hinkommt: Das Feld wächst auf der Seite, von der er wegpendelt. Gemessen wird der Moment, in dem du loslässt. */
-  let sway = { raf: 0, t0: 0, kx: 0 };
+  /* Torsicht. Das Tor ist je nach Lage des Schützen gross (nah) oder klein und weiter oben (fern). Alles am Tor (Goalie,
+     freie Felder, Zonen, Landepunkt) liegt in einer Ebene, die mitskaliert. Ball und Zielkreis liegen darüber.
+     Ebene: Koordinaten wie toScene sie liefert. Sicht: was auf dem Bildschirm steht. */
+  const gz = { s: 1, yb: 236 };
+  const toView = L => [180 + (L[0] - 180) * gz.s, gz.yb + (L[1] - 236) * gz.s];
+  const toLayer = V => [180 + (V[0] - 180) / gz.s, 236 + (V[1] - gz.yb) / gz.s];
+  function setZoom(q) {
+    gz.s = 0.72 + 0.5 * q; gz.yb = 150 + 86 * Math.min(1.12, gz.s);
+    const k = K();
+    $('gscale').style.transform = `translate(${((180 - 180 * gz.s) * k).toFixed(1)}px,${((gz.yb - 236 * gz.s) * k).toFixed(1)}px) scale(${gz.s.toFixed(3)})`;
+    $('ggoal').setAttribute('transform', `translate(180 ${gz.yb.toFixed(1)}) scale(${gz.s.toFixed(3)}) translate(-180 -236)`);
+  }
+  /* Dein Schuss: Der Goalie pendelt genau so, wie die Engine rechnet (keeperX). Grün ist, wo er nicht hinkommt: unten und,
+     etwas breiter, oben. Das Feld wächst auf der Seite, von der er wegpendelt. Gemessen wird der Moment des Loslassens. */
+  let sway = { raf: 0, t0: 0, kx: 0 }, drag = null;
   const rx = { timer: 0, t0: 0, flight: null, end: null };
+  const FREE = ['free-l', 'free-lt', 'free-r', 'free-rt'];
+  function hideFree() { FREE.forEach(id => { $(id).hidden = true; }); }
   function stopSway() { cancelAnimationFrame(sway.raf); sway.raf = 0; }
   function startSway() {
-    const sh = G.shot, kp = $('keeper'), fl = $('free-l'), fr = $('free-r'), R = M.reach(G, sh, 0.5, null), pc = g => (180 + g * 102) / 3.6;
+    const sh = G.shot, kp = $('keeper'), R = [M.reach(G, sh, false), M.reach(G, sh, true)], pc = g => (180 + g * 102) / 3.6;
+    const F = FREE.map((id, i) => ({ el: $(id), R: R[i % 2], left: i < 2 }));
     stopSway(); sway.t0 = performance.now();
     (function loop(now) {
-      if (phase !== 'aim' || !G.shot || G.shot !== sh) return;
-      const kx = M.keeperX(sh.keeper, now - sway.t0), l = kx - R, r = kx + R; sway.kx = kx;
+      if (phase !== 'aim' || G.shot !== sh) return;
+      const kx = M.keeperX(sh.keeper, now - sway.t0); sway.kx = kx;
       kp.style.transform = poseTf([kx * 102, 0, 0, 1]);
-      fl.hidden = l <= -1; if (l > -1) { fl.style.left = pc(-1).toFixed(2) + '%'; fl.style.width = (pc(l) - pc(-1)).toFixed(2) + '%'; }
-      fr.hidden = r >= 1; if (r < 1) { fr.style.left = pc(r).toFixed(2) + '%'; fr.style.width = (pc(1) - pc(r)).toFixed(2) + '%'; }
+      F.forEach(f => { const a = f.left ? -1 : kx + f.R, b = f.left ? kx - f.R : 1, on = b > a + 0.01; f.el.hidden = !on; if (on) { f.el.style.left = pc(a).toFixed(2) + '%'; f.el.style.width = (pc(b) - pc(a)).toFixed(2) + '%'; } });
       sway.raf = requestAnimationFrame(loop);
     })(sway.t0);
   }
@@ -487,42 +501,44 @@
       $('pitch').style.visibility = 'hidden'; $('stage').classList.add('goalmode'); gv.hidden = false; fresh(gv);
       anim(gv, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.1)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }], { duration: 280 });
     }
+    setZoom(sh.q);
     const kp = $('keeper'), ball = $('ball');
     [kp, ball].forEach(fresh);
     kp.innerHTML = keeperSvg(mine ? 'home' : 'you'); kp.style.transform = '';
     ball.hidden = false; ball.style.opacity = '1'; ball.style.transform = ballTf(START, 2.1);
-    $('ripple').hidden = true; $('spark').hidden = true; $('mark').hidden = true; $('free-l').hidden = true; $('free-r').hidden = true; $('tell').hidden = true;
-    const sco = Math.round(M.shotVal(X));
-    $('shooter').innerHTML = `<b>${sco}</b><span>${esc(X.last)}<i>Schuss ${shotLabel(sco)}, Lage ${lage(sh.q)}</i></span>`; $('shooter').hidden = false;
+    $('ripple').hidden = true; $('spark').hidden = true; $('mark').hidden = true; hideFree(); $('tell').hidden = true;
+    const sco = Math.round(M.shotVal(X)), far = sh.q < 0.4 ? 'aus der Distanz' : sh.q < 0.75 ? 'aus mittlerer Distanz' : 'aus der Nähe';
+    $('shooter').innerHTML = `<b>${sco}</b><span>${esc(X.last)}<i>Schuss ${shotLabel(sco)}, ${far}</i></span>`; $('shooter').hidden = false;
     setTag(sh.ctx === 'so' ? 'Penalty' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
     $('aim').toggleAttribute('hidden', true); $('power').hidden = true; $('hint').hidden = true;
     const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Parade ') + ZNAME[b.getAttribute('data-z')]); });
+    z.className = 'zones off';
     if (mine) {
-      say('Der Goalie pendelt. Wische vom Ball ins grüne Feld: dort kommt er nicht hin.');
-      $('hist').innerHTML = `<em>Warte, bis das Feld breit ist. Schnell wischen heisst hart: schwerer zu halten, streut aber mehr.${sh.perfect ? ' Perfekt abgezogen: weniger Streuung.' : sh.rushed ? ' Gestört: mehr Streuung.' : ''}</em>`;
-      z.className = 'zones armed'; phase = 'aim'; startSway();
+      say('Finger aufs Tor, Zielkreis ins grüne Feld schieben, loslassen.');
+      $('hist').innerHTML = `<em>Der Ball landet irgendwo im Kreis, nie ausserhalb. Je besser der Schütze, desto kleiner der Kreis; je näher am Tor, desto mehr Grün.${sh.perfect ? ' Perfekt abgezogen: kleinerer Kreis.' : sh.rushed ? ' Gestört: grösserer Kreis.' : ''}</em>`;
+      phase = 'aim'; startSway();
       return;
     }
     // Schuss des Gegners: erst ein kurzer, unterschiedlich langer Anlauf, dann fliegt der Ball. Die Flugzeit ist dein Zeitfenster.
     say(`${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`);
     $('hist').innerHTML = `<em>${sh.press > 0 ? 'Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? 'Freie Bahn für den Schützen: du hast weniger Zeit.' : 'Der goldene Ring zeigt, wo der Ball hinfliegt.'}</em>`;
-    z.className = 'zones off'; phase = 'wait';
+    phase = 'wait';
     const pulse = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf([START[0], START[1] + 5], 2.3) }], { duration: 300, iterations: Infinity, direction: 'alternate' });
     clearTimeout(rx.timer);
     rx.timer = setTimeout(() => { pulse.cancel(); if (G.shot === sh && phase === 'wait') react(sh); }, 650 + Math.random() * 900);
   }
+  // Endpunkt des Balls in der Ebene: bei Pfosten und Latte am Gestänge
+  const postPt = (g, L) => (Math.abs(g[0]) >= 1 ? [g[0] > 0 ? 282 : 78, Math.max(92, Math.min(232, L[1]))] : [Math.max(82, Math.min(278, L[0])), 88]);
   function react(sh) {
-    const ball = $('ball'), land = toScene(sh.land), mk = $('mark');
-    let end = land;
-    if (sh.miss === 'post') end = Math.abs(sh.land[0]) >= 1 ? [sh.land[0] > 0 ? 282 : 78, Math.max(92, Math.min(232, land[1]))] : [Math.max(82, Math.min(278, land[0])), 88];
+    const ball = $('ball'), mk = $('mark'), L = toScene(sh.land), endL = sh.miss === 'post' ? postPt(sh.land, L) : L, end = toView(endL);
     rx.end = end; phase = 'react'; rx.t0 = performance.now();
     $('zones').className = 'zones armed';
-    placeAt(mk, end, 11); mk.hidden = false; fresh(mk);
+    placeAt(mk, endL, 11); mk.hidden = false; fresh(mk);
     mk.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 160, iterations: Infinity, direction: 'alternate' });
     say('Jetzt! Tippe die Ecke.');
     // Die Flugzeit ist das Zeitfenster: echte Dauer, auch bei reduzierter Bewegung
     const mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24];
-    rx.flight = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf(mid, 1.5), offset: 0.5 }, { transform: ballTf(end, 0.95) }], { duration: sh.window, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
+    rx.flight = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf(mid, 1.5), offset: 0.5 }, { transform: ballTf(end, 0.95 * gz.s) }], { duration: sh.window, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
     clearTimeout(rx.timer);
     rx.timer = setTimeout(() => { if (phase === 'react' && G.shot === sh) aimAt({ zone: null, rt: sh.window + 500 }); }, sh.window + 30);
   }
@@ -533,25 +549,26 @@
     anim($('keeper'), [{ transform: 'none' }, { transform: poseTf(POSE[z]) }], { duration: 170, easing: 'cubic-bezier(.2,.8,.3,1)' });
     aimAt({ zone: z, rt: Math.max(0, t - rx.t0) });
   }
-  // Sprung des gegnerischen Goalies: von seiner Stelle zum Ball. Reicht er nicht hin, bleibt er kurz davor.
+  // Sprung des gegnerischen Goalies: von seiner Stelle zum Ball. Reicht er nicht hin, bleibt er deutlich davor.
   function dive(e) {
     const dir = Math.sign(e.land[0] - e.kx) || 1, gap = Math.abs(e.land[0] - e.kx), top = e.land[1] > 0.55;
-    const to = e.result === 'goal' ? e.kx + dir * Math.min(gap, e.reach) * 0.85 : e.land[0], move = to - e.kx;
+    const to = e.result === 'goal' ? e.kx + dir * Math.max(0, gap - 0.8) : e.land[0], move = to - e.kx;   // bei einem Tor bleibt er sichtbar vor dem Ball
     return poseTf([to * 102, top ? -40 : Math.abs(move) < 0.12 ? 4 : -4, Math.max(-66, Math.min(66, move * (top ? 70 : 110))), Math.abs(move) < 0.12 && !top ? 1.12 : 1]);
   }
   async function shotSeq(e) {
-    const mine = e.side === 'you', ball = $('ball'), kp = $('keeper'), land = toScene(e.land), X = card(e.side, e.x);
-    let end = land, out = null, fadeOut = false;
-    if (e.result === 'save') out = [end[0] + (end[0] < 180 ? -95 : 95), Math.max(30, end[1] - 110)];
-    else if (e.result === 'miss' && e.miss === 'post') { end = Math.abs(e.land[0]) >= 1 ? [e.land[0] > 0 ? 282 : 78, Math.max(92, Math.min(232, land[1]))] : [Math.max(82, Math.min(278, land[0])), 88]; out = [end[0] + (end[0] < 180 ? -60 : 60), 252]; }
-    else if (e.result === 'miss') { out = [land[0] + (land[0] - 180) * 0.35, land[1] - 30]; fadeOut = true; }
-    $('shooter').hidden = true; $('free-l').hidden = true; $('free-r').hidden = true;
+    const mine = e.side === 'you', ball = $('ball'), kp = $('keeper'), L = toScene(e.land), X = card(e.side, e.x), bs = 0.95 * gz.s;
+    let endL = L, outL = null, fadeOut = false;
+    if (e.result === 'save') outL = [endL[0] + (endL[0] < 180 ? -95 : 95), Math.max(30, endL[1] - 110)];
+    else if (e.result === 'miss' && e.miss === 'post') { endL = postPt(e.land, L); outL = [endL[0] + (endL[0] < 180 ? -60 : 60), 252]; }
+    else if (e.result === 'miss') { outL = [L[0] + (L[0] - 180) * 0.35, L[1] - 30]; fadeOut = true; }
+    const end = toView(endL), out = outL && toView(outL);
+    $('shooter').hidden = true; hideFree();
     if (mine) {
-      say(`${X.last} schiesst${e.power > 0.7 ? ' hart' : e.power < 0.35 ? ' platziert' : ''}.`);
+      say(`${X.last} schiesst.`);
       const pre = [START[0], START[1] + 6], mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24], from = poseTf([e.kx * 102, 0, 0, 1]);
       kp.style.transform = from;
       await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(pre, 2.25) }], { duration: 130, easing: 'ease-out' });
-      const fly = anim(ball, [{ transform: ballTf(pre, 2.25) }, { transform: ballTf(mid, 1.45), offset: 0.5 }, { transform: ballTf(end, 0.95) }], { duration: Math.round(520 - 200 * e.power), easing: 'cubic-bezier(.3,.6,.4,1)' });
+      const fly = anim(ball, [{ transform: ballTf(pre, 2.25) }, { transform: ballTf(mid, (2.25 + bs) / 2), offset: 0.5 }, { transform: ballTf(end, bs) }], { duration: 400, easing: 'cubic-bezier(.3,.6,.4,1)' });
       await wait(60);
       anim(kp, [{ transform: from }, { transform: dive(e) }], { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
       await fly;
@@ -559,18 +576,18 @@
       say(e.guess ? `Du springst ${ZNAME[e.guess]}.` : 'Keine Reaktion.');
       await rx.flight; rx.flight = null; fresh($('mark')); $('mark').hidden = true;
     }
-    if (e.result === 'goal') { anim(ball, [{ transform: ballTf(end, 0.95) }, { transform: ballTf([end[0], end[1] + 6], 0.78) }], { duration: 160 }); burst('ripple', end, 22, 0.3, 1.25, 520); scored(e.side, e.ctx); }
+    if (e.result === 'goal') { anim(ball, [{ transform: ballTf(end, bs) }, { transform: ballTf([end[0], end[1] + 6 * gz.s], bs * 0.82) }], { duration: 160 }); burst('ripple', endL, 22, 0.3, 1.25, 520); scored(e.side, e.ctx); }
     else if (e.result !== 'catch') {
-      if (e.miss === 'post') burst('spark', end, 12, 0.4, 1.4, 380);
-      anim(ball, [{ transform: ballTf(end, 0.95), opacity: 1 }, { transform: ballTf(out, fadeOut ? 0.6 : 1.1), opacity: fadeOut ? 0 : 1 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      if (e.miss === 'post') burst('spark', endL, 12, 0.4, 1.4, 380);
+      anim(ball, [{ transform: ballTf(end, bs), opacity: 1 }, { transform: ballTf(out, fadeOut ? 0.6 * gz.s : 1.1 * gz.s), opacity: fadeOut ? 0 : 1 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
     }
     const goal = e.result === 'goal', saved = e.result === 'save' || e.result === 'catch';
     let main, sub;
     if (mine) {
-      const edge = Math.abs(Math.abs(e.land[0] - e.kx) - e.reach) < 0.1;
-      if (goal) { main = 'Tor'; sub = edge ? 'Knapp an den Fingerspitzen vorbei.' : 'Der Goalie stand auf der anderen Seite.'; }
-      else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = Math.abs(e.land[0] - e.kx) < 0.3 ? 'Direkt auf den Goalie.' : edge ? 'Er kommt gerade noch hin.' : 'In seiner Reichweite.'; }
-      else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = e.q < 0.45 ? 'Aus der Distanz streut der Schuss stark.' : 'Der Schuss streute zu stark.'; }
+      const edge = Math.abs(Math.abs(e.land[0] - e.kx) - e.reach) < 0.08;
+      if (goal) { main = 'Tor'; sub = edge ? 'Knapp an den Fingerspitzen vorbei.' : 'Ins freie Feld.'; }
+      else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = edge ? 'Er kommt gerade noch hin.' : 'Der Ball landete in seiner Reichweite.'; }
+      else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = 'Der Zielkreis ragte über das Tor hinaus.'; }
     } else if (goal) { main = 'Tor'; sub = !e.guess ? 'Zu spät: der Ball war schon drin.' : !e.inTime ? `Zu spät um ${Math.max(1, Math.round((e.rt - e.window) / 10) * 10)} ms.` : 'Falsche Ecke.'; }
     else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = `Reagiert in ${e.rt} ms, Zeit waren ${e.window} ms.`; }
     else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = 'Der Schuss ging nicht aufs Tor.'; }
@@ -580,58 +597,55 @@
     await hold(1400);
   }
 
-  // --- Eingaben in der Torsicht: eigener Schuss mit Wischen (Richtung = Ziel, Tempo = Härte), Parade mit Antippen ---
-  let drag = null, lastSwipe = 0;
+  /* --- Eingaben in der Torsicht ---
+     Eigener Schuss: Finger aufs Tor, der Zielkreis erscheint. Schieben verschiebt ihn, loslassen schiesst. Wer hält oder
+     schiebt, sieht den Kreis etwas über dem Finger, damit er nicht verdeckt ist; ein kurzes Antippen schiesst genau dorthin.
+     Parade: die Ecke antippen. */
   const scenePt = ev => { const r = $('goalview').getBoundingClientRect(); return [(ev.clientX - r.left) / r.width * 360, (ev.clientY - r.top) / r.height * 260]; };
-  const speedToPower = v => Math.max(0, Math.min(1, (v - 0.25) / 1.2));
   const zoneAt = g => M.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1])));
-  function aimPreview(p, power) {
-    const sh = G.shot, X = card(sh.side, sh.x), from = [180, 270];
+  function aimPreview() {
+    const d = drag, p = [Math.max(14, Math.min(346, d.x)), Math.max(14, Math.min(252, d.y - d.lift))];
+    d.p = p;
     $('aim').toggleAttribute('hidden', false);
-    $('aim-line').setAttribute('x1', from[0]); $('aim-line').setAttribute('y1', from[1]);
     $('aim-line').setAttribute('x2', p[0].toFixed(1)); $('aim-line').setAttribute('y2', p[1].toFixed(1));
     $('aim-dot').setAttribute('cx', p[0].toFixed(1)); $('aim-dot').setAttribute('cy', p[1].toFixed(1));
-    const sp = $('aim-spread'); sp.setAttribute('cx', p[0].toFixed(1)); sp.setAttribute('cy', p[1].toFixed(1));
-    sp.setAttribute('r', (M.spread(G, X, power, sh.q) * (sh.perfect ? G.cfg.sdPerfect : sh.rushed ? G.cfg.sdRushed : 1) * 102 * 1.4).toFixed(1));
-    $('power').hidden = false; $('power-bar').style.width = Math.round(power * 100) + '%';
+    const sp = $('aim-spread'); sp.setAttribute('cx', p[0].toFixed(1)); sp.setAttribute('cy', p[1].toFixed(1)); sp.setAttribute('r', (M.rad(G, G.shot) * 102 * gz.s).toFixed(1));
   }
   function aimAt(input) {
     if (phase !== 'aim' && phase !== 'react') return;
-    const z = $('zones'), sz = input.zone || (input.target ? zoneAt(input.target) : null);
+    const z = $('zones'), sz = input.zone || null;
     z.className = 'zones off'; if (sz) z.querySelector(`[data-z="${sz}"]`).classList.add('sel');
-    $('aim').toggleAttribute('hidden', true); $('power').hidden = true; $('hist').innerHTML = '';
-    stopSway(); phase = 'aim';
+    $('aim').toggleAttribute('hidden', true); $('hist').innerHTML = '';
+    stopSway(); drag = null; phase = 'aim';
     run(Object.assign({ type: 'aim' }, input));
   }
   const stage = $('stage');
   stage.addEventListener('pointerdown', ev => {
-    if (phase === 'react') { if (ev.target.closest('#goalview')) { ev.preventDefault(); saveAt(zoneAt(toGoalXY(scenePt(ev))), ev.timeStamp); } return; }
+    if (phase === 'react') { if (ev.target.closest('#goalview')) { ev.preventDefault(); saveAt(zoneAt(toGoalXY(toLayer(scenePt(ev)))), ev.timeStamp); } return; }
     if (phase !== 'aim') return;
     ev.preventDefault();
-    const p = scenePt(ev); drag = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), lx: ev.clientX, ly: ev.clientY, lt: performance.now(), v: 0 };
+    const p = scenePt(ev), touch = ev.pointerType === 'touch', d = drag = { x: p[0], y: p[1], x0: ev.clientX, y0: ev.clientY, lift: 0, touch };
     try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* ohne Capture geht es auch */ }
-    aimPreview(p, 0);
+    aimPreview();
+    if (touch) d.timer = setTimeout(() => { if (drag === d) { d.lift = 44 / K(); aimPreview(); } }, 170);   // halten: Kreis über den Finger heben
   });
   stage.addEventListener('pointermove', ev => {
     if (!drag || phase !== 'aim') return;
-    const now = performance.now(), v = Math.hypot(ev.clientX - drag.lx, ev.clientY - drag.ly) / Math.max(1, now - drag.lt);
-    drag.v = 0.7 * drag.v + 0.3 * v; drag.lx = ev.clientX; drag.ly = ev.clientY; drag.lt = now;
-    aimPreview(scenePt(ev), speedToPower(drag.v));
+    const p = scenePt(ev); drag.x = p[0]; drag.y = p[1];
+    if (drag.touch && !drag.lift && Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) > 8) drag.lift = 44 / K();
+    aimPreview();
   });
-  stage.addEventListener('pointerup', ev => {
+  stage.addEventListener('pointerup', () => {
     if (!drag || phase !== 'aim') return;
-    const d = drag; drag = null; lastSwipe = Date.now();
-    const p = scenePt(ev), dist = Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0), avg = dist / Math.max(1, performance.now() - d.t0);
-    const g = toGoalXY(p), t = performance.now() - sway.t0;
-    if (dist < 14) { aimAt({ target: M.ZC[zoneAt(g)], power: 0.5, t }); return; }
-    aimAt({ target: g, power: speedToPower(Math.max(avg, d.v)), t });
+    const d = drag; clearTimeout(d.timer);
+    aimAt({ target: toGoalXY(toLayer(d.p)), t: performance.now() - sway.t0 });
   });
-  stage.addEventListener('pointercancel', () => { drag = null; $('aim').toggleAttribute('hidden', true); $('power').hidden = true; });
+  stage.addEventListener('pointercancel', () => { if (drag) clearTimeout(drag.timer); drag = null; $('aim').toggleAttribute('hidden', true); });
   // Tastatur: die Zonen sind Knöpfe
   $('zones').addEventListener('click', e => {
     const b = e.target.closest('.zone'); if (!b || e.detail !== 0) return;
     const z = b.getAttribute('data-z');
-    if (phase === 'react') saveAt(z, 0); else if (phase === 'aim') aimAt({ target: M.ZC[z], power: 0.5, t: performance.now() - sway.t0 });
+    if (phase === 'react') saveAt(z, 0); else if (phase === 'aim') aimAt({ target: M.ZC[z], t: performance.now() - sway.t0 });
   });
 
   // --- Start und Resultat ---

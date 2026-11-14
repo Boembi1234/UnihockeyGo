@@ -95,7 +95,10 @@
 .act .pct,.pass .pct{font-size:22px}
 .pass .pct{font-size:18px}
 /* Torsicht: freie Felder neben dem Goalie (dein Schuss) und Landepunkt (Schuss des Gegners) */
-.free{position:absolute;top:33.846%;height:56.923%;z-index:1;background:rgba(16,185,129,.34);box-shadow:inset 0 0 0 2px #34d399;pointer-events:none}
+.gscale{position:absolute;inset:0;transform-origin:0 0}
+.free{position:absolute;top:55.46%;height:35.31%;z-index:1;background:rgba(16,185,129,.4);box-shadow:inset 0 0 0 2px #34d399;pointer-events:none}
+.free.top{top:33.846%;height:21.62%}
+
 .mark{position:absolute;left:0;top:0;width:11%;aspect-ratio:1;z-index:4;border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 0 2px rgba(5,8,24,.7),0 0 16px rgba(247,215,116,.8);pointer-events:none}
 /*__STORECSS__*/
 </style>
@@ -163,8 +166,8 @@
         <rect x="0" y="118" width="360" height="22" fill="#e6ecfb"/>
         <g fill="#1a57ff"><rect x="8" y="122" width="54" height="14"/><rect x="298" y="122" width="54" height="14"/></g>
         <g fill="#0e1b47"><rect x="70" y="122" width="40" height="14"/><rect x="250" y="122" width="40" height="14"/></g>
-        <path d="M0 236 H360" stroke="#ffffff" stroke-opacity=".7" stroke-width="2"/>
-        <path d="M40 260 L64 236 M320 260 L296 236" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+        <g id="ggoal">
+        <path d="M-700 236 H1060" stroke="#ffffff" stroke-opacity=".7" stroke-width="2"/>
         <polygon points="96,104 264,104 270,224 90,224" fill="#0b1640" fill-opacity=".55"/>
         <polygon points="96,104 264,104 270,224 90,224" fill="url(#meshb)"/>
         <polygon points="78,88 96,104 90,224 78,236" fill="url(#meshb)"/>
@@ -172,21 +175,24 @@
         <polygon points="78,88 282,88 264,104 96,104" fill="url(#meshb)"/>
         <rect x="78" y="88" width="204" height="148" fill="url(#mesh)"/>
         <path d="M78 236 V88 H282 V236" fill="none" stroke="#e2231a" stroke-width="7" stroke-linejoin="round"/>
+        </g>
       </svg>
+      <div class="gscale" id="gscale">
       <div class="ripple" id="ripple" hidden></div>
       <div class="spark" id="spark" hidden></div>
-      <div class="free" id="free-l" hidden></div><div class="free" id="free-r" hidden></div>
+      <div class="free" id="free-l" hidden></div><div class="free" id="free-r" hidden></div><div class="free top" id="free-lt" hidden></div><div class="free top" id="free-rt" hidden></div>
       <div class="keeper" id="keeper"></div>
       <div class="mark" id="mark" hidden></div>
-      <div class="ball" id="ball" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#c4cde6" stroke-width="1"/><g fill="#9aa6c6"><circle cx="12" cy="6" r="1.8"/><circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9" cy="15.5" r="1.8"/><circle cx="15" cy="15.5" r="1.8"/><circle cx="12" cy="11.5" r="1.5"/></g></svg></div>
       <div class="zones off" id="zones">
         <button class="zone" type="button" data-z="tl"></button><button class="zone" type="button" data-z="tm"></button><button class="zone" type="button" data-z="tr"></button>
         <button class="zone" type="button" data-z="bl"></button><button class="zone" type="button" data-z="bm"></button><button class="zone" type="button" data-z="br"></button>
       </div>
+      </div>
+      <div class="ball" id="ball" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#c4cde6" stroke-width="1"/><g fill="#9aa6c6"><circle cx="12" cy="6" r="1.8"/><circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9" cy="15.5" r="1.8"/><circle cx="15" cy="15.5" r="1.8"/><circle cx="12" cy="11.5" r="1.5"/></g></svg></div>
       <svg class="aim" id="aim" viewBox="0 0 360 260" aria-hidden="true" hidden>
-        <line id="aim-line" x1="180" y1="270" x2="180" y2="160" stroke="#f7d774" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round"/>
-        <circle id="aim-spread" cx="180" cy="160" r="20" fill="rgba(247,215,116,.16)" stroke="#f7d774" stroke-width="1.5" stroke-dasharray="3 3"/>
-        <circle id="aim-dot" cx="180" cy="160" r="5" fill="#f7d774" stroke="#1a1203" stroke-width="1.5"/>
+        <line id="aim-line" x1="180" y1="270" x2="180" y2="160" stroke="#f7d774" stroke-opacity=".55" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
+        <circle id="aim-spread" cx="180" cy="160" r="20" fill="rgba(247,215,116,.2)" stroke="#f7d774" stroke-width="2.5"/>
+        <circle id="aim-dot" cx="180" cy="160" r="2.5" fill="#f7d774" stroke="#1a1203" stroke-width="1"/>
       </svg>
     </div>
     <div class="shooter" id="shooter" hidden></div>

@@ -2,7 +2,7 @@
    Weil das Match vom Können abhängt, spielt hier ein Modell-Spieler mit einem Profil:
    s    Streuung beim Tippen auf dem Timing-Balken in ms
    rel  Streuung beim Loslassen des Schusses in ms (der Goalie pendelt)
-   aim  Zielfehler beim Wischen, in Torbreiten (Tor von -1 bis 1)
+   aim  Zielfehler beim Platzieren des Zielkreises, in halben Torbreiten (Tor von -1 bis 1)
    rt   Reaktionszeit bei der Parade in ms, rtSd ihre Streuung, zerr Anteil falsch angetippter Zonen
    Die Zahlen sind Annahmen und müssen mit echten Spielern überprüft werden. */
 'use strict';
@@ -11,37 +11,48 @@ const box = {}; box.window = box; vm.createContext(box);
 ['src/engine.js', 'src/world.js', 'src/lab/match.js', 'src/lab/pool.js', 'src/lab/club.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), box));
 const E = box.HK, W = box.HKWorld, M = box.HKMatch;
 const PROFILES = {
-  stark: { s: 45, rel: 80, aim: 0.08, rt: 480, rtSd: 70, zerr: 0.03 },       // etwa die besten 10 %
-  mittel: { s: 70, rel: 120, aim: 0.12, rt: 560, rtSd: 85, zerr: 0.06 },
-  schwach: { s: 105, rel: 170, aim: 0.17, rt: 650, rtSd: 100, zerr: 0.1 }    // etwa die schwächsten 10 %
+  stark: { s: 45, rel: 60, aim: 0.05, rt: 480, rtSd: 70, zerr: 0.03 },       // etwa die besten 10 %
+  mittel: { s: 70, rel: 95, aim: 0.08, rt: 560, rtSd: 85, zerr: 0.06 },
+  schwach: { s: 105, rel: 140, aim: 0.12, rt: 650, rtSd: 100, zerr: 0.1 }    // etwa die schwächsten 10 %
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), pick = (l, r) => l[Math.floor(r() * l.length)];
 function gauss(r) { let u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
 function erf(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 const pHit = (pf, w, cfg) => erf(w * cfg.barSweep / (2 * Math.SQRT2 * pf.s));
 const shift = (sq, d) => sq.map(c => { const x = Object.assign({}, c); ['sco', 'ply', 'clu', 'fai', 'frm', 'exp', 'ovr'].forEach(k => { x[k] = Math.max(40, Math.min(99, x[k] + d)); }); return x; });
+/* Eigener Schuss wie ein vernünftiger Spieler: loslassen, wenn der Goalie ganz aussen steht (frühestens nach 500 ms), und
+   den Zielkreis in die Mitte des freien Felds auf der anderen Seite legen, hoch, wenn der Kreis dort ganz Platz hat. */
+function shotPlan(s) {
+  const sh = s.shot, k = sh.keeper, R0 = M.rad(s, sh); let t = 0, side = -1;
+  for (let n = 0; n < 8; n++) { const tl = (n - k.phase) * k.period, tr = (n + 0.5 - k.phase) * k.period; if (tl >= 500) { t = tl; side = -1; break; } if (tr >= 500) { t = tr; side = 1; break; } }
+  const top = R0 * 0.69 <= 0.19, free = 1 + k.amp - M.reach(s, sh, top);        // Breite des freien Felds auf der fernen Seite
+  return { t, target: [-side * (1 - Math.max(free, 0.05) / 2), top ? 0.81 : 0.3], fit: Math.max(0, Math.min(1, free / (2 * R0))) };
+}
+// Grobe Torchance für einen Schuss von Spieler id aus seiner Lage: wie gut passt der Zielkreis ins freie Feld
+function chance(s, sc, id) {
+  const sh = { side: 'you', x: id, q: M.shotInfo(s, sc, id).q, ctx: 'attack' }, R0 = M.rad(s, sh), free = 1 + s.cfg.kAmp - M.reach(s, sh, false);
+  return Math.max(0.08, Math.min(0.92, free / (2 * R0) * 0.85));
+}
 /* Spielt vernünftig: wählt die Aktion mit dem besten Erwartungswert für das eigene Können, tippt mit seiner Streuung,
-   schiesst auf die Seite, von der der Goalie gerade wegpendelt, und reagiert bei der Parade mit seiner Reaktionszeit. */
+   zielt ins freie Feld und reagiert bei der Parade mit seiner Reaktionszeit. */
 function policy(pf) {
   return (s, r) => {
     const sc = s.cur, cfg = s.cfg, tap = pos => clamp(pos + gauss(r) * pf.s / cfg.barSweep, 0, 1);
     if (s.phase === 'decide' && sc.type === 'att') {
-      const X = sc.carrier, last = sc.step >= sc.max - 1, goalP = q => 0.2 + 0.55 * q;
+      const X = sc.carrier, last = sc.step >= sc.max - 1;
       const val = a => { const c = M.contest(s, a); return c.free ? 1 : pHit(pf, c.w, cfg); };
-      let best = { v: val({ type: 'shoot' }) * goalP(M.shotInfo(s, sc, X).q) * 1.05, a: { type: 'shoot' } };
+      let best = { v: val({ type: 'shoot' }) * chance(s, sc, X) * 1.05, a: { type: 'shoot' } };
       if (!last) {
-        s.teams.you.cards.forEach(c => { if (c.id === X) return; const a = { type: 'pass', to: c.id }, v = val(a) * goalP(M.shotInfo(s, sc, c.id).q) * 0.9; if (v > best.v) best = { v, a }; });
-        const vd = val({ type: 'dribble' }) * goalP(Math.min(1, M.shotInfo(s, sc, X).q + 0.25)) * 0.9; if (vd > best.v) best = { v: vd, a: { type: 'dribble' } };
+        s.teams.you.cards.forEach(c => { if (c.id === X) return; const a = { type: 'pass', to: c.id }, v = val(a) * chance(s, sc, c.id) * 0.9; if (v > best.v) best = { v, a }; });
+        const vd = val({ type: 'dribble' }) * Math.min(0.92, chance(s, sc, X) + 0.2) * 0.9; if (vd > best.v) best = { v: vd, a: { type: 'dribble' } };
       }
       const c = M.contest(s, best.a);
       return c.free ? best.a : Object.assign({ hit: tap(c.pos) }, best.a);
     }
     if (s.phase === 'decide') return { type: 'defend', hit: tap(sc.bar.pos) };
     if (s.phase === 'aim' && s.shot.side === 'you') {
-      // Abschluss, wenn der Goalie ganz aussen steht (frühestens nach 500 ms), Ziel auf der anderen Seite
-      const k = s.shot.keeper; let t = 0, side = -1;
-      for (let n = 0; n < 8; n++) { const tl = (n - k.phase) * k.period, tr = (n + 0.5 - k.phase) * k.period; if (tl >= 500) { t = tl; side = -1; break; } if (tr >= 500) { t = tr; side = 1; break; } }
-      return { type: 'aim', t: Math.max(0, t + gauss(r) * pf.rel), target: [-side * 0.68 + gauss(r) * pf.aim, (r() < 0.5 ? 0.3 : 0.7) + gauss(r) * pf.aim * 0.8], power: clamp(0.55 + gauss(r) * 0.12, 0.1, 1) };
+      const pl = shotPlan(s);
+      return { type: 'aim', t: Math.max(0, pl.t + gauss(r) * pf.rel), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] };
     }
     if (s.phase === 'aim') { const sh = s.shot; return { type: 'aim', zone: r() < pf.zerr ? pick(M.ZONES.filter(z => z !== sh.zone), r) : sh.zone, rt: Math.max(160, pf.rt + gauss(r) * pf.rtSd) }; }
     return { type: 'next' };
@@ -58,7 +69,7 @@ function play(squad, opp, pol, n, seed, cfg) {
   }
   return m;
 }
-module.exports = { box, PROFILES, policy, play, shift };
+module.exports = { box, PROFILES, policy, play, shift, shotPlan, gauss };
 if (require.main === module) {
   const n = +process.argv[2] || 1500, cfg = JSON.parse(JSON.stringify(M.CFG));
   process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); cfg[k] = +v; });
