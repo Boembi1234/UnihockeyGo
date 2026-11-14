@@ -8,7 +8,7 @@
 <style>
 /*__LABCSS__*/
 /* Match: Feld von oben mit allen zehn Spielern, darunter die Entscheidung und der Ticker. */
-.stage.match{height:auto;aspect-ratio:360/400;max-height:440px}
+.stage.match{height:auto;aspect-ratio:360/420;max-height:460px}
 .stage.match::before,.stage.match::after{display:none}
 .stage.match{background:#1440a6}
 #pitch{position:absolute;inset:0;width:100%;height:100%;display:block}
@@ -82,18 +82,21 @@
     <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club"></span></div>
   </div>
   <div class="stage match" id="stage">
-    <svg id="pitch" viewBox="0 0 360 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-      <rect x="-200" y="-50" width="760" height="500" fill="#1440a6"/>
-      <path d="M0 14 H360" stroke="#ffffff" stroke-opacity=".85" stroke-width="4"/>
+    <svg id="pitch" viewBox="0 0 360 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <rect x="-200" y="-50" width="760" height="900" fill="#1440a6"/>
+      <path d="M0 14 H360 M0 786 H360" stroke="#ffffff" stroke-opacity=".85" stroke-width="4"/>
       <rect x="132" y="22" width="96" height="84" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
       <rect x="157" y="40" width="46" height="18" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
-      <path d="M100 40 H260" stroke="#ffffff" stroke-opacity=".22" stroke-width="1.5"/>
       <path d="M165 40 V28 H195 V40" fill="rgba(255,255,255,.12)" stroke="#e2231a" stroke-width="4" stroke-linejoin="round"/>
-      <path d="M0 398 H360" stroke="#ffffff" stroke-opacity=".4" stroke-width="2"/>
-      <circle cx="180" cy="398" r="40" fill="none" stroke="#ffffff" stroke-opacity=".3" stroke-width="2"/>
-      <circle cx="70" cy="150" r="3" fill="#ffffff" fill-opacity=".4"/><circle cx="290" cy="150" r="3" fill="#ffffff" fill-opacity=".4"/>
+      <rect x="132" y="694" width="96" height="84" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+      <rect x="157" y="742" width="46" height="18" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="2"/>
+      <path d="M165 760 V772 H195 V760" fill="rgba(255,255,255,.12)" stroke="#e2231a" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M0 400 H360" stroke="#ffffff" stroke-opacity=".5" stroke-width="2"/>
+      <circle cx="180" cy="400" r="40" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="2"/>
+      <g fill="#ffffff" fill-opacity=".4"><circle cx="70" cy="150" r="3"/><circle cx="290" cy="150" r="3"/><circle cx="70" cy="650" r="3"/><circle cx="290" cy="650" r="3"/><circle cx="180" cy="400" r="3"/></g>
       <g id="lanes"></g>
-      <circle id="gk" cx="180" cy="52" r="12" stroke-width="2.5"/>
+      <circle id="gk" cx="180" cy="52" r="12" stroke-width="2.5" fill="#1b2033" stroke="#f7d774"/>
+      <circle id="gk2" cx="180" cy="748" r="12" stroke-width="2.5" fill="#1a57ff" stroke="#ffffff"/>
       <g id="pls"></g>
       <circle id="mball" r="6" fill="#ffffff" stroke="#c4cde6" stroke-width="1.5"/>
     </svg>

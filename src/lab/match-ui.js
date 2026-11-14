@@ -56,8 +56,19 @@
     }));
   }
   function place(id, p) { pos[id] = p; els[id].setAttribute('transform', `translate(${p[0].toFixed(1)} ${p[1].toFixed(1)})`); }
+  /* Ganzes Feld 360 x 800: Du spielst nach oben aufs Tor bei (180, 40), der Gegner nach unten aufs Tor bei (180, 760).
+     Die Engine rechnet jede Szene in einer Hälfte, in der nach oben angegriffen wird; hier wird sie aufs ganze Feld gelegt.
+     Die Kamera zeigt einen Ausschnitt von 420 Einheiten Höhe und fährt dem Ball nach. */
+  const toRink = (p, side) => (side === 'you' ? [p[0], p[1]] : [360 - p[0], 800 - p[1]]);
+  const goalOf = side => (side === 'you' ? [180, 40] : [180, 760]);
+  const ep = (sc, id) => toRink(sc.pos[id], M.atkSide(sc));
+  // Im offenen Spiel folgt die Kamera dem Ball, in einer Szene zeigt sie fest auf das Tor, auf das gespielt wird.
+  let cam = 0, camMode = 'follow';
+  const camTarget = () => (camMode === 'follow' ? Math.max(0, Math.min(380, ballP[1] - 230)) : (G && G.cur && G.cur.type === 'def' ? 380 : 0));
+  function camSet(y) { cam = y; $('pitch').setAttribute('viewBox', `0 ${cam.toFixed(1)} 360 420`); }
   let ballP = [180, 380];
   function ballAt(p) { ballP = p; $('mball').setAttribute('cx', p[0].toFixed(1)); $('mball').setAttribute('cy', p[1].toFixed(1)); }
+  const camFollow = k => camSet(cam + (camTarget() - cam) * k);
   const atFoot = id => [pos[id][0] + 10, pos[id][1] - 12];
   function setCarrier(id) {
     Object.keys(els).forEach(k => els[k].querySelector('.carrier-ring').setAttribute('visibility', k === id ? 'visible' : 'hidden'));
@@ -70,7 +81,7 @@
   function tween(moves, ms, slow) {
     const from = moves.map(m => (m.id === 'ball' ? ballP : pos[m.id]).slice());
     const apply = t => moves.forEach((m, i) => { const p = m.via ? bez(from[i], m.via, m.to, t) : lerp(from[i], m.to, t); if (m.id === 'ball') ballAt(p); else place(m.id, p); });
-    if (!T(ms)) { apply(1); return Promise.resolve(); }
+    if (!T(ms)) { apply(1); camSet(camTarget()); return Promise.resolve(); }
     return new Promise(res => {
       const vig = $('vignette'); let t = 0, last = performance.now();
       (function tick(now) {
@@ -78,7 +89,7 @@
         const rate = slow && t > 0.55 && t < 0.9 ? 0.3 : 1;
         t = fast ? 1 : Math.min(1, t + dt / ms * rate);
         if (slow) vig.style.opacity = (0.7 * Math.sin(Math.PI * Math.max(0, Math.min(1, (t - 0.45) / 0.55)))).toFixed(2);
-        apply(io(t));
+        apply(io(t)); camFollow(t < 1 ? Math.min(1, dt / 140) : 1);
         if (t < 1) requestAnimationFrame(tick); else { vig.style.opacity = 0; res(); }
       })(last);
     });
@@ -86,7 +97,8 @@
   // Alle Spieler an die Positionen der aktuellen Szene
   function syncPositions(ms) {
     const sc = G.cur; if (!sc) return Promise.resolve();
-    const moves = Object.keys(sc.pos).map(id => ({ id, to: sc.pos[id] }));
+    const moves = Object.keys(sc.pos).map(id => ({ id, to: ep(sc, id) }));
+    moves.push({ id: 'ball', to: (p => [p[0] + 10, p[1] - 12])(ep(sc, sc.carrier)) });
     return tween(moves, ms).then(() => setCarrier(sc.carrier));
   }
   function drawLanes() {
@@ -101,10 +113,7 @@
       svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: col, 'stroke-width': as === 'you' ? 3 : 2, 'stroke-dasharray': '6 6', opacity: as === 'you' ? 0.85 : 0.4, 'stroke-linecap': 'round' }, g);
     });
   }
-  function setKeeperColor() {
-    const top = G.cur && G.cur.type === 'def' ? 'you' : 'home';
-    $('gk').setAttribute('fill', TEAM[top].fill); $('gk').setAttribute('stroke', TEAM[top].ring);
-  }
+  function setKeeperColor() { /* feste Seiten: oben der Goalie des Gegners, unten deiner */ }
 
   // --- Anzeige ---
   function show(name) { ['intro', 'match', 'end'].forEach(n => { $('screen-' + n).hidden = n !== name; }); window.scrollTo(0, 0); }
@@ -208,18 +217,18 @@
       if (e.t === 'shootStart') {
         say(`${card(sideOf(e.x), e.x).last} zieht ab.`);
         if (nx && nx.t === 'blocked') {
-          const b = before.cur.pos[nx.by];
+          const b = ep(before.cur, nx.by);
           await tween([{ id: nx.by, to: lerp(b, pos[e.x], 0.45) }, { id: 'ball', to: lerp(b, pos[e.x], 0.45) }], 520, true);
           stamp('Geblockt', `${card(sideOf(nx.by), nx.by).last} wirft sich in den Schuss.`, sideOf(e.x) === 'you' ? 'bad' : 'good');
           addTick(`${card(sideOf(e.x), e.x).last} schiesst, ${card(sideOf(nx.by), nx.by).last} blockt.`);
           await hold(1100); hideStamp(); i++;
         }
       } else if (e.t === 'pass') {
-        const side = sideOf(e.from), to = e.ok ? (G.cur && G.cur.pos[e.to]) || pos[e.to] : pos[e.to];
+        const side = sideOf(e.from), to = e.ok && G.cur && G.cur.pos[e.to] ? ep(G.cur, e.to) : pos[e.to];
         say(`${card(side, e.from).last} passt zu ${card(side, e.to).last}.`);
         if (e.ok) {
           const m = before.cur.mark[e.to], moves = [{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.to, to }];
-          if (m && G.cur && G.cur.pos[m]) moves.push({ id: m, to: G.cur.pos[m] });
+          if (m && G.cur && G.cur.pos[m]) moves.push({ id: m, to: ep(G.cur, m) });
           await tween(moves, 520, e.risk > 0.35);
           setCarrier(e.to);
         } else {
@@ -233,8 +242,8 @@
         const side = sideOf(e.x), X = card(side, e.x), mk = card(sideOf(e.by), e.by);
         say(`${X.last} geht ins Dribbling gegen ${mk.last}.`);
         if (e.ok) {
-          const to = G.cur.pos[e.x], via = [pos[e.by][0] + (pos[e.x][0] < 180 ? 34 : -34), pos[e.by][1]];
-          await tween([{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: G.cur.pos[e.by] }], 700, true);
+          const to = ep(G.cur, e.x), via = [pos[e.by][0] + (pos[e.x][0] < 180 ? 34 : -34), pos[e.by][1]];
+          await tween([{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
           setCarrier(e.x);
           stamp('Vorbei', `${X.last} lässt ${mk.last} stehen.`, side === 'you' ? 'good' : 'bad', 'low');
           await hold(800); hideStamp();
@@ -248,7 +257,7 @@
         }
       } else if (e.t === 'defend') {
         const X = card('home', e.x), Dc = card('you', e.by), c = pos[e.x];
-        const spot = e.action === 'press' ? lerp(pos[e.by], c, 0.7) : e.action === 'block' ? lerp(c, [180, 40], 0.3) : lerp(c, pos[e.target], 0.5);
+        const spot = e.action === 'press' ? lerp(pos[e.by], c, 0.7) : e.action === 'block' ? lerp(c, goalOf('home'), 0.3) : lerp(c, pos[e.target], 0.5);
         say(`${Dc.last} ${e.action === 'press' ? 'geht auf ' + X.last : e.action === 'block' ? 'stellt sich in die Schusslinie' : 'stellt den Pass zu ' + card('home', e.target).last + ' zu'}.`);
         const it = e.intent, moves = [{ id: e.by, to: spot }];
         if (e.stopped) {
@@ -262,12 +271,12 @@
           await tween(moves, 520);
           stamp(e.right ? 'Knapp' : 'Falsch gelesen', e.right ? `Richtig gelesen, aber ${X.last} setzt sich durch.` : `${X.last} wollte ${INTENT[it.kind]}.`, 'bad', 'low');
           if (it.kind === 'pass') {
-            const to = G.cur.pos[it.to] || pos[it.to];
+            const to = G.cur.pos[it.to] ? ep(G.cur, it.to) : pos[it.to];
             await tween([{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: it.to, to }], 480);
             setCarrier(it.to);
           } else if (it.kind === 'dribble') {
-            const to = G.cur.pos[e.x];
-            await tween([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: G.cur.pos[e.by] }], 560);
+            const to = ep(G.cur, e.x);
+            await tween([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: ep(G.cur, e.by) }], 560);
             setCarrier(e.x);
           }
           await hold(1000); hideStamp();
@@ -311,7 +320,10 @@
     setTag('Spiel läuft', 'warn'); $('panel').hidden = true;
     showHint('Tippe aufs Feld, um vorzuspulen');
     $('sc-time').textContent = lastMinute + '. Minute';
+    camMode = 'follow';
     await leadIn();
+    camMode = 'scene';
+    await tween([], 450);
     addTick(att ? `Angriff: ${X.last} am Ball.` : `${HOME} greift an, ${X.last} am Ball.`);
     renderDecision();
   }
@@ -326,12 +338,10 @@
     atk.forEach(c => { const b = M.FORM[c.role]; wp[c.id] = [Math.max(30, Math.min(330, b[0] + (Math.random() - 0.5) * 50)), Math.min(385, b[1] + depth * 160 + (Math.random() - 0.5) * 30)]; });
     const opp = G.teams[side === 'you' ? 'home' : 'you'].cards, byRole = {}; opp.forEach(c => { byRole[c.role] = c; });
     atk.forEach(c => { const d = byRole[M.MARKS[c.role]], a = wp[c.id], mp = lerp(a, [180, 40], 0.27), sd = a[0] < 170 ? 1 : -1; wp[d.id] = [mp[0] + sd * 20, mp[1] - 6]; });
+    Object.keys(wp).forEach(id => { wp[id] = toRink(wp[id], side); });
     return wp;
   }
-  function turnView(side) {
-    view = side; const top = side === 'you' ? 'home' : 'you';
-    $('gk').setAttribute('fill', TEAM[top].fill); $('gk').setAttribute('stroke', TEAM[top].ring);
-  }
+  function turnView(side) { view = side; }   // nur noch: wer hat den Ball; das Feld dreht nicht mehr
   async function leadIn() {
     const sc = G.cur, ev = sc.open || [], m0 = lastMinute, m1 = G.minute, nm = id => card(sideOf(id), id).last, tm = side => (side === 'you' ? 'Du' : HOME);
     let holder = ev.length ? ev[0].from : sc.carrier;
@@ -343,12 +353,12 @@
       const e = ev[k], last = k === ev.length - 1;
       $('sc-time').textContent = Math.round(m0 + (m1 - m0) * (k + 1) / ev.length) + '. Minute';
       if (e.kind === 'pass' || e.kind === 'hold') {
-        const wp = e.final ? Object.assign({}, sc.pos) : formation(e.side, e.depth), to = e.kind === 'hold' ? e.from : e.to;
+        const wp = e.final ? Object.fromEntries(Object.keys(sc.pos).map(id => [id, ep(sc, id)])) : formation(e.side, e.depth), to = e.kind === 'hold' ? e.from : e.to;
         if (e.kind === 'pass') say(`${nm(e.from)} spielt zu ${nm(to)}.`);
         await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[to][0] + 10, wp[to][1] - 12] }]), last ? 750 : 820);
         setCarrier(to); holder = to;
       } else if (e.kind === 'intercept' || e.kind === 'tackle') {
-        const cut = e.kind === 'tackle' ? pos[e.from] : lerp(pos[e.from], [pos[e.from][0] + (Math.random() - 0.5) * 120, pos[e.from][1] - 70], 0.6);
+        const fwd = e.side === 'you' ? -70 : 70, cut = e.kind === 'tackle' ? pos[e.from] : lerp(pos[e.from], [pos[e.from][0] + (Math.random() - 0.5) * 120, pos[e.from][1] + fwd], 0.6);
         say(`${nm(e.by)} ${KIND[e.kind]}. Ballwechsel.`);
         await tween([{ id: e.by, to: cut }, { id: 'ball', to: cut }], 600);
         setCarrier(e.by); addTick(`${nm(e.by)} ${KIND[e.kind]} gegen ${nm(e.from)}.`);
@@ -358,7 +368,7 @@
         await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[e.by][0] + 10, wp[e.by][1] - 12] }]), 800);
         setCarrier(e.by); holder = e.by;
       } else {
-        const tgt = e.kind === 'save' ? [180 + (Math.random() - 0.5) * 16, 50] : [180 + (Math.random() < 0.5 ? -40 : 40), 22];
+        const g = goalOf(e.side), dir = e.side === 'you' ? 1 : -1, tgt = e.kind === 'save' ? [180 + (Math.random() - 0.5) * 16, g[1] + dir * 10] : [180 + (Math.random() < 0.5 ? -40 : 40), g[1] - dir * 18];
         say(`${nm(e.from)} versucht es aus der Distanz.`);
         await tween([{ id: 'ball', to: tgt }], 520);
         addTick(`Distanzschuss ${nm(e.from)}: ${e.kind === 'save' ? 'gehalten' : 'daneben'}.`);
@@ -529,7 +539,7 @@
     G = M.newMatch({ homeName: HOME, you: { goalie: { val: 88 }, cards: SQUAD }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), opp) } }, rng);
     disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0;
     buildPlayers(); show('match');
-    Object.keys(G.cur.pos).forEach(id => place(id, [G.cur.pos[id][0], 400]));
+    Object.keys(G.cur.pos).forEach(id => place(id, [G.cur.pos[id][0], 400])); ballAt([180, 400]); camSet(190);
     startScene();
   }
   function finish() {
