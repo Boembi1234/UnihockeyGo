@@ -21,6 +21,15 @@ Unter <https://unihockeygo.netlify.app/lab/> liegt ein neues Duell zum Ausprobie
 
 Code in `src/lab/`, Simulation mit `node sim/lab.js`, Browser-Test mit `node test/lab.js`.
 
+Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Shop:
+
+- **Team aus Packs:** Du startest mit fünf Bronze-Karten (Linie um 74) und 1500 Münzen. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.
+- **Pool:** alle 271 Feldspieler der Herren L-UPL 2026/27 aus dem Fantasy-Pool (`src/lab/pool.js`). Die 28 bekannten Karten behalten ihre Werte, die übrigen werden aus dem Fantasy-Preis abgeleitet.
+- **Münzen:** Sieg 400 (WASA) bis 900 (GC), Niederlage 120, dazu 30 pro eigenes Tor. Doppelte Karten geben 60, 200 oder 600.
+- **Speichern:** Karten, Linie und Münzen liegen im `localStorage` dieses Browsers. «Neu beginnen» im Shop setzt alles zurück.
+
+Logik in `src/lab/club.js`, Oberfläche in `src/lab/store-ui.js`. Simulation mit `node sim/club.js`, Browser-Test mit `node test/store.js`.
+
 ## Aufbau
 
 | Pfad | Inhalt |

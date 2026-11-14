@@ -1,14 +1,14 @@
 /* Match mit Schlüsselszenen: Oberfläche. Rechnet nichts selbst aus, sondern zeigt, was HKMatch zurückgibt. */
 (function () {
   'use strict';
-  const E = window.HK, W = window.HKWorld, M = window.HKMatch;
+  const E = window.HK, W = window.HKWorld, M = window.HKMatch, C = window.HKClub, S = window.HKStore;
   const $ = id => document.getElementById(id), NS = 'http://www.w3.org/2000/svg';
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
   const rng = E.makeRng((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0);
-  const OPPS = ['koeniz', 'wiler', 'gc'];
+  const OPPS = C.OPPS.map(o => o.id);
 
-  let G = null, phase = 'idle', fast = false, wake = null, opp = 'koeniz', HOME = '';
+  let G = null, phase = 'idle', fast = false, wake = null, opp = 'wasa', HOME = '';
   let disp = { you: 0, home: 0 }, penDisp = { you: 0, home: 0 }, ticker = [];
   const els = {}, pos = {};
 
@@ -117,7 +117,7 @@
   function setKeeperColor() { /* feste Seiten: oben der Goalie des Gegners, unten deiner */ }
 
   // --- Anzeige ---
-  function show(name) { ['intro', 'match', 'end'].forEach(n => { $('screen-' + n).hidden = n !== name; }); window.scrollTo(0, 0); }
+  const show = S.show;
   function setTag(text, tone) { $('tag').textContent = text; $('tag').className = 'tag ' + tone; }
   const say = t => { $('say').textContent = t; };
   function stamp(main, sub, tone, where) {
@@ -543,21 +543,23 @@
   });
 
   // --- Start und Resultat ---
-  const top = (pos_, n) => E.DATA.collection.filter(c => c.pos === pos_).sort((a, b) => b.ovr - a.ovr).slice(0, n);
-  const SQUAD = top('ATT', 3).concat(top('DEF', 2));
+  // Deine Linie kommt aus dem Team (Shop und Packs); beim Gegner fehlt, wer bei dir spielt
+  const squad = () => S.line();
+  const oppCards = id => C.oppCards(id, S.state().lineup);
   function renderIntro() {
-    const m = M.newMatch({ you: { goalie: { val: 88 }, cards: SQUAD }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), opp) } }, E.makeRng(1));
+    const sq = squad(), m = M.newMatch({ you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(opp) } }, E.makeRng(1));
+    $('intro-ovr').textContent = '· ' + C.teamOvr(S.state().lineup);
     $('lineup').innerHTML = m.teams.you.cards.slice().sort((a, b) => ['LW', 'C', 'RW', 'LD', 'RD'].indexOf(a.role) - ['LW', 'C', 'RW', 'LD', 'RD'].indexOf(b.role))
-      .map(c => `<li><b>${c.ovr}</b><span>${esc(c.last)}</span><i>${ROLE[c.role]}</i></li>`).join('');
+      .map(c => `<li class="${C.rarity(c)}"><b>${c.ovr}</b><span>${esc(c.last)}</span><i>${ROLE[c.role]}</i></li>`).join('');
     $('opps').innerHTML = OPPS.map(id => {
-      const mm = M.newMatch({ you: { goalie: { val: 88 }, cards: SQUAD }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), id) } }, E.makeRng(1));
-      const str = Math.round(M.strength(mm.teams.home.cards)), atts = Math.round(mm.attShare * 12);
-      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Etwa ${atts} von 12 Szenen greifst du an.</span><i>${str}</i></button>`;
+      const mm = M.newMatch({ you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(id) } }, E.makeRng(1));
+      const str = Math.round(M.strength(mm.teams.home.cards)), atts = Math.round(mm.attShare * 12), o = C.OPPS.find(x => x.id === id);
+      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Etwa ${atts} von 12 Szenen greifst du an. Sieg: ${S.fmt(o.win)} Münzen.</span><i>${str}</i></button>`;
     }).join('');
   }
   function start() {
     HOME = W.club(opp).short;
-    G = M.newMatch({ homeName: HOME, you: { goalie: { val: 88 }, cards: SQUAD }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), opp) } }, rng);
+    G = M.newMatch({ homeName: HOME, you: { goalie: { val: 88 }, cards: squad() }, home: { goalie: { val: 88 }, cards: oppCards(opp) } }, rng);
     disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0;
     buildPlayers(); show('match');
     Object.keys(G.cur.pos).forEach(id => place(id, [G.cur.pos[id][0], 400])); ballAt([180, 400]); camSet(190);
@@ -577,6 +579,8 @@
       [`${st.stops} von ${st.def}`, 'Abwehrszenen mit Ballgewinn']
     ].map(r => `<li><b>${r[0]}</b><span>${r[1]}</span></li>`).join('');
     $('ticker-end').innerHTML = $('ticker').innerHTML;
+    const coins = C.reward(opp, won, y); S.earn(coins, won);
+    $('reward').innerHTML = `${S.COIN}+${S.fmt(coins)} <span>Münzen</span>`;
     show('end');
   }
 
@@ -602,5 +606,6 @@
     if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake();
   });
   $('hint').addEventListener('click', () => { if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake(); });
+  S.onChange(() => { if (!$('screen-intro').hidden || phase === 'end' || phase === 'idle') renderIntro(); });
   renderIntro();
 })();

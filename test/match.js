@@ -16,6 +16,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     const over = async w => { const x = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth); if (x > 0) errors.push('Überlauf ' + w + ' +' + x); };
     await snap('00-intro', true); await over('intro');
     for (let m = 0; m < N; m++) {
+      if (m > 0) await p.click('#btn-other');
       await p.evaluate(() => { const o = [...document.querySelectorAll('#opps [data-opp]')]; o[Math.floor(Math.random() * o.length)].click(); });
       await p.click(m === 0 ? '#btn-start' : '#btn-start');
       for (let g = 0; g < 5000; g++) {
@@ -26,7 +27,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('button:not(:disabled)')) return document.getElementById('tag').textContent === 'Abwehr' ? 'def' : 'att';
           return 'wait';
         });
-        if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score')); break; }
+        if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att' || st === 'def') {
           await snap(st === 'att' ? '01-angriff' : '02-abwehr'); await over(st);
           n++;

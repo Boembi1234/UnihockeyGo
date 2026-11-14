@@ -1,8 +1,8 @@
 /* Simulation für das Match mit Schlüsselszenen. node sim/match.js [n] [key=value ...] */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
-const box = {}; vm.createContext(box);
-['src/engine.js', 'src/world.js', 'src/lab/match.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), box));
+const box = {}; box.window = box; vm.createContext(box);
+['src/engine.js', 'src/world.js', 'src/lab/match.js', 'src/lab/pool.js', 'src/lab/club.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), box));
 const E = box.HK, W = box.HKWorld, M = box.HKMatch;
 const n = +process.argv[2] || 2000, cfg = JSON.parse(JSON.stringify(M.CFG));
 process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); cfg[k] = +v; });
@@ -53,7 +53,8 @@ function run(name, pol, squad, hall, seed) {
   const p = v => (100 * v).toFixed(1).padStart(5) + '%', f = v => v.toFixed(2);
   console.log(name.padEnd(24), 'Sieg', p(m.win / n), ' Tore', f((m.gf + m.ga) / n), f(m.gf / n) + ':' + f(m.ga / n), ' Penaltys', p(m.so / n), ' Angriffe', f(m.att / n), '(' + p(m.share / n) + ')', ' Schüsse', f(m.shots / n), p(m.goals / Math.max(1, m.shots)), ' gegen dich', f(m.faced / n), ' Ballgewinne/Abwehr', p(m.stops / Math.max(1, m.def)), ' Entscheide/M', f(m.decisions / n));
 }
-['koeniz', 'wiler', 'gc'].forEach((h, i) => {
+module.exports = { box, reasonable, random };
+if (require.main === module) ['koeniz', 'wiler', 'gc'].forEach((h, i) => {
   console.log('--- gegen ' + h);
   run('vernünftig', reasonable, SQ, h, 11 + i);
   run('vernünftig, Werte -8', reasonable, shift(SQ, -8), h, 21 + i);
