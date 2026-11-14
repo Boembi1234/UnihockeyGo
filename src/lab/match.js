@@ -86,6 +86,17 @@
     return { p: clamp(s.cfg.drib + (dribVal(X) - stanceVal(M, 'zwei')) * s.cfg.dribSlope + space, s.cfg.dribMin, s.cfg.dribMax), by: M.id, edge: dribVal(X) - stanceVal(M, 'zwei') };
   }
 
+  // Laufwege: Nach jeder gelungenen Aktion bewegen sich die anderen Angreifer, ihre Gegenspieler folgen ihnen.
+  function shift(s, sc, rng) {
+    players(s, atkSide(sc)).forEach(c => {
+      if (c.id === sc.carrier) return;
+      const t = lerp(P(sc, c.id), GOAL, 0.06);
+      sc.pos[c.id] = [clamp(t[0] + (rng() - 0.5) * 40, 30, 330), clamp(t[1] + (rng() - 0.5) * 26, 90, 360)];
+      const d = sc.mark[c.id], mp = lerp(sc.pos[c.id], GOAL, 0.22 + rng() * 0.12), side = sc.pos[c.id][0] < 170 ? 1 : -1;
+      sc.pos[d] = [mp[0] + side * 18, mp[1] - 6];
+    });
+  }
+
   // --- Szenen ---
   function makeScene(s, rng, type, counter) {
     const sc = { type, step: 0, max: counter ? s.cfg.counterSteps : s.cfg.maxSteps, counter: !!counter, pos: {}, mark: {}, carrier: null, intent: null };
@@ -231,7 +242,7 @@
       s.stats.passOk++;
       // Der Empfänger hat kurz Luft: sein Gegenspieler kommt einen Schritt zu spät
       const m = sc.mark[a.to]; sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), 0.4);
-      sc.carrier = a.to; sc.step++; return;
+      sc.carrier = a.to; shift(s, sc, rng); sc.step++; return;
     }
     if (a.type === 'dribble') {
       const di = dribInfo(s, sc, X), ok = rng() < di.p;
@@ -242,7 +253,7 @@
       const p = P(sc, X), to = lerp(p, GOAL, clamp(70 / dist(p, GOAL), 0.2, 0.55));
       sc.pos[X] = [to[0] + (p[0] < 180 ? 14 : -14), Math.max(80, to[1])];
       sc.pos[di.by] = [P(sc, di.by)[0], P(sc, di.by)[1] + 46];   // Gegenspieler ausgespielt, steht hinter ihm
-      sc.step++; return;
+      shift(s, sc, rng); sc.step++; return;
     }
     return false;
   }
@@ -271,6 +282,7 @@
     if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack'); return; }
     if (it.kind === 'pass') { const m = sc.mark[it.to]; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3); sc.carrier = it.to; }
     else { const p = P(sc, X.id), to = lerp(p, GOAL, clamp(70 / dist(p, GOAL), 0.2, 0.55)); sc.pos[X.id] = [to[0], Math.max(80, to[1])]; sc.pos[D.id] = [P(sc, D.id)[0], P(sc, D.id)[1] + 40]; }
+    shift(s, sc, rng);
     sc.step++;
     aiIntent(s, rng);
   }

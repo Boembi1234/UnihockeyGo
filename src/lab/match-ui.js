@@ -283,7 +283,7 @@
   }
   async function after() {
     if (G.phase === 'aim') { await toGoal(); return; }
-    if (G.phase === 'decide') { leaveGoal(); await syncPositions(260); renderScore(); renderDecision(); return; }
+    if (G.phase === 'decide') { leaveGoal(); await syncPositions(650); renderScore(); renderDecision(); return; }
     if (G.phase === 'done') {
       phase = 'pause'; fast = false;
       const lastScene = !G.pen && G.scene + 1 >= G.cfg.scenes;
@@ -308,10 +308,39 @@
     phase = 'play'; fast = false;
     leaveGoal(); renderScore(); setKeeperColor();
     const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier);
+    setTag(att ? 'Spielaufbau' : HOME + ' baut auf', att ? 'you' : 'home'); $('panel').hidden = true;
+    showHint('Tippe aufs Feld, um vorzuspulen');
+    $('sc-time').textContent = lastMinute + '. Minute';
+    await leadIn();
     addTick(att ? `Angriff: ${X.last} am Ball.` : `${HOME} greift an, ${X.last} am Ball.`);
-    setTag(att ? 'Angriff' : 'Abwehr', att ? 'you' : 'home'); say(''); $('panel').hidden = true;
-    await syncPositions(700);
     renderDecision();
+  }
+
+  /* Spielaufbau vor der Szene: Das angreifende Team spielt sich den Ball von hinten 3 bis 5 Mal zu und rückt vor,
+     die Gegenspieler verschieben mit, die Uhr läuft. Reine Darstellung: Am Ende stehen alle genau so, wie die Engine die Szene aufgestellt hat. */
+  let lastMinute = 0;
+  async function leadIn() {
+    const sc = G.cur, as = M.atkSide(sc), atk = G.teams[as].cards, n = 3 + Math.floor(Math.random() * 3);
+    const name = id => card(as, id).last, back = atk.filter(c => c.role === 'LD' || c.role === 'RD');
+    let carrier = sc.counter ? sc.carrier : back[Math.floor(Math.random() * back.length)].id;
+    const steps = sc.counter ? 1 : n, m0 = lastMinute, m1 = G.minute;
+    say(sc.counter ? '' : `${as === 'you' ? 'Dein Team' : HOME} baut über ${name(carrier)} auf.`);
+    if (!sc.counter) addTick(`${as === 'you' ? 'Du baust' : HOME + ' baut'} über ${name(carrier)} auf.`);
+    setCarrier(null); ballAt(atFoot(carrier));
+    for (let k = 0; k < steps; k++) {
+      const lastStep = k === steps - 1, off = 150 * (1 - (k + 1) / steps), wp = {};
+      atk.forEach(c => { const b = sc.pos[c.id]; wp[c.id] = lastStep ? b : [Math.max(30, Math.min(330, b[0] + (Math.random() - 0.5) * 56)), b[1] + off + (Math.random() - 0.5) * 30]; });
+      atk.forEach(c => { const d = sc.mark[c.id]; if (lastStep) { wp[d] = sc.pos[d]; return; } const a = wp[c.id], mp = lerp(a, [180, 40], 0.27), sd = a[0] < 170 ? 1 : -1; wp[d] = [mp[0] + sd * 20, mp[1] - 6]; });
+      let nextC = sc.carrier;
+      if (!lastStep) { const opts = atk.filter(c => c.id !== carrier && c.id !== sc.carrier || (k === steps - 2 && c.id === sc.carrier)); nextC = opts[Math.floor(Math.random() * opts.length)].id; }
+      const moves = Object.keys(wp).map(id => ({ id, to: wp[id] }));
+      moves.push({ id: 'ball', to: [wp[nextC][0] + 10, wp[nextC][1] - 12] });
+      if (k > 0 || sc.counter) say(`${name(carrier)} spielt zu ${name(nextC)}.`);
+      await tween(moves, 950);
+      setCarrier(nextC); carrier = nextC;
+      $('sc-time').textContent = Math.round(m0 + (m1 - m0) * (k + 1) / steps) + '. Minute';
+    }
+    lastMinute = G.minute;
   }
 
   // --- Tor von vorne: wie im Testduell ---
@@ -467,7 +496,7 @@
   function start() {
     HOME = W.club(opp).short;
     G = M.newMatch({ homeName: HOME, you: { goalie: { val: 88 }, cards: SQUAD }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), opp) } }, rng);
-    disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = '';
+    disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0;
     buildPlayers(); show('match');
     Object.keys(G.cur.pos).forEach(id => place(id, [G.cur.pos[id][0], 400]));
     startScene();
