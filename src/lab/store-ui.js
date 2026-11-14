@@ -342,6 +342,8 @@
   $('sheet-x').addEventListener('click', closeSheet);
   $('sheet').addEventListener('click', e => { if (e.target === $('sheet')) closeSheet(); });
   $('sheet-do').addEventListener('click', () => { if (!sheetId) return; set(C.swapIn(st, sheetId, slot)); slot = null; closeSheet(); if (!$('screen-team').hidden) renderTeam(); if (P && P.phase === 'summary') { $('po-take').hidden = !canImprove(); } });
+  // Nur für die Testversion: Münzen schenken, damit sich Packs ausprobieren lassen
+  $('btn-coins').addEventListener('click', () => { set(Object.assign({}, st, { coins: st.coins + 10000 })); renderStore(); });
   let resetArm = 0;
   $('btn-reset').addEventListener('click', () => {
     if (Date.now() - resetArm > 3000) { resetArm = Date.now(); $('btn-reset').textContent = 'Wirklich? Nochmals tippen'; return; }
