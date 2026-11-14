@@ -1,10 +1,12 @@
 /* Match mit Schlüsselszenen (Testversion unter /lab/match/).
    Ein Match hat 12 Szenen in 3 Dritteln. Jede Szene ist ein Angriff von dir oder vom Gegner. Wer mehr Angriffe bekommt,
    hängt von der Teamstärke ab: Ein starkes Team hat mehr Angriffs-, ein schwaches mehr Abwehrszenen.
+   Nichts wird gewürfelt, was der User selbst entscheiden kann. Jeder Zweikampf läuft über einen Timing-Balken: Ein Strich
+   läuft hin und her, der User tippt, wenn er im grünen Feld ist. Die Karten bestimmen, wie breit das Feld ist.
    Angriff: Der Ballführende kann schiessen, passen oder dribbeln, bis zu vier Aktionen pro Szene.
-   Abwehr: Der Gegner hat einen verdeckten Plan (Schuss, Pass oder Dribbling). Du wählst Druck, Schuss blocken oder
-   den Passweg zu einem Gegner. Liegst du richtig, gewinnst du den Ball oft, und daraus kann ein Konter werden.
-   Schüsse laufen über die Wischgeste: Ziel und Härte vom User, Streuung nach Abschluss, Härte und Distanz.
+   Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst, der User trifft das Timing.
+   Eigener Schuss: Wischgeste für Ziel und Härte. Der Goalie pendelt sichtbar und hält, was in seiner Reichweite landet.
+   Schuss des Gegners: Die Flugbahn ist ehrlich zu sehen, der User muss die richtige Ecke antippen, bevor der Ball da ist.
    Spielfeld: Koordinaten 0 bis 360 (Breite) und 0 bis 400 (Länge). Angegriffen wird immer das Tor oben bei (180, 40).
    Reine Funktionen: Zustand rein, Ergebnis raus, Zufall nur aus rng. Karten und Grundwerte kommen aus HK. */
 (function (root) {
@@ -18,21 +20,29 @@
   const ZC = { tl: [-0.62, 0.72], tm: [0, 0.75], tr: [0.62, 0.72], bl: [-0.62, 0.25], bm: [0, 0.2], br: [0.62, 0.25] };
 
   const CFG = {
-    scenes: 12, perPeriod: 4, goalie: 88, maxSteps: 4, counterSteps: 2,
-    attBase: 0.5, attSlope: 0.03, attMin: 0.25, attMax: 0.75,        // Anteil deiner Angriffsszenen nach Teamstärke
-    // Schuss: wie im Testduell, dazu die Distanz
-    sdBase: 0.05, sdSkill: 0.17, sdPow: 0.11, sdDist: 0.2, post: 0.07,
-    saveSame: 0.9, saveAdj: 0.48, savePow: 0.35, saveSco: 0.012, saveEdge: 0.15, saveBody: 0.45, saveDist: 0.45,
+    scenes: 12, perPeriod: 4, goalie: 88, maxSteps: 4, counterSteps: 2, defSteps: 2,
+    attBase: 0.5, attSlope: 0.02, attMin: 0.25, attMax: 0.75,        // Anteil deiner Angriffsszenen nach Teamstärke
+    // Timing-Balken: Durchlauf in ms, Streuung eines durchschnittlichen Spielers in ms (bei ihr trifft er so oft wie die
+    // Chance aus dem Wertevergleich), kleinstes und grösstes Feld, Anteil des perfekten Kerns, «knapp daneben»
+    barSweep: 900, barRef: 80, barMin: 0.045, barMax: 0.34, barCore: 0.26, barNear: 0.07, barGross: 0.2,
+    blockFree: 0.08,                                                  // darunter ist der Schuss frei, ohne Balken
+    defScale: 0.8, defBlock: 0.7,                                     // Feld in der Abwehr, gegen Schüsse etwas schmaler
+    pressGood: 130, pressNear: 60,                                    // gestörter Gegner: so viele ms mehr Zeit für die Parade
+    // Schuss: Streuung nach Abschluss, Härte und Distanz
+    sdBase: 0.03, sdSkill: 0.15, sdPow: 0.08, sdDist: 0.12, sdPerfect: 0.75, sdRushed: 1.5, post: 0.07,
+    // Goalie des Gegners pendelt: Dauer einer Runde in ms, Ausschlag, Reichweite um seine Stelle beim Abschluss
+    kPeriod: 1350, kSlope: 15, kMin: 950, kMax: 1900, kAmp: 0.32,
+    reach: 1.13, reachPow: 0.2, reachVal: 0.008, reachDist: 0.15, reachTrait: 0.06, reachTop: 0.86, reachMin: 0.3, reachMax: 0.95,
+    // Reaktionsparade: Zeit in ms, bis der Ball im Tor ist
+    aiPowMin: 0.1, rxBase: 380, rxPow: 700, rxVal: 8, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
     blockBase: 0.65,                                                  // Schuss geblockt, wenn ein Gegner ganz nah steht
     // Pass und Dribbling
     laneRange: 40, intercept: 0.55, passLong: 700,
-    drib: 0.52, dribSlope: 0.04, dribMin: 0.12, dribMax: 0.9,
-    // Ballverlust und Konter
-    counterLoss: 0.3, counterWin: 0.35,
+    drib: 0.52, dribSlope: 0.028, dribMin: 0.12, dribMax: 0.9,
     // Abwehrszene: richtige Abwehr stoppt so oft, verschoben um den Wertevergleich
-    stopRight: 0.5, stopSlope: 0.035, stopMin: 0.25, stopMax: 0.92, stopHalf: 0.15,
+    stopRight: 0.5, stopSlope: 0.024, stopMin: 0.25, stopMax: 0.92, stopHalf: 0.15,
     traitBonus: 0.15,                                                 // Spezialfähigkeit im passenden Einsatz
-    keeperMemory: 6, tellTrue: 0.65
+    traitShot: 0.6
   };
 
   const byId = (l, id) => { for (let i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; };
@@ -120,7 +130,7 @@
 
   // --- Szenen ---
   function makeScene(s, rng, type, counter) {
-    const sc = { type, step: 0, max: counter ? s.cfg.counterSteps : s.cfg.maxSteps, counter: !!counter, pos: {}, mark: {}, carrier: null, intent: null };
+    const sc = { type, step: 0, max: counter ? s.cfg.counterSteps : type === 'def' ? s.cfg.defSteps : s.cfg.maxSteps, counter: !!counter, pos: {}, mark: {}, carrier: null, intent: null };
     const as = type === 'att' ? 'you' : 'home', ds = other(as);
     const byRole = side => { const m = {}; players(s, side).forEach(c => { m[c.role] = c; }); return m; };
     const A = byRole(as), D = byRole(ds);
@@ -137,11 +147,12 @@
       sc.carrier = counter;
       sc.pos[counter] = jit(rng, [180, 200], 30);
     } else sc.carrier = A[sample({ C: 0.3, LW: 0.2, RW: 0.2, LD: 0.15, RD: 0.15 }, rng)].id;
+    sc.bar = newBar(rng);
     s.cur = sc;
     if (type === 'def') aiIntent(s, rng);
     s.phase = 'decide';
   }
-  // Plan des Gegners in der Abwehrszene, verdeckt. Er schiesst eher aus guter Position, passt eher zu freien Mitspielern.
+  // Plan des Gegners in der Abwehrszene. Er schiesst eher aus guter Position, passt eher zu freien Mitspielern.
   function aiIntent(s, rng) {
     const sc = s.cur, X = card(s, 'home', sc.carrier), sh = shotInfo(s, sc, sc.carrier), w = {};
     if (sc.step >= sc.max - 1) { sc.intent = { kind: 'shoot' }; return; }
@@ -154,47 +165,91 @@
     sc.intent = kind === 'pass' ? { kind, to: bestTo } : { kind };
   }
 
+  // --- Timing-Balken ---
+  /* Grundlage ist die Chance p aus dem Wertevergleich (Pass gegen Antizipation, Dribbling gegen Zweikampf, Schuss gegen
+     Block, in der Abwehr umgekehrt). Daraus wird die Breite des grünen Felds: Ein durchschnittlicher Spieler trifft es etwa
+     so oft wie p. Wer genauer tippt, trifft öfter, und bessere Karten machen das Feld breiter. hit ist die Stelle des
+     Strichs beim Tippen, 0 bis 1. Note: perfect (im Kern), good (im Feld), near (knapp daneben: halber Erfolg),
+     bad (daneben), gross (grob daneben: im Angriff Konter für den Gegner). */
+  function erfinv(x) { const a = 0.147, l = Math.log(1 - x * x), t = 2 / (Math.PI * a) + l / 2; return Math.sign(x) * Math.sqrt(Math.sqrt(t * t - l / a) - t); }
+  const zone = (cfg, p) => clamp(2 * Math.SQRT2 * cfg.barRef / cfg.barSweep * erfinv(clamp(p, 0.03, 0.985)), cfg.barMin, cfg.barMax);
+  function grade(cfg, hit, pos, w) { const d = Math.abs(hit - pos); return d <= w * cfg.barCore / 2 ? 'perfect' : d <= w / 2 ? 'good' : d <= w / 2 + cfg.barNear ? 'near' : d <= w / 2 + cfg.barGross ? 'bad' : 'gross'; }
+  const newBar = rng => ({ pos: 0.18 + rng() * 0.64, start: rng() });
+  const hitOk = a => typeof a.hit === 'number' && isFinite(a.hit) && a.hit >= 0 && a.hit <= 1;
+  // Wer abwehrt und wie gut. Für Anzeige und Auflösung.
+  function defChoice(s, sc, action, target) {
+    const X = card(s, 'home', sc.carrier);
+    let D, kind, stat, tr;
+    if (action === 'press') { D = nearest(s, sc, 'you', P(sc, X.id)).c; kind = 'dribble'; stat = 'zwei'; tr = 'kampf'; }
+    else if (action === 'block') { let b = null, bd = Infinity; players(s, 'you').forEach(c => { const d = distSeg(P(sc, c.id), P(sc, X.id), GOAL); if (d < bd) { bd = d; b = c; } }); D = b; kind = 'shoot'; stat = 'block'; tr = 'wand'; }
+    else { D = card(s, 'you', sc.mark[target]) || nearest(s, sc, 'you', P(sc, target)).c; kind = 'pass'; stat = 'pass'; tr = 'anti'; }
+    const atkV = kind === 'shoot' ? shotVal(X) : kind === 'pass' ? passVal(X) : dribVal(X), dv = stanceVal(D, stat), c = s.cfg;
+    const bonus = (has(D, tr) ? c.traitBonus : 0) - (kind === 'shoot' && has(X, 'kanone') || kind === 'pass' && has(X, 'passer') || kind === 'dribble' && has(X, 'dribbler') ? c.traitBonus : 0);
+    return { D, kind, atkV, dv, trait: has(D, tr) ? tr : null, p: clamp(c.stopRight + (dv - atkV) * c.stopSlope + bonus, c.stopMin, c.stopMax) };
+  }
+  // Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Offen ist nur das Timing.
+  const ANSWER = { shoot: 'block', pass: 'lane', dribble: 'press' };
+  function defInfo(s, sc) {
+    const it = sc.intent, action = ANSWER[it.kind], ch = defChoice(s, sc, action, it.to);
+    const p = ch.p * (it.kind === 'shoot' ? s.cfg.defBlock : s.cfg.defScale);
+    return { action, D: ch.D, kind: it.kind, to: it.to || null, atkV: ch.atkV, dv: ch.dv, trait: ch.trait, p, w: zone(s.cfg, p) };
+  }
+  /* Balken für eine Aktion in der laufenden Szene: Chance p, Feldbreite w, Lage des Felds pos, Gegenspieler by.
+     free: freier Schuss ohne Balken. a: { type: 'shoot' | 'pass' | 'dribble', to }, in der Abwehr egal. */
+  function contest(s, a) {
+    const sc = s.cur, X = sc.carrier, c = s.cfg;
+    if (sc.type === 'def') { const d = defInfo(s, sc); return { p: d.p, w: d.w, pos: sc.bar.pos, start: sc.bar.start, by: d.D.id, free: false }; }
+    let p, by, free = false;
+    if (a.type === 'shoot') { const sh = shotInfo(s, sc, X); p = 1 - sh.block; by = sh.by; free = sh.block < c.blockFree; }
+    else if (a.type === 'pass') { const pi = passInfo(s, sc, X, a.to); p = 1 - pi.risk; by = pi.by; }
+    else { const di = dribInfo(s, sc, X); p = di.p; by = di.by; }
+    return { p, w: free ? 1 : zone(c, p), pos: sc.bar.pos, start: sc.bar.start, by, free };
+  }
+
   // --- Schuss auf das Tor ---
   const zoneOf = (x, y) => (y >= 0.5 ? 't' : 'b') + (x < -0.34 ? 'l' : x > 0.34 ? 'r' : 'm');
-  const COL = { l: 0, m: 1, r: 2 };
-  const adjacent = (a, b) => (a[1] === b[1] && a[0] !== b[0]) || (a[0] === b[0] && Math.abs(COL[a[1]] - COL[b[1]]) === 1);
+  // Liegt der Ball in der gewählten Zone? Mit etwas Spielraum an den Grenzen: dort hält jede der beiden Zonen.
+  function inZone(land, z, e) {
+    const x = land[0], y = land[1], col = z[1] === 'l' ? x < -0.34 + e : z[1] === 'r' ? x > 0.34 - e : x > -0.34 - e && x < 0.34 + e;
+    return col && (z[0] === 't' ? y >= 0.5 - e * 0.8 : y < 0.5 + e * 0.8);
+  }
   function spread(s, X, power, q) { const c = s.cfg; return c.sdBase + c.sdSkill * clamp((99 - shotVal(X)) / 27, 0, 1) + c.sdPow * power + c.sdDist * (1 - q); }
-  function keeperWeights(s) {
-    const last = s.hist.aims.slice(-s.cfg.keeperMemory), n = last.length || 1, w = { tl: 0.9, tm: 0.5, tr: 0.9, bl: 1, bm: 0.7, br: 1 };
-    ZONES.forEach(z => { w[z] += 2 * last.filter(x => x === z).length / n; });
-    return w;
+  function missOf(c, land) {
+    const ax = Math.abs(land[0]);
+    if (ax < 1 && land[1] < 1) return null;
+    const post = (ax >= 1 && ax < 1 + c.post && land[1] < 1 + c.post) || (land[1] >= 1 && land[1] < 1 + c.post && ax < 1 + c.post);
+    return post ? 'post' : land[1] >= 1 ? 'high' : 'wide';
   }
   function favZone(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['tl', 'br', 'tr', 'bl', 'bm'][h % 5]; }
-  // Bereitet einen Schuss vor. Die verdeckte Wahl der KI steht fest, bevor der User wischt.
-  function setShot(s, rng, side, x, q, ctx) {
-    const sh = { side, x, q, ctx };
+  // Der gegnerische Goalie pendelt sichtbar hin und her (Dreieckswelle). t in ms seit Beginn der Schussphase.
+  function keeperX(k, t) { const u = (((t / k.period + k.phase) % 1) + 1) % 1; return k.amp * (u < 0.5 ? 4 * u - 1 : 3 - 4 * u); }
+  // Reichweite des Goalies links und rechts von seiner Stelle beim Abschluss. Harte Schüsse und hohe Bälle sind schwerer.
+  function reach(s, sh, power, land) {
+    const c = s.cfg, X = card(s, 'you', sh.x);
+    const r = clamp(c.reach - c.reachPow * power - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal + c.reachDist * (1 - sh.q) - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0), c.reachMin, c.reachMax);
+    return land && land[1] > 0.62 ? r * c.reachTop : r;
+  }
+  /* Bereitet einen Schuss vor.
+     Dein Schuss: Der Goalie pendelt (keeper), du wischst. opt.perfect: perfekt abgezogen, der Schuss streut weniger.
+     Schuss des Gegners: Ziel, Härte und Streuung stehen sofort fest, damit die Flugbahn ehrlich gezeigt werden kann.
+     window ist die Zeit in ms, bis der Ball im Tor ist. Deine Verteidiger (Block) geben dir mehr Zeit. */
+  function setShot(s, rng, side, x, q, ctx, opt) {
+    const c = s.cfg, X = card(s, side, x), sh = { side, x, q, ctx }, o = opt || {};
     if (side === 'home') {
       const w = {}; ZONES.forEach(z => { w[z] = 0.11; }); w[favZone(x)] = 0.45;
-      const z = sample(w, rng), c = ZC[z];
-      sh.ai = { target: [c[0] + (rng() - 0.5) * 0.24, c[1] + (rng() - 0.5) * 0.2], power: 0.45 + rng() * 0.5 };
-      const others = ['l', 'm', 'r'].filter(k => k !== z[1]);
-      sh.tell = rng() < s.cfg.tellTrue ? z[1] : others[Math.floor(rng() * 2)];
-    } else sh.ai = { guess: sample(keeperWeights(s), rng) };
-    s.shot = sh; s.phase = 'aim';
-  }
-  function resolveShot(s, rng, sh, target, power, guess) {
-    const c = s.cfg, X = card(s, sh.side, sh.x), sd = spread(s, X, power, sh.q) * (has(X, 'kanone') ? 0.6 : 1);
-    const land = [target[0] + gauss(rng) * sd, Math.max(0.03, target[1] + gauss(rng) * sd * 0.8)];
-    const ax = Math.abs(land[0]), lz = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1]));
-    const base = { land, zone: lz, guess, right: lz === guess, near: adjacent(lz, guess), power, target };
-    if (ax >= 1 || land[1] >= 1) {
-      const post = (ax >= 1 && ax < 1 + c.post && land[1] < 1 + c.post) || (land[1] >= 1 && land[1] < 1 + c.post && ax < 1 + c.post);
-      return Object.assign(base, { result: 'miss', miss: post ? 'post' : land[1] >= 1 ? 'high' : 'wide' });
+      const zc = ZC[sample(w, rng)], power = c.aiPowMin + rng() * (0.95 - c.aiPowMin), target = [zc[0] + (rng() - 0.5) * 0.24, zc[1] + (rng() - 0.5) * 0.2];
+      const sd = spread(s, X, power, q) * (has(X, 'kanone') ? c.traitShot : 1);
+      const land = [target[0] + gauss(rng) * sd, Math.max(0.03, target[1] + gauss(rng) * sd * 0.8)];
+      const defs = players(s, 'you').filter(d => d.role === 'LD' || d.role === 'RD'), dv = ctx === 'so' ? 93 : defs.reduce((a, d) => a + stanceVal(d, 'block'), 0) / defs.length;
+      sh.power = power; sh.land = land; sh.miss = missOf(c, land); sh.zone = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])); sh.dv = dv;
+      sh.window = Math.round(clamp(c.rxBase - c.rxPow * (power - 0.5) - (shotVal(X) - 88) * c.rxVal + (dv - 93) * c.rxVal + c.rxDist * (1 - q)
+        - (ctx === 'counter' ? c.rxCounter : 0) - (has(X, 'kanone') ? c.rxTrait : 0) + (o.press || 0), c.rxMin, c.rxMax));
+      sh.press = o.press || 0;
+    } else {
+      sh.perfect = !!o.perfect; sh.rushed = !!o.rushed;
+      sh.keeper = { period: Math.round(clamp(c.kPeriod + (shotVal(X) - s.teams.home.goalie.val) * c.kSlope, c.kMin, c.kMax)), amp: c.kAmp, phase: rng() };
     }
-    const d = shotVal(X) - s.teams[other(sh.side)].goalie.val, edge = ax > 0.8 || land[1] > 0.85 ? c.saveEdge : 0;
-    let ps = lz === guess ? c.saveSame - power * c.savePow - d * c.saveSco - edge : adjacent(lz, guess) ? c.saveAdj - power * 0.3 - d * 0.01 - edge : 0;
-    if (ax < 0.3 && land[1] < 0.6) ps = Math.max(ps, c.saveBody - power * 0.2 - d * 0.01);
-    ps += c.saveDist * (1 - sh.q);
-    if (has(X, 'kanone')) ps -= 0.12;
-    if (sh.ctx === 'counter') ps -= 0.1;
-    ps = clamp(ps, 0, 0.95);
-    if (rng() < ps) return Object.assign(base, { result: power < 0.5 && lz === guess ? 'catch' : 'save' });
-    return Object.assign(base, { result: 'goal' });
+    s.shot = sh; s.phase = 'aim';
   }
 
   // --- Ablauf ---
@@ -210,8 +265,7 @@
     const s = {
       cfg, homeName: setup.homeName || '', teams: { you: { goalie: Object.assign({}, setup.you.goalie), cards: lineup(setup.you.cards) }, home: { goalie: Object.assign({}, setup.home.goalie), cards: lineup(setup.home.cards) } },
       scene: 0, score: { you: 0, home: 0 }, plan: [], cur: null, shot: null, phase: 'decide', pen: null, outcome: null, results: [],
-      hist: { aims: [], homeShots: {} },
-      stats: { att: 0, def: 0, shots: 0, goals: 0, faced: 0, saved: 0, passes: 0, passOk: 0, dribbles: 0, dribOk: 0, stops: 0, counters: 0 }
+      stats: { att: 0, def: 0, shots: 0, goals: 0, faced: 0, onGoal: 0, saved: 0, passes: 0, passOk: 0, dribbles: 0, dribOk: 0, stops: 0, counters: 0, bars: 0, hits: 0, perfects: 0, nears: 0 }
     };
     // Szenenplan: Anteil deiner Angriffe nach Teamstärke, gleichmässig gemischt
     const pa = clamp(cfg.attBase + (strength(s.teams.you.cards) - strength(s.teams.home.cards)) * cfg.attSlope, cfg.attMin, cfg.attMax);
@@ -265,101 +319,91 @@
     ev.push({ t: 'end', why, goal });
     s.cur.done = true; s.phase = 'done';
   }
-  // Ballverlust: der Gegner kann kontern. Konter gegen dich enden in einem Schuss auf dein Tor.
-  function lost(s, rng, ev, by) {
-    const sc = s.cur, side = atkSide(sc), winner = other(side);
-    const pc = winner === 'you' ? s.cfg.counterWin : s.cfg.counterLoss;
-    if (rng() < pc) {
-      s.stats.counters += winner === 'you' ? 1 : 0;
-      ev.push({ t: 'counter', side: winner, x: by });
-      if (winner === 'you') { makeScene(s, rng, 'att', by); return; }
-      setShot(s, rng, 'home', by, 0.6, 'counter'); return;
-    }
+  // Ballverlust. Nur ein grober Fehler (weit neben dem Feld) gibt dem Gegner den Konter: ein Schuss auf dein Tor.
+  function lost(s, rng, ev, by, counter) {
+    if (counter) { ev.push({ t: 'counter', side: 'home', x: by }); setShot(s, rng, 'home', by, 0.6, 'counter'); return; }
     endScene(s, ev, 'lost');
   }
+  const tally = (s, g) => { s.stats.bars++; if (g === 'perfect' || g === 'good') s.stats.hits++; if (g === 'perfect') s.stats.perfects++; if (g === 'near') s.stats.nears++; };
+  /* Angriff. perfekt: Vorteil (freier Empfänger, mehr Raum, genauerer Schuss). im Feld: gelungen. knapp daneben: halb
+     gelungen (Pass kommt an, aber der Gegenspieler steht eng; Dribbling ohne Raumgewinn; Schuss gestört und streut stärker).
+     daneben: Ball weg. grob daneben: Ball weg und Konter für den Gegner. */
   function attAction(s, rng, ev, a) {
-    const sc = s.cur, X = sc.carrier;
+    const sc = s.cur, X = sc.carrier, me = card(s, 'you', X);
+    if (a.type !== 'shoot' && sc.step >= sc.max - 1) return false;      // letzte Aktion der Szene: nur noch Schuss
+    if (a.type === 'pass' && (!card(s, 'you', a.to) || a.to === X)) return false;
+    const c = contest(s, a); if (!c.free && !hitOk(a)) return false;
+    const g = c.free ? 'good' : grade(s.cfg, a.hit, c.pos, c.w), ok = g === 'perfect' || g === 'good' || g === 'near', D = card(s, 'home', c.by);
+    if (!c.free) tally(s, g);
     if (a.type === 'shoot') {
       const sh = shotInfo(s, sc, X);
-      ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, av: shotVal(card(s, 'you', X)), dv: stanceVal(card(s, 'home', sh.by), 'block'), trait: has(card(s, 'you', X), 'kanone') ? 'kanone' : null, btrait: has(card(s, 'home', sh.by), 'wand') ? 'wand' : null });
-      if (rng() < sh.block) { ev.push({ t: 'blocked', x: X, by: sh.by }); return lost(s, rng, ev, sh.by); }
-      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack'); return;
+      ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, free: c.free, grade: g, w: c.w, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
+      if (!ok) { ev.push({ t: 'blocked', x: X, by: sh.by, grade: g }); return lost(s, rng, ev, sh.by, g === 'gross'); }
+      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', { perfect: g === 'perfect', rushed: g === 'near' }); return;
     }
-    if (sc.step >= sc.max - 1) return false;      // letzte Aktion der Szene: nur noch Schuss
     if (a.type === 'pass') {
-      if (!card(s, 'you', a.to) || a.to === X) return false;
-      const pi = passInfo(s, sc, X, a.to), ok = rng() >= pi.risk;
       s.stats.passes++;
-      ev.push({ t: 'pass', from: X, to: a.to, ok, risk: pi.risk, by: pi.by, av: passVal(card(s, 'you', X)), dv: stanceVal(card(s, 'home', pi.by), 'pass'), trait: has(card(s, 'you', X), 'passer') ? 'passer' : null, dtrait: has(card(s, 'home', pi.by), 'anti') ? 'anti' : null });
-      if (!ok) { sc.pos[pi.by] = lerp(P(sc, X), P(sc, a.to), 0.5); return lost(s, rng, ev, pi.by); }
+      ev.push({ t: 'pass', from: X, to: a.to, ok, grade: g, w: c.w, risk: 1 - c.p, by: c.by, av: passVal(me), dv: stanceVal(D, 'pass'), trait: has(me, 'passer') ? 'passer' : null, dtrait: has(D, 'anti') ? 'anti' : null });
+      if (!ok) { sc.pos[c.by] = lerp(P(sc, X), P(sc, a.to), 0.5); return lost(s, rng, ev, c.by, g === 'gross'); }
       s.stats.passOk++;
-      // Der Empfänger hat kurz Luft: sein Gegenspieler kommt einen Schritt zu spät
-      const m = sc.mark[a.to]; sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), 0.4);
-      sc.carrier = a.to; shift(s, sc, rng); sc.step++; return;
+      // Der Gegenspieler des Empfängers: nach einem perfekten Pass weit weg, sonst einen Schritt zu spät, nach einem knappen Pass eng dran
+      const m = sc.mark[a.to]; sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), g === 'perfect' ? -0.7 : g === 'near' ? 0.92 : 0.4);
+      sc.carrier = a.to; shift(s, sc, rng); sc.step++; sc.bar = newBar(rng); return;
     }
-    if (a.type === 'dribble') {
-      const di = dribInfo(s, sc, X), ok = rng() < di.p;
-      s.stats.dribbles++;
-      ev.push({ t: 'dribble', x: X, by: di.by, ok, p: di.p, av: di.av, dv: di.dv, trait: has(card(s, 'you', X), 'dribbler') ? 'dribbler' : null, dtrait: has(card(s, 'home', di.by), 'kampf') ? 'kampf' : null });
-      if (!ok) return lost(s, rng, ev, di.by);
+    s.stats.dribbles++;
+    ev.push({ t: 'dribble', x: X, by: c.by, ok, grade: g, w: c.w, p: c.p, av: dribVal(me), dv: stanceVal(D, 'zwei'), trait: has(me, 'dribbler') ? 'dribbler' : null, dtrait: has(D, 'kampf') ? 'kampf' : null });
+    if (!ok) return lost(s, rng, ev, c.by, g === 'gross');
+    if (g !== 'near') {
       s.stats.dribOk++;
-      const p = P(sc, X), to = lerp(p, GOAL, clamp(70 / dist(p, GOAL), 0.2, 0.55));
+      // Vorbei: ein Stück näher ans Tor, der Gegenspieler steht dahinter. Perfekt: noch näher.
+      const p = P(sc, X), to = lerp(p, GOAL, clamp((g === 'perfect' ? 100 : 70) / dist(p, GOAL), 0.2, 0.62));
       sc.pos[X] = [to[0] + (p[0] < 180 ? 14 : -14), Math.max(80, to[1])];
-      sc.pos[di.by] = [P(sc, di.by)[0], P(sc, di.by)[1] + 46];   // Gegenspieler ausgespielt, steht hinter ihm
-      shift(s, sc, rng); sc.step++; return;
+      sc.pos[c.by] = [P(sc, c.by)[0], P(sc, c.by)[1] + (g === 'perfect' ? 70 : 46)];
     }
-    return false;
+    shift(s, sc, rng); sc.step++; sc.bar = newBar(rng);
   }
-  // Wer abwehrt und wie gut, wenn du richtig liest. Für Anzeige und Auflösung.
-  function defChoice(s, sc, action, target) {
-    const X = card(s, 'home', sc.carrier);
-    let D, kind, stat, tr;
-    if (action === 'press') { D = nearest(s, sc, 'you', P(sc, X.id)).c; kind = 'dribble'; stat = 'zwei'; tr = 'kampf'; }
-    else if (action === 'block') { let b = null, bd = Infinity; players(s, 'you').forEach(c => { const d = distSeg(P(sc, c.id), P(sc, X.id), GOAL); if (d < bd) { bd = d; b = c; } }); D = b; kind = 'shoot'; stat = 'block'; tr = 'wand'; }
-    else { D = card(s, 'you', sc.mark[target]) || nearest(s, sc, 'you', P(sc, target)).c; kind = 'pass'; stat = 'pass'; tr = 'anti'; }
-    const atkV = kind === 'shoot' ? shotVal(X) : kind === 'pass' ? passVal(X) : dribVal(X), dv = stanceVal(D, stat), c = s.cfg;
-    const bonus = (has(D, tr) ? c.traitBonus : 0) - (kind === 'shoot' && has(X, 'kanone') || kind === 'pass' && has(X, 'passer') || kind === 'dribble' && has(X, 'dribbler') ? c.traitBonus : 0);
-    return { D, kind, atkV, dv, trait: has(D, tr) ? tr : null, p: clamp(c.stopRight + (dv - atkV) * c.stopSlope + bonus, c.stopMin, c.stopMax) };
-  }
+  /* Abwehr: ein Balken pro Aktion des Gegners. Nur genau in der Mitte (perfekt) gewinnst du den Ball, daraus wird ein
+     Konter. Sonst kommt der Gegner durch, aber je besser du triffst, desto stärker ist er gestört: im Feld deutlich, knapp
+     daneben etwas. Die Störung summiert sich über die Szene und gibt deinem Goalie beim Schuss mehr Zeit (press, in ms).
+     Grob daneben kostet Zeit. */
   function defAction(s, rng, ev, a) {
-    const sc = s.cur, X = card(s, 'home', sc.carrier), it = sc.intent;
-    if (['press', 'block', 'lane'].indexOf(a.action) === -1) return false;
-    if (a.action === 'lane' && !card(s, 'home', a.target)) return false;
-    const ch = defChoice(s, sc, a.action, a.target), D = ch.D, c = s.cfg;
-    const right = it.kind === ch.kind && (it.kind !== 'pass' || it.to === a.target);
-    let stop;
-    if (right) stop = ch.p;
-    else if (it.kind === 'pass') stop = Math.max(passInfo(s, sc, X.id, it.to).risk * 0.8, a.action === 'press' ? c.stopHalf : 0.1);
-    else stop = (a.action === 'press' && it.kind === 'shoot') || (a.action === 'block' && it.kind === 'dribble') ? c.stopHalf : 0.1;
-    const ok = rng() < stop;
-    ev.push({ t: 'defend', action: a.action, target: a.target || null, intent: it, by: D.id, x: X.id, right, stopped: ok, p: stop, av: ch.atkV, dv: ch.dv, trait: right ? ch.trait : null });
-    if (ok) {
-      s.stats.stops++;
-      // Ballgewinn: manchmal wird daraus ein Konter für dich
-      if (rng() < c.counterWin) { s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id }); makeScene(s, rng, 'att', D.id); return; }
-      return endScene(s, ev, 'stopped');
-    }
-    if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack'); return; }
-    if (it.kind === 'pass') { const m = sc.mark[it.to]; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3); sc.carrier = it.to; }
-    else { const p = P(sc, X.id), to = lerp(p, GOAL, clamp(70 / dist(p, GOAL), 0.2, 0.55)); sc.pos[X.id] = [to[0], Math.max(80, to[1])]; sc.pos[D.id] = [P(sc, D.id)[0], P(sc, D.id)[1] + 40]; }
+    const sc = s.cur, X = card(s, 'home', sc.carrier), it = sc.intent, c = s.cfg;
+    if (!hitOk(a)) return false;
+    const d = defInfo(s, sc), D = d.D, g = grade(c, a.hit, sc.bar.pos, d.w), won = g === 'perfect';
+    const gain = g === 'good' ? c.pressGood : g === 'near' ? c.pressNear : g === 'gross' ? -c.rxLate : 0;
+    tally(s, g);
+    sc.press = (sc.press || 0) + gain;
+    ev.push({ t: 'defend', action: d.action, target: it.to || null, intent: it, by: D.id, x: X.id, stopped: won, grade: g, gain, w: d.w, av: d.atkV, dv: d.dv, trait: d.trait });
+    if (won) { s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id }); makeScene(s, rng, 'att', D.id); return; }
+    if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack', { press: sc.press }); return; }
+    const tight = g === 'good' ? 1 : g === 'near' ? 0.5 : 0;      // gestört: Empfänger enger gedeckt, weniger Raumgewinn
+    if (it.kind === 'pass') { const m = sc.mark[it.to]; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3 + 0.55 * tight); sc.carrier = it.to; }
+    else { const p = P(sc, X.id), to = lerp(p, GOAL, clamp((70 - 40 * tight) / dist(p, GOAL), 0.08, 0.55)); sc.pos[X.id] = [to[0], Math.max(80, to[1])]; sc.pos[D.id] = [P(sc, D.id)[0], P(sc, D.id)[1] + 40 - 30 * tight]; }
     shift(s, sc, rng);
-    sc.step++;
+    sc.step++; sc.bar = newBar(rng);
     aiIntent(s, rng);
   }
+  /* Schuss auflösen.
+     Dein Schuss { target, power, t }: Der Ball streut um das Ziel. Der Goalie hält, was innerhalb seiner Reichweite um die
+     Stelle landet, an der er beim Abschluss (t ms nach Beginn) stand.
+     Schuss des Gegners { zone, rt }: gehalten, wenn du rechtzeitig (rt ms nach dem Abschluss) die richtige Zone antippst. */
   function shoot(s, rng, ev, a) {
-    const sh = s.shot; let target, power, guess;
+    const sh = s.shot, c = s.cfg, X = card(s, sh.side, sh.x); let r;
     if (sh.side === 'you') {
       if (!a.target || !isFinite(a.target[0]) || !isFinite(a.target[1])) return false;
-      target = [clamp(+a.target[0], -1.5, 1.5), clamp(+a.target[1], 0, 1.5)]; power = clamp(+a.power || 0, 0, 1); guess = sh.ai.guess;
-      s.hist.aims.push(zoneOf(clamp(target[0], -0.99, 0.99), clamp(target[1], 0, 0.99)));
+      const target = [clamp(+a.target[0], -1.5, 1.5), clamp(+a.target[1], 0, 1.5)], power = clamp(+a.power || 0, 0, 1), t = Math.max(0, +a.t || 0);
+      const sd = spread(s, X, power, sh.q) * (has(X, 'kanone') ? c.traitShot : 1) * (sh.perfect ? c.sdPerfect : sh.rushed ? c.sdRushed : 1);
+      const land = [target[0] + gauss(rng) * sd, Math.max(0.03, target[1] + gauss(rng) * sd * 0.8)], miss = missOf(c, land);
+      const kx = keeperX(sh.keeper, t), R = reach(s, sh, power, land), dx = Math.abs(land[0] - kx);
+      r = { land, zone: zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])), target, power, kx, reach: R, miss, result: miss ? 'miss' : dx <= R ? (dx <= R * 0.4 && power < 0.5 ? 'catch' : 'save') : 'goal' };
     } else {
-      if (ZONES.indexOf(a.zone) === -1) return false;
-      target = sh.ai.target; power = sh.ai.power; guess = a.zone;
+      const zn = ZONES.indexOf(a.zone) !== -1 ? a.zone : null, rt = typeof a.rt === 'number' && isFinite(a.rt) ? Math.max(0, a.rt) : Infinity;
+      const right = !!zn && inZone(sh.land, zn, c.rxEdge), inTime = rt <= sh.window;
+      r = { land: sh.land, zone: sh.zone, guess: zn, power: sh.power, rt: isFinite(rt) ? Math.round(rt) : null, window: sh.window, right, inTime, miss: sh.miss, result: sh.miss ? 'miss' : right && inTime ? (rt <= sh.window * 0.6 ? 'catch' : 'save') : 'goal' };
     }
-    const r = resolveShot(s, rng, sh, target, power, guess), goal = r.result === 'goal';
-    if (sh.side === 'home') (s.hist.homeShots[sh.x] = s.hist.homeShots[sh.x] || []).push(r.zone);
-    if (sh.side === 'you') { s.stats.shots++; if (goal) s.stats.goals++; } else { s.stats.faced++; if (!goal) s.stats.saved++; }
-    ev.push(Object.assign({ t: 'shot', side: sh.side, x: sh.x, ctx: sh.ctx, q: sh.q, tell: sh.tell || null }, r));
+    const goal = r.result === 'goal';
+    if (sh.side === 'you') { s.stats.shots++; if (goal) s.stats.goals++; } else { s.stats.faced++; if (r.result === 'save' || r.result === 'catch') s.stats.saved++; if (!sh.miss) s.stats.onGoal++; }
+    ev.push(Object.assign({ t: 'shot', side: sh.side, x: sh.x, ctx: sh.ctx, q: sh.q }, r));
     s.shot = null;
     if (sh.ctx === 'so') { const P_ = s.pen; if (goal) P_[sh.side]++; P_.shots[sh.side]++; P_.results.push({ side: sh.side, goal }); s.phase = 'done'; return; }
     if (goal) { s.score[sh.side]++; s.cur.goal = sh.side; }
@@ -388,9 +432,11 @@
   function finish(s) { s.outcome = s.pen ? (s.pen.you > s.pen.home ? 'penwin' : 'penloss') : (s.score.you > s.score.home ? 'win' : 'loss'); s.phase = 'end'; }
 
   /* Einziger Einstieg für Eingaben. Gibt einen neuen Zustand und die Ereignisse zurück, der alte bleibt unverändert.
-     Angriff:  { type: 'shoot' } | { type: 'pass', to } | { type: 'dribble' }
-     Abwehr:   { type: 'defend', action: 'press' | 'block' | 'lane', target }   target: Gegner, dessen Passweg du zustellst
-     Schuss:   { type: 'aim', target: [x, y], power } eigener Schuss | { type: 'aim', zone } Sprung deines Goalies
+     hit ist die Stelle des Strichs auf dem Timing-Balken beim Tippen (0 bis 1), siehe contest().
+     Angriff:  { type: 'shoot', hit } | { type: 'pass', to, hit } | { type: 'dribble', hit }   freier Schuss: ohne hit
+     Abwehr:   { type: 'defend', hit }
+     Schuss:   { type: 'aim', target: [x, y], power, t } eigener Schuss, t in ms seit Beginn der Schussphase
+               { type: 'aim', zone, rt } Parade, rt in ms seit dem Abschluss des Gegners
      Weiter:   { type: 'next' } */
   function act(state, a, rng) {
     const s = copy(state), ev = [];
@@ -403,5 +449,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TRAITS, trait, defChoice, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, keeperWeights, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TRAITS, trait, defChoice, defInfo, contest, zone, grade, keeperX, reach, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

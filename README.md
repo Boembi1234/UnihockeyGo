@@ -23,7 +23,27 @@ Code in `src/lab/`, Simulation mit `node sim/lab.js`, Browser-Test mit `node tes
 
 Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Shop:
 
-- **Team aus Packs:** Du startest mit fünf Bronze-Karten (Linie um 74) und 1500 Münzen. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.
+**Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
+
+- **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss unter Druck und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
+- **Noten:** Mitte = perfekt (Vorteil: freier Mitspieler, mehr Raum, genauerer Schuss), im Feld = gelungen, knapp daneben = halb gelungen, daneben = Ball weg, grob daneben = Konter für den Gegner.
+- **Abwehr:** Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Nur die Mitte gewinnt den Ball (und gibt einen Konter). Sonst gilt: Je besser getroffen, desto mehr Zeit bekommt der Goalie beim Schuss.
+- **Eigener Schuss:** Der gegnerische Goalie pendelt sichtbar. Grün ist, wo er nicht hinkommt. Wischen wie bisher (Richtung = Ziel, Tempo = Härte); der Ball streut um das Ziel, der Kreis zeigt wie stark. Das ist der einzige Zufall, der bleibt.
+- **Parade:** Der Schuss des Gegners ist ehrlich zu sehen (goldener Ring am Landepunkt). Gehalten ist, wenn die richtige Ecke angetippt wird, bevor der Ball da ist. Bessere Verteidiger und gestörte Schützen geben mehr Zeit.
+
+Abgestimmt ist das so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), 800 Matches je Feld, Siegquote:
+
+| Spieler | Karten −12 | −6 | gleich | +6 | +12 |
+|---|---|---|---|---|---|
+| stark | 23 % | 65 % | 94 % | 99 % | 100 % |
+| mittel | 2 % | 25 % | 53 % | 87 % | 100 % |
+| schwach | 0 % | 3 % | 15 % | 43 % | 92 % |
+
+Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
+
+**Shop und Team:**
+
+- **Team aus Packs:** Du startest mit fünf Bronze-Karten (Linie um 77) und 1500 Münzen. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.
 - **Pool:** alle 271 Feldspieler der Herren L-UPL 2026/27 aus dem Fantasy-Pool (`src/lab/pool.js`), mit Nation, Rückennummer, Jahrgang und Porträt. Die 28 bekannten Karten behalten ihre Werte, die übrigen werden aus dem Fantasy-Preis abgeleitet.
 - **Karte:** ein Wappen mit Metallrand in Bronze, Silber oder Gold. Oben links hängt ein Wimpel mit Gesamtwert, Position, Flagge und dem Zeichen der Spezialfähigkeit. Das Porträt ist auf das Metall «gedruckt» (der weisse Studiohintergrund verschwindet), darunter steht der Name auf einem dunklen Feld. Die volle Karte zeigt die sechs Werte, mit denen das Match rechnet: Schuss, Pass, Dribbling, Zweikampf, Block, Antizipation. Unter 150 px Breite erscheint die Kurzform ohne Werte. Ohne Bild zeigt die Karte geprägte Initialen.
 - **Porträts:** 190 Bilder kommen von swiss unihockey (Cloudinary), 17 von hcrychenberg.ch, 10 sind Google-Vorschaubilder, 1 liegt bei fliiga.com. Die Seite lädt sie direkt von dort. 53 Spieler haben kein Bild.

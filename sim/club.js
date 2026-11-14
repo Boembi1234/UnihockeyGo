@@ -1,6 +1,7 @@
 /* Shop und Team: Pool, Packs, Startteam und Siegchancen je nach Teamstärke. node sim/club.js [n] */
 'use strict';
-const { box, reasonable } = require('./match.js');
+const { box, policy, PROFILES } = require('./match.js');
+const reasonable = policy(PROFILES.mittel);   // durchschnittlicher Spieler
 const E = box.HK, M = box.HKMatch, C = box.HKClub;
 const n = +process.argv[2] || 400;
 const B = C.BUCKET; console.log('Pool', C.POOL.length, 'Gold', B.gold.length, 'Silber', B.silver.length, 'Bronze', B.bronze.length);

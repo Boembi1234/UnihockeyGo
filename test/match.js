@@ -1,14 +1,15 @@
-/* Match im Browser: spielt Matches mit Zufallsentscheiden durch (inklusive Wischen), prüft Konsole und Überlauf, macht Bilder.
+/* Match im Browser: spielt Matches durch, prüft Konsole und Überlauf, macht Bilder.
+   Der Testspieler wählt zufällig, trifft den Timing-Balken mal genau und mal blind, wischt Schüsse und reagiert bei Paraden.
    Vorher bauen: node build.js. node test/match.js [matches] */
 'use strict';
 const path = require('path'), fs = require('fs');
 const { chromium } = require('playwright');
 const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursive: true });
 (async () => {
-  const b = await chromium.launch(), N = +process.argv[2] || 1;
+  const b = await chromium.launch(), N = +process.argv[2] || 1; let fail = 0;
   for (const run of [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true }]) {
     const ctx = await b.newContext({ viewport: { width: run.width, height: 900 }, deviceScaleFactor: 1, reducedMotion: run.reduce ? 'reduce' : 'no-preference' });
-    const p = await ctx.newPage(), errors = [], taken = {}, res = []; let n = 0;
+    const p = await ctx.newPage(), errors = [], taken = {}, res = [], seen = {}; let n = 0;
     p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     await p.goto('file://' + path.resolve(__dirname, '..', 'dist', 'lab', 'match', 'index.html'), { waitUntil: 'load' });
     await p.evaluate(() => Promise.all(['600', '700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
@@ -18,41 +19,66 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     for (let m = 0; m < N; m++) {
       if (m > 0) await p.click('#btn-other');
       await p.evaluate(() => { const o = [...document.querySelectorAll('#opps [data-opp]')]; o[Math.floor(Math.random() * o.length)].click(); });
-      await p.click(m === 0 ? '#btn-start' : '#btn-start');
-      for (let g = 0; g < 5000; g++) {
+      await p.click('#btn-start');
+      for (let g = 0; g < 6000; g++) {
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
-          if (!document.getElementById('zones').classList.contains('off')) return 'aim';
-          const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('button:not(:disabled)')) return document.getElementById('tag').textContent === 'Abwehr' ? 'def' : 'att';
+          const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
+          if (document.getElementById('zones').classList.contains('armed')) return /pendelt/.test(document.getElementById('say').textContent) ? 'aim' : 'react';
+          const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
           return 'wait';
         });
+        seen[st] = (seen[st] || 0) + 1;
         if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
-        if (st === 'att' || st === 'def') {
-          await snap(st === 'att' ? '01-angriff' : '02-abwehr'); await over(st);
-          n++;
+        if (st === 'att') {
+          await snap('01-angriff'); await over('angriff'); n++;
           if (Math.random() < 0.25) await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-          else await p.evaluate(() => { const l = [...document.querySelectorAll('#panel button:not(:disabled)')]; l[Math.floor(Math.random() * l.length)].click(); });
-          if (!run.reduce) { await p.waitForTimeout(420); await snap(st === 'att' ? '03-ablauf-angriff' : '04-ablauf-abwehr'); }
-          continue;
+          else await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')]; l[Math.floor(Math.random() * l.length)].click(); });
+          await p.waitForTimeout(40); continue;
+        }
+        if (st === 'bar-att' || st === 'bar-def') {
+          await p.waitForTimeout(320); await snap(st === 'bar-att' ? '02-balken-angriff' : '03-balken-abwehr'); await over(st); n++;
+          if (st === 'bar-att' && Math.random() < 0.08) { await p.click('#tb-back'); continue; }   // «Andere Aktion»
+          // Hälfte genau: warten, bis der Strich im Feld ist. Hälfte blind.
+          const aimed = Math.random() < 0.55;
+          await p.evaluate(aimed => new Promise(done => {
+            const tb = document.getElementById('tbb'), z = tb.querySelector('.tb-z'), m = document.getElementById('tb-m'), t0 = performance.now(), wait = aimed ? 0 : Math.random() * 900;
+            (function poll() {
+              const a = z.getBoundingClientRect(), x = m.getBoundingClientRect().left + 2, inside = x >= a.left && x <= a.right, now = performance.now();
+              if ((aimed && inside) || (!aimed && now - t0 > wait) || now - t0 > 4000) { tb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })); done(); } else requestAnimationFrame(poll);
+            })();
+          }), aimed);
+          if (!run.reduce) { await p.waitForTimeout(200); await snap(st === 'bar-att' ? '04-balken-treffer' : '05-balken-abwehr-treffer'); }
+          await p.waitForTimeout(260); continue;
         }
         if (st === 'aim') {
-          const mine = await p.evaluate(() => /Wische vom Ball/.test(document.getElementById('say').textContent));
-          await snap(mine ? '05-schuss' : '06-goalie');
+          await p.waitForTimeout(300 + Math.random() * 900); await snap('06-schuss'); await over('schuss'); n++;
           const bb = await p.locator('#goalview').boundingBox(), k = bb.width / 360;
-          const from = mine ? [180, 262] : [180, 192], to = [100 + Math.random() * 160, 95 + Math.random() * 130], steps = Math.random() < 0.5 ? 4 : 14;
+          const from = [180, 262], to = [100 + Math.random() * 160, 95 + Math.random() * 130], steps = Math.random() < 0.5 ? 4 : 14;
           await p.mouse.move(bb.x + from[0] * k, bb.y + from[1] * k); await p.mouse.down();
           for (let i = 1; i <= steps; i++) await p.mouse.move(bb.x + (from[0] + (to[0] - from[0]) * i / steps) * k, bb.y + (from[1] + (to[1] - from[1]) * i / steps) * k);
           await p.mouse.up();
-          if (!run.reduce) { await p.waitForTimeout(700); await snap(mine ? '07-schuss-ende' : '08-goalie-ende'); }
+          if (!run.reduce) { await p.waitForTimeout(700); await snap('07-schuss-ende'); }
           continue;
+        }
+        if (st === 'react') {
+          await snap('08-parade'); n++;
+          // Mal dorthin, wo der Ring ist, mal zufällig, mal gar nicht
+          const r = Math.random();
+          if (r < 0.6) await p.evaluate(() => { const mk = document.getElementById('mark').getBoundingClientRect(); document.getElementById('goalview').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: mk.left + mk.width / 2, clientY: mk.top + mk.height / 2 })); });
+          else if (r < 0.85) await p.evaluate(() => { const gv = document.getElementById('goalview').getBoundingClientRect(); document.getElementById('goalview').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: gv.left + gv.width * (0.3 + Math.random() * 0.4), clientY: gv.top + gv.height * (0.45 + Math.random() * 0.4) })); });
+          if (!run.reduce) { await p.waitForTimeout(650); await snap('08-parade-ende'); }
+          await p.waitForTimeout(300); continue;
         }
         if (Math.random() < 0.5) await p.evaluate(() => document.getElementById('stage').click());
         await p.waitForTimeout(60);
       }
     }
-    console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Entscheide' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
+    const missing = ['att', 'bar-att', 'bar-def', 'aim', 'react', 'end'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
+    if (errors.length || res.length < N) fail = 1;
     await ctx.close();
   }
-  await b.close();
+  await b.close(); process.exit(fail);
 })();

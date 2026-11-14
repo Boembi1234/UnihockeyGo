@@ -92,10 +92,10 @@
   }
   const teamOvr = ids => { const l = ids.map(get).filter(Boolean); return l.length ? Math.round(l.reduce((a, c) => a + c.ovr, 0) / l.length) : 0; };
 
-  // --- Startteam: fünf Bronze-Karten um 74 ---
+  // --- Startteam: fünf Bronze-Karten um 77 ---
   function fresh(seed) {
     const r = E.makeRng(seed >>> 0), pick = (pos, n) => {
-      const l = POOL.filter(c => c.pos === pos && c.ovr >= 72 && c.ovr <= 77 && !c.base), out = [];
+      const l = POOL.filter(c => c.pos === pos && c.ovr >= 75 && c.ovr <= 79 && !c.base), out = [];
       while (out.length < n) { const c = l[Math.floor(r() * l.length)]; if (out.indexOf(c.id) < 0) out.push(c.id); }
       return out;
     };
