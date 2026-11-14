@@ -1,13 +1,15 @@
-/* Match mit Schlüsselszenen (Testversion unter /lab/match/).
-   Ein Match hat 12 Szenen in 3 Dritteln. Jede Szene ist ein Angriff von dir oder vom Gegner. Wer mehr Angriffe bekommt,
-   hängt von der Teamstärke ab: Ein starkes Team hat mehr Angriffs-, ein schwaches mehr Abwehrszenen.
+/* Match mit Spielfluss (Testversion unter /lab/match/).
+   Drei Drittel zu 20 Minuten. Die Uhr läuft, und aus dem Spiel entstehen Chancen: wie viele, ist nicht fest. Jede Seite
+   bekommt Chancen nach ihrem Angriffswert (die drei Stürmer) gegen den Abwehrwert des Gegners (die zwei Verteidiger) und
+   nach der Taktik: offensiv bringt mehr eigene Chancen, öffnet aber hinten, defensiv das Gegenteil.
+   Eine Chance ist ein Positionsangriff, ein Konter 3 gegen 2, ein Konter 2 gegen 1 oder selten ein Alleingang.
    Nichts wird gewürfelt, was der User selbst entscheiden kann. Jeder Zweikampf läuft über einen Timing-Balken: Ein Strich
    läuft hin und her, der User tippt, wenn er im grünen Feld ist. Die Karten bestimmen, wie breit das Feld ist.
-   Angriff: Der Ballführende kann schiessen, passen oder dribbeln, bis zu vier Aktionen pro Szene.
+   Angriff: Der Ballführende kann schiessen, passen oder dribbeln.
    Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst, der User trifft das Timing.
    Eigener Schuss: Zielkreis halten, schieben, loslassen. Der Ball landet irgendwo im Kreis, nie ausserhalb. Der Kreis ist
-   klein für gute Schützen aus der Nähe und gross für schwache aus der Distanz. Der Goalie pendelt sichtbar und hält, was in
-   seiner Reichweite landet; aus der Nähe reicht er weniger weit.
+   klein für gute Schützen und gross für schwache. Der Goalie pendelt sichtbar und hält, was in seiner Reichweite landet;
+   aus der Nähe reicht er weniger weit.
    Schuss des Gegners: Die Flugbahn ist ehrlich zu sehen, der User muss die richtige Ecke antippen, bevor der Ball da ist.
    Spielfeld: Koordinaten 0 bis 360 (Breite) und 0 bis 400 (Länge). Angegriffen wird immer das Tor oben bei (180, 40).
    Reine Funktionen: Zustand rein, Ergebnis raus, Zufall nur aus rng. Karten und Grundwerte kommen aus HK. */
@@ -22,8 +24,10 @@
   const ZC = { tl: [-0.62, 0.72], tm: [0, 0.75], tr: [0.62, 0.72], bl: [-0.62, 0.25], bm: [0, 0.2], br: [0.62, 0.25] };
 
   const CFG = {
-    scenes: 12, perPeriod: 4, goalie: 88, maxSteps: 4, counterSteps: 2, defSteps: 2,
-    attBase: 0.5, attSlope: 0.012, attMin: 0.25, attMax: 0.75,        // Anteil deiner Angriffsszenen nach Teamstärke
+    periods: 3, periodMin: 20, goalie: 88, maxSteps: 4, counterSteps: 2, defSteps: 2,
+    // Chancen pro Minute und Seite bei gleichen Werten und ausgeglichener Taktik; wie stark Angriff gegen Abwehr zählt;
+    // Mindestabstand zwischen zwei Chancen in Minuten; höchstens so viele Chancen pro Drittel
+    chanceBase: 0.095, chanceK: 0.035, chanceGap: 1.2, maxPerPeriod: 5,
     // Timing-Balken: Durchlauf in ms, Streuung eines durchschnittlichen Spielers in ms (bei ihr trifft er so oft wie die
     // Chance aus dem Wertevergleich), kleinstes und grösstes Feld, Anteil des perfekten Kerns, «knapp daneben»
     barSweep: 900, barRef: 80, barMin: 0.045, barMax: 0.34, barCore: 0.26, barNear: 0.07, barGross: 0.2,
@@ -67,6 +71,19 @@
   const shotVal = c => E.eff(c.sco, c);
   const passVal = c => E.eff(c.ply, c);
   const strength = cards => cards.reduce((a, c) => a + E.eff(c.ovr, c), 0) / cards.length;
+  // Angriff: was die drei Stürmer mit dem Ball können. Abwehr: was die zwei Verteidiger gegen den Ball können.
+  const FWD = ['C', 'LW', 'RW'], BACK = ['LD', 'RD'];
+  const avg = l => l.reduce((a, v) => a + v, 0) / Math.max(1, l.length);
+  const attackVal = cards => avg(cards.filter(c => FWD.indexOf(c.role) !== -1).map(c => (shotVal(c) + passVal(c) + dribVal(c)) / 3));
+  const defenceVal = cards => avg(cards.filter(c => BACK.indexOf(c.role) !== -1).map(c => (stanceVal(c, 'block') + stanceVal(c, 'pass') + stanceVal(c, 'zwei')) / 3 - (c.pos === 'DEF' ? 5 : 0)));
+  /* Taktik. own: Faktor auf die eigenen Chancen. open: Faktor auf die Chancen des Gegners.
+     Wer offensiv spielt, gibt dem Gegner ausserdem öfter Konter; wer defensiv spielt, kommt selbst öfter über Konter. */
+  const TACTICS = {
+    def: { name: 'Defensiv', own: 0.72, open: 0.68 },
+    bal: { name: 'Normal', own: 1, open: 1 },
+    off: { name: 'Offensiv', own: 1.35, open: 1.38 }
+  };
+  const KINDS = { set: 'Angriff', rush32: 'Konter 3 gegen 2', rush21: 'Konter 2 gegen 1', solo: 'Alleingang' };
 
   /* Spezialfähigkeiten aus den Ratings. Jede Karte hat höchstens eine: Stürmer zuerst eine Angriffs-, Verteidiger zuerst eine
      Abwehrfähigkeit, jeweils die, deren Wert die Schwelle am weitesten übertrifft. Im passenden Einsatz gibt sie einen grossen Bonus. */
@@ -121,34 +138,52 @@
 
   // Laufwege: Nach jeder gelungenen Aktion bewegen sich die anderen Angreifer, ihre Gegenspieler folgen ihnen.
   function shift(s, sc, rng) {
+    const n = {}; Object.keys(sc.mark).forEach(a => { n[sc.mark[a]] = (n[sc.mark[a]] || 0) + 1; });
     players(s, atkSide(sc)).forEach(c => {
       if (c.id === sc.carrier) return;
       const t = lerp(P(sc, c.id), GOAL, 0.06);
       sc.pos[c.id] = [clamp(t[0] + (rng() - 0.5) * 40, 30, 330), clamp(t[1] + (rng() - 0.5) * 26, 90, 360)];
-      const d = sc.mark[c.id], mp = lerp(sc.pos[c.id], GOAL, 0.22 + rng() * 0.12), side = sc.pos[c.id][0] < 170 ? 1 : -1;
+      const d = sc.mark[c.id]; if (n[d] > 1) return;       // im Konter deckt ein Verteidiger mehrere: er bleibt, wo er ist
+      const mp = lerp(sc.pos[c.id], GOAL, 0.22 + rng() * 0.12), side = sc.pos[c.id][0] < 170 ? 1 : -1;
       sc.pos[d] = [mp[0] + side * 18, mp[1] - 6];
     });
   }
 
   // --- Szenen ---
-  function makeScene(s, rng, type, counter) {
-    const sc = { type, step: 0, max: counter ? s.cfg.counterSteps : type === 'def' ? s.cfg.defSteps : s.cfg.maxSteps, counter: !!counter, pos: {}, mark: {}, carrier: null, intent: null };
-    const as = type === 'att' ? 'you' : 'home', ds = other(as);
-    const byRole = side => { const m = {}; players(s, side).forEach(c => { m[c.role] = c; }); return m; };
+  /* Stellt eine Chance auf. kind: set (Positionsangriff, alle zehn im Angriffsdrittel), rush32, rush21 (Konter: nur ein Teil
+     der Spieler ist vorne dabei, der Rest läuft hinterher) oder solo (Alleingang, führt direkt zum Schuss). */
+  function makeScene(s, rng, type, opt) {
+    const o = opt || {}, kind = o.kind || 'set', as = type === 'att' ? 'you' : 'home', ds = other(as), c = s.cfg;
+    const sc = { type, kind, step: 0, max: kind === 'set' ? (type === 'def' ? c.defSteps : c.maxSteps) : c.counterSteps, counter: kind !== 'set', pos: {}, mark: {}, carrier: null, intent: null, press: 0 };
+    const byRole = side => { const m = {}; players(s, side).forEach(x => { m[x.role] = x; }); return m; };
     const A = byRole(as), D = byRole(ds);
-    ROLES.forEach(r => { sc.pos[A[r].id] = jit(rng, FORM[r], 16); });
-    ROLES.forEach(r => {
-      const a = A[r], d = D[MARKS[r]], pa = sc.pos[a.id];
-      sc.mark[a.id] = d.id;
-      const mp = lerp(pa, GOAL, 0.2 + rng() * 0.14), side = pa[0] < 170 ? 1 : pa[0] > 190 ? -1 : (rng() < 0.5 ? -1 : 1);
-      sc.pos[d.id] = jit(rng, [mp[0] + side * 20, mp[1] - 6], 5);   // leicht zur Mitte versetzt, damit sich die Namen nicht überdecken
-    });
-    if (counter) {
-      // Konter: drei Gegenspieler sind noch hinten, der Ballführende startet weiter vorne
-      ROLES.slice(2).forEach(r => { const d = D[MARKS[r]]; sc.pos[d.id] = [sc.pos[d.id][0], 360 + rng() * 25]; });
-      sc.carrier = counter;
-      sc.pos[counter] = jit(rng, [180, 200], 30);
-    } else sc.carrier = A[sample({ C: 0.3, LW: 0.2, RW: 0.2, LD: 0.15, RD: 0.15 }, rng)].id;
+    if (kind === 'set') {
+      ROLES.forEach(r => { sc.pos[A[r].id] = jit(rng, FORM[r], 16); });
+      ROLES.forEach(r => {
+        const a = A[r], d = D[MARKS[r]], pa = sc.pos[a.id];
+        sc.mark[a.id] = d.id;
+        const mp = lerp(pa, GOAL, 0.2 + rng() * 0.14), side = pa[0] < 170 ? 1 : pa[0] > 190 ? -1 : (rng() < 0.5 ? -1 : 1);
+        sc.pos[d.id] = jit(rng, [mp[0] + side * 20, mp[1] - 6], 5);   // leicht zur Mitte versetzt, damit sich die Namen nicht überdecken
+      });
+      sc.carrier = o.carrier && card(s, as, o.carrier) ? o.carrier : A[sample({ C: 0.3, LW: 0.2, RW: 0.2, LD: 0.15, RD: 0.15 }, rng)].id;
+    } else {
+      const nA = kind === 'rush32' ? 3 : kind === 'rush21' ? 2 : 1, nD = kind === 'rush32' ? 2 : kind === 'rush21' ? 1 : 0;
+      const car = o.carrier && card(s, as, o.carrier) ? card(s, as, o.carrier) : A[sample({ C: 0.4, LW: 0.3, RW: 0.3 }, rng)];
+      const mates = FWD.concat(BACK).map(r => A[r]).filter(x => x.id !== car.id), front = [car].concat(mates.slice(0, nA - 1)), trail = mates.slice(nA - 1);
+      const backs = BACK.concat(FWD).map(r => D[r]), guard = backs.slice(0, nD), chase = backs.slice(nD), sx = rng() < 0.5 ? -1 : 1;
+      const spots = kind === 'solo' ? [[180 + sx * 22, 142]] : kind === 'rush21' ? [[180 + sx * 46, 196], [180 - sx * 58, 178]] : [[180 + sx * 8, 208], [180 - sx * 86, 176], [180 + sx * 90, 182]];
+      front.forEach((x, i) => { sc.pos[x.id] = jit(rng, spots[i], 9); });
+      trail.forEach((x, i) => { sc.pos[x.id] = jit(rng, [84 + i * 64, 306 + (i % 2) * 26], 12); });
+      (nD === 1 ? [[180 - sx * 6, 120]] : [[180 + sx * 36, 126], [180 - sx * 42, 114]]).slice(0, nD).forEach((p, i) => { sc.pos[guard[i].id] = jit(rng, p, 6); });
+      chase.forEach((x, i) => { sc.pos[x.id] = jit(rng, [66 + i * 58, 250 + (i % 2) * 24], 10); });               // laufen hinterher
+      // Gegenspieler: für die vorne der nächste Verteidiger, der noch hinten ist, für die Nachrückenden ein Verfolger
+      players(s, as).forEach(x => {
+        const pool = front.indexOf(x) !== -1 && guard.length ? guard : chase.length ? chase : guard; let b = pool[0], bd = Infinity;
+        pool.forEach(d => { const v = dist(sc.pos[x.id], sc.pos[d.id]); if (v < bd) { bd = v; b = d; } });
+        sc.mark[x.id] = b.id;
+      });
+      sc.carrier = car.id;
+    }
     sc.bar = newBar(rng);
     s.cur = sc;
     if (type === 'def') aiIntent(s, rng);
@@ -271,35 +306,64 @@
     const cfg = setup.cfg || CFG;
     const s = {
       cfg, homeName: setup.homeName || '', teams: { you: { goalie: Object.assign({}, setup.you.goalie), cards: lineup(setup.you.cards) }, home: { goalie: Object.assign({}, setup.home.goalie), cards: lineup(setup.home.cards) } },
-      scene: 0, score: { you: 0, home: 0 }, plan: [], cur: null, shot: null, phase: 'decide', pen: null, outcome: null, results: [],
+      period: 0, clock: 0, from: 0, minute: 0, perChances: 0, tactic: { you: TACTICS[setup.tactic] ? setup.tactic : 'bal', home: 'bal' }, chances: { you: 0, home: 0 },
+      score: { you: 0, home: 0 }, cur: null, fill: null, shot: null, phase: 'decide', pen: null, outcome: null, results: [],
       stats: { att: 0, def: 0, shots: 0, goals: 0, faced: 0, onGoal: 0, saved: 0, passes: 0, passOk: 0, dribbles: 0, dribOk: 0, stops: 0, counters: 0, bars: 0, hits: 0, perfects: 0, nears: 0 }
     };
-    // Szenenplan: Anteil deiner Angriffe nach Teamstärke, gleichmässig gemischt
-    const pa = clamp(cfg.attBase + (strength(s.teams.you.cards) - strength(s.teams.home.cards)) * cfg.attSlope, cfg.attMin, cfg.attMax);
-    s.attShare = pa;
-    let att = Math.round(pa * cfg.scenes); const plan = [];
-    for (let i = 0; i < cfg.scenes; i++) { const left = cfg.scenes - i, want = att / left; const t = rng() < want ? 'att' : 'def'; if (t === 'att') att--; plan.push(t); }
-    s.plan = plan;
-    startScene(s, rng);
+    s.val = { you: { att: attackVal(s.teams.you.cards), def: defenceVal(s.teams.you.cards) }, home: { att: attackVal(s.teams.home.cards), def: defenceVal(s.teams.home.cards) } };
+    advance(s, rng, null);
     return s;
   }
-  function startScene(s, rng) {
-    const t = s.plan[s.scene];
-    s.minute = Math.floor(s.scene / s.cfg.perPeriod) * 20 + 2 + (s.scene % s.cfg.perPeriod) * 5 + Math.floor(rng() * 4);
-    if (t === 'att') s.stats.att++; else s.stats.def++;
-    makeScene(s, rng, t);
-    s.cur.open = openPlay(s, rng, t === 'att' ? 'you' : 'home');
+  // Chancen pro Minute für beide Seiten: Angriff gegen Abwehr, mal die eigene Taktik, mal wie offen der Gegner steht
+  function rates(s) {
+    const c = s.cfg, r = side => c.chanceBase * Math.exp(c.chanceK * (s.val[side].att - s.val[other(side)].def)) * TACTICS[s.tactic[side]].own * TACTICS[s.tactic[other(side)]].open;
+    return { you: r('you'), home: r('home') };
+  }
+  // Der Gegner stellt um: im Rückstand offensiv (spät oder ab zwei Toren), mit Vorsprung defensiv
+  function aiTactic(s) { const d = s.score.home - s.score.you, late = s.period >= s.cfg.periods - 1; return d < 0 && (late || d <= -2) ? 'off' : d >= 2 || (d > 0 && late) ? 'def' : 'bal'; }
+  // Art der Chance. Gegen ein offensives Team gibt es mehr Konter, gegen ein defensives fast nur Positionsangriffe.
+  function pickKind(s, rng, side) {
+    const open = s.tactic[other(side)];
+    const w = open === 'off' ? { set: 0.36, rush32: 0.28, rush21: 0.26, solo: 0.1 } : open === 'def' ? { set: 0.74, rush32: 0.14, rush21: 0.09, solo: 0.03 } : { set: 0.56, rush32: 0.21, rush21: 0.17, solo: 0.06 };
+    if (s.tactic[side] === 'def') { w.set -= 0.12; w.rush32 += 0.06; w.rush21 += 0.06; }
+    return sample(w, rng);
+  }
+  // Beginnt eine Chance. Ein Alleingang führt direkt zum Schuss. open: das Spiel davor (nur zum Zeigen).
+  function startChance(s, rng, side, kind, carrier, quiet) {
+    const type = side === 'you' ? 'att' : 'def';
+    s.chances[side]++; if (type === 'att') s.stats.att++; else s.stats.def++;
+    makeScene(s, rng, type, { kind, carrier });
+    s.cur.open = quiet ? [] : openPlay(s, rng, side, s.cur.carrier);
+    if (kind === 'solo') setShot(s, rng, side, s.cur.carrier, Math.max(0.8, shotInfo(s, s.cur, s.cur.carrier).q), 'counter');
+  }
+  /* Lässt die Uhr laufen bis zur nächsten Chance oder bis zum Drittelsende. Die Zeit bis zur nächsten Chance ist zufällig,
+     im Schnitt umso kürzer, je mehr Chancen beide Seiten nach Werten und Taktik haben. */
+  function advance(s, rng, ev) {
+    const c = s.cfg, end = (s.period + 1) * c.periodMin, was = s.tactic.home;
+    s.tactic.home = aiTactic(s); if (ev && was !== s.tactic.home) ev.push({ t: 'tactic', side: 'home', value: s.tactic.home });
+    const r = rates(s), tot = r.you + r.home, t = s.clock + Math.max(c.chanceGap, -Math.log(1 - rng()) / tot);
+    s.from = s.clock; s.fill = null;
+    if (t >= end - 0.4 || s.perChances >= c.maxPerPeriod) {
+      s.clock = end; s.minute = end; s.cur = null; s.fill = openPlay(s, rng, null, null);
+      if (ev) ev.push({ t: 'period', period: s.period });
+      if (s.period < c.periods - 1) { s.phase = 'break'; return; }
+      if (s.score.you === s.score.home) { s.pen = { you: 0, home: 0, shots: { you: 0, home: 0 }, results: [] }; penShot(s, rng); } else finish(s);
+      return;
+    }
+    s.clock = t; s.minute = Math.max(1, Math.ceil(t)); s.perChances++;
+    const side = rng() < r.you / tot ? 'you' : 'home';
+    startChance(s, rng, side, pickKind(s, rng, side));
   }
   /* Offenes Spiel vor der Szene, ohne Eingriff des Users: Pässe, Ballverluste, Distanzschüsse. Das schwächere Team verliert
      den Ball öfter. Endet, wenn das Team der Szene nah genug vor dem Tor ist, mit dem Pass zum Ballführenden der Szene.
      depth: 1 tief in der eigenen Hälfte, 0 in der Schlüsselposition. Reine Erzählung: entscheidet kein Tor. */
-  function openPlay(s, rng, target) {
+  function openPlay(s, rng, target, carrier) {
     const ev = [], str = side => strength(players(s, side)), pick = side => { const l = players(s, side); return l[Math.floor(rng() * l.length)].id; };
     const back = side => { const l = players(s, side).filter(c => c.role === 'LD' || c.role === 'RD'); return l[Math.floor(rng() * l.length)].id; };
     let side = rng() < 0.5 ? 'you' : 'home', holder = back(side), depth = 0.95, n = 0;
     const minN = 2 + Math.floor(rng() * 2);
     while (n < 7) {
-      if (n >= minN && side === target && depth <= 0.4) break;
+      if (n >= minN && (target ? side === target && depth <= 0.4 : n >= minN + 1)) break;
       n++;
       const lose = clamp(0.18 + (str(other(side)) - str(side)) * 0.05, 0.06, 0.4) + (depth < 0.45 ? 0.06 : 0);
       if (rng() < lose) {
@@ -315,21 +379,27 @@
       depth = Math.max(0.05, depth - (0.22 + rng() * 0.22));
       ev.push({ kind: 'pass', side, from: holder, to, depth }); holder = to;
     }
+    if (!target) return ev;                                 // Spiel ohne Chance: läuft bis zum Drittelsende
     if (side !== target) { const by = pick(target); ev.push({ kind: 'intercept', side, from: holder, by, depth }); side = target; holder = by; depth = 0.45; }
-    if (holder !== s.cur.carrier) ev.push({ kind: 'pass', side, from: holder, to: s.cur.carrier, depth: 0, final: true });
+    if (holder !== carrier) ev.push({ kind: 'pass', side, from: holder, to: carrier, depth: 0, final: true });
     else ev.push({ kind: 'hold', side, from: holder, depth: 0, final: true });
     return ev;
   }
+  const closeChance = (s, goal) => { s.results.push({ type: s.cur.type, kind: s.cur.kind, goal: goal || null, minute: s.minute }); };
   function endScene(s, ev, why) {
     const goal = s.cur.goal || null;
-    s.results[s.scene] = { type: s.plan[s.scene], goal };
+    closeChance(s, goal);
     ev.push({ t: 'end', why, goal });
     s.cur.done = true; s.phase = 'done';
   }
-  // Ballverlust. Nur ein grober Fehler (weit neben dem Feld) gibt dem Gegner den Konter: ein Schuss auf dein Tor.
+  /* Ballverlust. Nur ein grober Fehler (weit neben dem Feld) gibt dem Gegner den Konter. Der ist eine neue Chance für ihn:
+     meist in Überzahl gegen deine Verteidiger, nur selten allein vor dem Tor. */
   function lost(s, rng, ev, by, counter) {
-    if (counter) { ev.push({ t: 'counter', side: 'home', x: by }); setShot(s, rng, 'home', by, 0.6, 'counter'); return; }
-    endScene(s, ev, 'lost');
+    if (!counter) return endScene(s, ev, 'lost');
+    const kind = sample({ rush32: 0.42, rush21: 0.42, solo: 0.16 }, rng);
+    ev.push({ t: 'counter', side: 'home', x: by, kind });
+    closeChance(s, null);
+    startChance(s, rng, 'home', kind, by, true);
   }
   const tally = (s, g) => { s.stats.bars++; if (g === 'perfect' || g === 'good') s.stats.hits++; if (g === 'perfect') s.stats.perfects++; if (g === 'near') s.stats.nears++; };
   /* Angriff. perfekt: Vorteil (freier Empfänger, mehr Raum, genauerer Schuss). im Feld: gelungen. knapp daneben: halb
@@ -381,7 +451,11 @@
     tally(s, g);
     sc.press = (sc.press || 0) + gain;
     ev.push({ t: 'defend', action: d.action, target: it.to || null, intent: it, by: D.id, x: X.id, stopped: won, grade: g, gain, w: d.w, av: d.atkV, dv: d.dv, trait: d.trait });
-    if (won) { s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id }); makeScene(s, rng, 'att', D.id); return; }
+    if (won) {
+      const kind = sample({ rush32: 0.5, rush21: 0.4, solo: 0.1 }, rng);
+      s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id, kind });
+      closeChance(s, null); startChance(s, rng, 'you', kind, D.id, true); return;
+    }
     if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack', { press: sc.press }); return; }
     const tight = g === 'good' ? 1 : g === 'near' ? 0.5 : 0;      // gestört: Empfänger enger gedeckt, weniger Raumgewinn
     if (it.kind === 'pass') { const m = sc.mark[it.to]; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3 + 0.55 * tight); sc.carrier = it.to; }
@@ -425,15 +499,10 @@
     if (a <= 3 && b <= 3) return P_.you > P_.home + (3 - b) || P_.home > P_.you + (3 - a);
     return a === b && P_.you !== P_.home;
   }
-  function next(s, rng) {
+  function next(s, rng, ev) {
     if (s.pen) { if (penOver(s.pen)) finish(s); else penShot(s, rng); return; }
-    s.scene++;
-    if (s.scene >= s.cfg.scenes) {
-      if (s.score.you === s.score.home) { s.pen = { you: 0, home: 0, shots: { you: 0, home: 0 }, results: [] }; s.cur = null; penShot(s, rng); }
-      else finish(s);
-      return;
-    }
-    startScene(s, rng);
+    if (s.phase === 'break') { s.period++; s.perChances = 0; }
+    advance(s, rng, ev);
   }
   function finish(s) { s.outcome = s.pen ? (s.pen.you > s.pen.home ? 'penwin' : 'penloss') : (s.score.you > s.score.home ? 'win' : 'loss'); s.phase = 'end'; }
 
@@ -443,17 +512,19 @@
      Abwehr:   { type: 'defend', hit }
      Schuss:   { type: 'aim', target: [x, y], t } eigener Schuss, t in ms seit Beginn der Schussphase
                { type: 'aim', zone, rt } Parade, rt in ms seit dem Abschluss des Gegners
-     Weiter:   { type: 'next' } */
+     Taktik:   { type: 'tactic', value: 'def' | 'bal' | 'off' } jederzeit, gilt ab der nächsten Chance
+     Weiter:   { type: 'next' } nach einer Chance oder in der Drittelspause: die Uhr läuft bis zur nächsten Chance */
   function act(state, a, rng) {
     const s = copy(state), ev = [];
     let ok = true;
-    if (s.phase === 'decide' && s.cur.type === 'att' && ['shoot', 'pass', 'dribble'].indexOf(a.type) !== -1) ok = attAction(s, rng, ev, a) !== false;
+    if (a.type === 'tactic') { if (TACTICS[a.value] && s.phase !== 'end') s.tactic.you = a.value; else ok = false; }
+    else if (s.phase === 'decide' && s.cur.type === 'att' && ['shoot', 'pass', 'dribble'].indexOf(a.type) !== -1) ok = attAction(s, rng, ev, a) !== false;
     else if (s.phase === 'decide' && s.cur.type === 'def' && a.type === 'defend') ok = defAction(s, rng, ev, a) !== false;
     else if (s.phase === 'aim' && a.type === 'aim') ok = shoot(s, rng, ev, a) !== false;
-    else if (s.phase === 'done' && a.type === 'next') next(s, rng);
+    else if ((s.phase === 'done' || s.phase === 'break') && a.type === 'next') next(s, rng, ev);
     else ok = false;
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TRAITS, trait, defChoice, defInfo, contest, zone, grade, keeperX, reach, rad, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TACTICS, KINDS, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, keeperX, reach, rad, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

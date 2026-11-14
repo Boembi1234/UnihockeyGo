@@ -17,8 +17,9 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     const over = async w => { const x = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth); if (x > 0) errors.push('Überlauf ' + w + ' +' + x); };
     await snap('00-intro', true); await over('intro');
     for (let m = 0; m < N; m++) {
-      if (m > 0) await p.click('#btn-other');
+      if (m > 0) { if (!(await p.isVisible('#btn-other'))) { errors.push('Match ' + m + ' kam nicht ans Ende: ' + await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-period').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent].join(' / '))); break; } await p.click('#btn-other'); }
       await p.evaluate(() => { const o = [...document.querySelectorAll('#opps [data-opp]')]; o[Math.floor(Math.random() * o.length)].click(); });
+      await p.evaluate(() => { const o = [...document.querySelectorAll('#tac-intro [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
       await p.click('#btn-start');
       for (let g = 0; g < 6000; g++) {
         const st = await p.evaluate(() => {
@@ -31,6 +32,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           return 'wait';
         });
         seen[st] = (seen[st] || 0) + 1;
+        if (process.env.DEBUG && (g % 400 === 0 || st !== seen._last)) { seen._last = st; console.log(g, st, await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent.slice(0, 60), document.getElementById('hint').hidden ? '' : document.getElementById('hint-text').textContent].join(' / '))); }
         if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att') {
           await snap('01-angriff'); await over('angriff'); n++;
@@ -77,8 +79,9 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (!run.reduce) { await p.waitForTimeout(650); await snap('08-parade-ende'); }
           await p.waitForTimeout(300); continue;
         }
-        if (Math.random() < 0.5) await p.evaluate(() => document.getElementById('stage').click());
-        await p.waitForTimeout(60);
+        if (Math.random() < 0.02) await p.evaluate(() => { const o = [...document.querySelectorAll('#tac [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
+        await p.evaluate(() => document.getElementById('stage').click());
+        await p.waitForTimeout(25);
       }
     }
     const missing = ['att', 'bar-att', 'bar-def', 'aim', 'react', 'end'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));

@@ -23,6 +23,21 @@ Code in `src/lab/`, Simulation mit `node sim/lab.js`, Browser-Test mit `node tes
 
 Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Shop:
 
+**Spielfluss und Taktik.** Ein Match läuft über drei Drittel zu 20 Minuten, die Uhr läuft mit. Die Zahl der Chancen steht nicht fest (im Schnitt etwa 12, in der Simulation zwischen 2 und 21):
+
+- **Chancen aus den Karten:** Jede Seite bekommt Chancen nach ihrem Angriffswert (die drei Stürmer: Schuss, Pass, Dribbling) gegen den Abwehrwert des Gegners (die zwei Verteidiger: Block, Antizipation, Zweikampf). Gute Stürmer bringen mehr eigene Chancen, schwache Verteidiger mehr Chancen für den Gegner.
+- **Taktik:** Defensiv, Normal oder Offensiv, vor dem Match und jederzeit während des Spiels wählbar, mit Hinweis in jeder Drittelspause. Offensiv bringt mehr eigene Chancen (Faktor 1.35), öffnet aber hinten (1.38 für den Gegner, dazu mehr Konter). Defensiv senkt beides (0.72 und 0.68), die eigenen Chancen kommen öfter aus Kontern. Der Gegner stellt selbst um: im Rückstand offensiv, mit Vorsprung defensiv.
+- **Arten von Chancen:** Positionsangriff, Konter 3 gegen 2, Konter 2 gegen 1 und selten ein Alleingang. Ein Konter nach einem groben Fehler ist ebenfalls meist eine Überzahl, nur selten ein Alleingang.
+- **Feld von oben:** Die Spieler sind Figuren mit Schultern, Kopf, Armen, Beinen und Stock. Sie drehen sich in Laufrichtung oder zum Ball, die Beine laufen mit, der Stock schwingt bei Pass und Schuss, der Ball liegt an der Schaufel. Die Goalies knien im Torraum und rutschen mit dem Ball mit.
+
+Wirkung der Taktik für den mittleren Modell-Spieler (Team um 81 gegen WASA, 600 Matches je Feld, Siegquote):
+
+| Karten | Defensiv | Normal | Offensiv |
+|---|---|---|---|
+| 6 schwächer | 25 % | 18 % | 15 % |
+| gleich | 60 % | 58 % | 57 % |
+| 6 stärker | 86 % | 89 % | 92 % |
+
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
 
 - **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss unter Druck und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
@@ -41,13 +56,13 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 | 90 | 14 % | 35 % | 56 % | 76 % |
 | 97 | 22 % | 46 % | 70 % | 83 % |
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), 800 Matches je Feld, Siegquote:
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), normale Taktik, 600 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 23 % | 80 % | 99 % | 100 % | 100 % |
-| mittel | 2 % | 16 % | 61 % | 95 % | 99 % |
-| schwach | 0 % | 0 % | 6 % | 33 % | 72 % |
+| stark | 20 % | 66 % | 92 % | 99 % | 100 % |
+| mittel | 1 % | 18 % | 56 % | 88 % | 98 % |
+| schwach | 0 % | 2 % | 11 % | 43 % | 75 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

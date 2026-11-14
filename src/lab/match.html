@@ -14,7 +14,8 @@
 #pitch{position:absolute;inset:0;width:100%;height:100%;display:block}
 #pitch .pl{cursor:default}
 #pitch .pl.pick{cursor:pointer}
-#pitch .pl.pick circle.body{stroke:#f7d774;stroke-width:3.5}
+#pitch .pl.pick .body{stroke:#f7d774;stroke-width:3.2}
+#pitch .pl.pick .lab{fill:#f7d774}
 #pitch .lab{font-family:'Saira Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;fill:#fff;text-transform:uppercase;paint-order:stroke;stroke:#050818;stroke-width:3px}
 #pitch .num{font-family:'Saira Condensed','Arial Narrow',sans-serif;font-weight:800;font-size:15px}
 .carrier-ring{animation:ring 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
@@ -101,6 +102,17 @@
 .free.top{top:33.846%;height:21.62%}
 
 .mark{position:absolute;left:0;top:0;width:11%;aspect-ratio:1;z-index:4;border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 0 2px rgba(5,8,24,.7),0 0 16px rgba(247,215,116,.8);pointer-events:none}
+/* Taktik */
+.tac{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#070b1f}
+.tac button{min-height:40px;border:0;border-right:1px solid var(--line);background:transparent;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.tac button:last-child{border-right:0}
+.tac button.on{background:var(--ice);color:#050818}
+.tac.ask{box-shadow:0 0 0 3px rgba(247,215,116,.45);border-color:var(--gold)}
+.tacrow{display:flex;align-items:center;gap:10px}
+.tacrow .tac{flex:1}
+.tacrow .tac button{min-height:36px;font-size:13px}
+.tac-opp{flex-shrink:0;max-width:34%;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--mute);text-align:right}
+.dots{flex-wrap:wrap;justify-content:center;max-width:150px;min-height:10px}
 /*__STORECSS__*/
 </style>
 </head>
@@ -110,7 +122,7 @@
 <section id="screen-intro" class="screen">
   <div class="topbar"><span class="brand">PLAYMAKERZ</span><span class="coins" data-coins></span></div>
   <h1 class="hero">Hallen<br><span>Match</span></h1>
-  <p class="lead">Ein ganzes Match mit deinen 5 Feldspielern. In 12 Schlüsselszenen entscheidest du und triffst das Timing: Gewürfelt wird nichts mehr. Bessere Karten machen das grüne Feld breiter, dein Goalie bekommt mehr Zeit.</p>
+  <p class="lead">Ein ganzes Match über drei Drittel. Das Spiel läuft, und aus ihm entstehen Chancen: Positionsangriffe und Konter, für dich und gegen dich. Wie viele, hängt an deinen Karten und deiner Taktik. In jeder Chance entscheidest du und triffst das Timing.</p>
   <div class="panel">
     <p class="group-label">Deine Linie <span id="intro-ovr"></span></p>
     <ul class="lineup cards" id="lineup"></ul>
@@ -120,9 +132,14 @@
     </div>
   </div>
   <div class="panel">
+    <p class="group-label">Taktik</p>
+    <div class="tac" id="tac-intro"><button type="button" data-tac="def">Defensiv</button><button type="button" data-tac="bal">Normal</button><button type="button" data-tac="off">Offensiv</button></div>
+    <p class="note">Offensiv: mehr Chancen für dich, aber hinten offen, der Gegner kontert öfter. Defensiv: weniger Chancen auf beiden Seiten, deine kommen öfter aus Kontern. Du kannst im Match jederzeit umstellen.</p>
+  </div>
+  <div class="panel">
     <p class="group-label">Gegner wählen</p>
     <div class="screen" id="opps"></div>
-    <p class="note">Je stärker der Gegner, desto mehr Szenen musst du verteidigen und desto mehr Münzen gibt ein Sieg.</p>
+    <p class="note">Gute Stürmer bringen dir mehr Chancen, schwache Verteidiger dem Gegner. Die Zahl der Chancen steht nicht fest.</p>
   </div>
   <button class="cta" id="btn-start" type="button">Anpfiff</button>
   <p class="note">Nur zum Ausprobieren: Standort, Vereine, Fouls und Taktiken fehlen hier. Karten und Münzen speichert nur dieser Browser. Bei Unentschieden gibt es Penaltys. Das <a class="link" href="../">Testduell</a> gibt es weiterhin.</p>
@@ -134,6 +151,7 @@
     <div class="sb-mid"><span class="sb-period" id="sc-period">1. Drittel</span><span class="time" id="sc-time"></span><span class="dots" id="dots" aria-hidden="true"></span></div>
     <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club"></span></div>
   </div>
+  <div class="tacrow"><div class="tac" id="tac"><button type="button" data-tac="def">Defensiv</button><button type="button" data-tac="bal">Normal</button><button type="button" data-tac="off">Offensiv</button></div><span class="tac-opp" id="tac-opp"></span></div>
   <div class="stage match" id="stage">
     <svg id="pitch" viewBox="0 0 360 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <rect x="-200" y="-50" width="760" height="900" fill="#1440a6"/>
@@ -148,10 +166,9 @@
       <circle cx="180" cy="400" r="40" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="2"/>
       <g fill="#ffffff" fill-opacity=".4"><circle cx="70" cy="150" r="3"/><circle cx="290" cy="150" r="3"/><circle cx="70" cy="650" r="3"/><circle cx="290" cy="650" r="3"/><circle cx="180" cy="400" r="3"/></g>
       <g id="lanes"></g>
-      <circle id="gk" cx="180" cy="52" r="12" stroke-width="2.5" fill="#1b2033" stroke="#f7d774"/>
-      <circle id="gk2" cx="180" cy="748" r="12" stroke-width="2.5" fill="#1a57ff" stroke="#ffffff"/>
+      <g id="gks"></g>
       <g id="pls"></g>
-      <circle id="mball" r="6" fill="#ffffff" stroke="#c4cde6" stroke-width="1.5"/>
+      <circle id="mball" r="4.4" fill="#ffffff" stroke="#050818" stroke-width="1.3"/>
     </svg>
     <div class="vignette" id="vignette"></div>
     <div class="goalview" id="goalview" hidden>

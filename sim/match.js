@@ -58,13 +58,14 @@ function policy(pf) {
     return { type: 'next' };
   };
 }
-function play(squad, opp, pol, n, seed, cfg) {
-  const r = E.makeRng(seed), m = { n, win: 0, gf: 0, ga: 0, so: 0 };
+function play(squad, opp, pol, n, seed, cfg, tactic) {
+  const r = E.makeRng(seed), m = { n, win: 0, gf: 0, ga: 0, so: 0, chY: 0, chH: 0, min: 99, max: 0 };
   ['att', 'shots', 'goals', 'faced', 'onGoal', 'saved', 'stops', 'def', 'bars', 'hits', 'perfects', 'counters'].forEach(k => { m[k] = 0; });
   for (let i = 0; i < n; i++) {
-    let s = M.newMatch({ cfg, you: { goalie: { val: 88 }, cards: squad }, home: { goalie: { val: 88 }, cards: opp } }, r), g = 0;
+    let s = M.newMatch({ cfg, tactic, you: { goalie: { val: 88 }, cards: squad }, home: { goalie: { val: 88 }, cards: opp } }, r), g = 0;
     while (s.phase !== 'end') { const a = pol(s, r), x = M.act(s, a, r); if (!x.ok) throw new Error('ungültig ' + JSON.stringify(a) + ' ' + s.phase); s = x.state; if (++g > 700) throw new Error('endlos'); }
     if (s.outcome === 'win' || s.outcome === 'penwin') m.win++; if (s.pen) m.so++;
+    m.chY += s.chances.you; m.chH += s.chances.home; const tot = s.chances.you + s.chances.home; m.min = Math.min(m.min, tot); m.max = Math.max(m.max, tot);
     m.gf += s.score.you; m.ga += s.score.home; Object.keys(s.stats).forEach(k => { if (k in m) m[k] += s.stats[k]; });
   }
   return m;

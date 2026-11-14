@@ -8,7 +8,7 @@
   const rng = E.makeRng((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0);
   const OPPS = C.OPPS.map(o => o.id);
 
-  let G = null, phase = 'idle', fast = false, wake = null, opp = 'wasa', HOME = '';
+  let G = null, phase = 'idle', fast = false, wake = null, opp = 'wasa', HOME = '', tactic = 'bal';
   let disp = { you: 0, home: 0 }, penDisp = { you: 0, home: 0 }, ticker = [];
   const els = {}, pos = {};
 
@@ -37,22 +37,88 @@
   const sideOf = id => (card('you', id) ? 'you' : 'home');
 
   // --- Spielfeld ---
-  const TEAM = { you: { fill: '#1a57ff', ring: '#ffffff', text: '#ffffff' }, home: { fill: '#1b2033', ring: '#f7d774', text: '#f7d774' } };
+  const TEAM = { you: { fill: '#1a57ff', ring: '#ffffff', text: '#ffffff', blade: '#ffffff' }, home: { fill: '#1b2033', ring: '#f7d774', text: '#f7d774', blade: '#f7d774' } };
   const svg = (tag, a, parent) => { const n = document.createElementNS(NS, tag); for (const k in a) n.setAttribute(k, a[k]); if (parent) parent.appendChild(n); return n; };
+  /* Spieler von oben: Schultern, Kopf, Arme, Beine und ein Stock mit Schaufel. Die Figur dreht sich in Laufrichtung oder zum
+     Ball, die Beine laufen mit dem zurückgelegten Weg, beim Pass und Schuss schwingt der Stock. Name und Markierung drehen
+     nicht mit. fig[id] hält den Zustand: Winkel a (0 = nach oben), Ziel want, Weg dist, Schwung swing. */
+  const HAIR = ['#2b1d12', '#16130f', '#6b4a2a', '#c9a45c', '#8a5a2b', '#3a2a1c'], OUTL = '#050818';
+  const hashOf = id => { let h = 7; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
+  const fig = {}, keepers = {};
+  let carrier = null, ballBusy = false, lifeRaf = 0;
   function buildPlayers() {
     const g = $('pls'); g.innerHTML = '';
+    Object.keys(fig).forEach(k => delete fig[k]);
     ['home', 'you'].forEach(side => G.teams[side].cards.forEach(c => {
-      const t = TEAM[side], el = svg('g', { class: 'pl', 'data-id': c.id }, g);
-      svg('circle', { r: 21, fill: 'none', stroke: '#f7d774', 'stroke-width': 3, class: 'carrier-ring', visibility: 'hidden' }, el);
-      svg('ellipse', { cx: 2, cy: 6, rx: 15, ry: 8, fill: '#000', opacity: 0.25 }, el);
-      svg('circle', { r: 15, fill: t.fill, stroke: t.ring, 'stroke-width': 2.5, class: 'body' }, el);
-      const n = svg('text', { y: 5.5, 'text-anchor': 'middle', class: 'num', fill: t.text }, el); n.textContent = c.no === null || c.no === undefined ? c.last.slice(0, 2).toUpperCase() : c.no;
-      const l = svg('text', { y: 29, 'text-anchor': 'middle', class: 'lab' }, el); l.textContent = c.last;
-      if (M.trait(c)) svg('path', { d: 'M12 -18 L16 -13 L12 -8 L8 -13 Z', fill: '#f7d774', stroke: '#050818', 'stroke-width': 1.2 }, el);   // Raute: Spezialfähigkeit
+      const t = TEAM[side], h = hashOf(c.id), hand = h % 3 === 0 ? -1 : 1, el = svg('g', { class: 'pl', 'data-id': c.id }, g);
+      svg('circle', { r: 22, fill: 'none', stroke: '#f7d774', 'stroke-width': 2.5, class: 'carrier-ring', visibility: 'hidden' }, el);
+      svg('ellipse', { cx: 2, cy: 5, rx: 14, ry: 9, fill: '#000', opacity: 0.22 }, el);
+      const f = svg('g', { class: 'fig' }, el);
+      const fl = svg('ellipse', { cx: -5.4, cy: 1, rx: 3.7, ry: 5.8, fill: '#0b0f20', stroke: OUTL, 'stroke-width': 1 }, f), fr = svg('ellipse', { cx: 5.4, cy: 1, rx: 3.7, ry: 5.8, fill: '#0b0f20', stroke: OUTL, 'stroke-width': 1 }, f);
+      // Stock: Schaft von den Händen zum Boden, vorne die Schaufel
+      const st = svg('g', {}, f), shaft = `M${hand * 3.5} -3 L${hand * 15} -27`, bl = `M${hand * 15} -27 q${-hand * 1.5} -5 ${-hand * 8.5} -4`;
+      svg('path', { d: shaft, fill: 'none', stroke: OUTL, 'stroke-width': 4.4, 'stroke-linecap': 'round' }, st); svg('path', { d: bl, fill: 'none', stroke: OUTL, 'stroke-width': 5.8, 'stroke-linecap': 'round' }, st);
+      svg('path', { d: shaft, fill: 'none', stroke: '#eef1f7', 'stroke-width': 2.2, 'stroke-linecap': 'round' }, st); svg('path', { d: bl, fill: 'none', stroke: t.blade, 'stroke-width': 3.4, 'stroke-linecap': 'round' }, st);
+      // Arme: die Stockhand unten, die andere greift quer nach oben
+      const arms = `M${hand * 11} -1 L${hand * 11} -15 M${-hand * 11} -1 L${hand * 5.5} -7`;
+      svg('path', { d: arms, fill: 'none', stroke: OUTL, 'stroke-width': 7, 'stroke-linecap': 'round' }, st); svg('path', { d: arms, fill: 'none', stroke: t.fill, 'stroke-width': 4.8, 'stroke-linecap': 'round' }, st);
+      svg('circle', { cx: hand * 11, cy: -15.5, r: 2.5, fill: '#15161a' }, st); svg('circle', { cx: hand * 5.5, cy: -7.5, r: 2.5, fill: '#15161a' }, st);
+      svg('ellipse', { rx: 13.2, ry: 8.2, fill: t.fill, stroke: t.ring, 'stroke-width': 2, class: 'body' }, f);
+      svg('path', { d: 'M-8.5 2.6 H8.5', stroke: t.ring, 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: 0.7 }, f);
+      svg('circle', { cx: 0, cy: -1.6, r: 6.2, fill: HAIR[h % HAIR.length], stroke: OUTL, 'stroke-width': 1.3 }, f);
+      svg('path', { d: 'M-3.4 -6.4 Q0 -8.6 3.4 -6.4', fill: 'none', stroke: '#e9c3a2', 'stroke-width': 2, 'stroke-linecap': 'round' }, f);   // Stirn: zeigt die Blickrichtung
+      const l = svg('text', { y: 33, 'text-anchor': 'middle', class: 'lab' }, el); l.textContent = c.last;
+      if (M.trait(c)) svg('path', { d: 'M16 -22 L20 -17 L16 -12 L12 -17 Z', fill: '#f7d774', stroke: OUTL, 'stroke-width': 1.2 }, el);   // Raute: Spezialfähigkeit
       els[c.id] = el; pos[c.id] = [180, 380];
+      fig[c.id] = { f, fl, fr, st, hand, a: side === 'you' ? 0 : 180, want: null, dist: 0, moved: 0, swing: 0, seed: (h % 628) / 100 };
     }));
+    buildKeepers();
+    cancelAnimationFrame(lifeRaf); lifeRaf = requestAnimationFrame(life);
   }
-  function place(id, p) { pos[id] = p; els[id].setAttribute('transform', `translate(${p[0].toFixed(1)} ${p[1].toFixed(1)})`); }
+  // Goalies von oben: knien im Torraum, Arme und Beine gespreizt, rutschen mit dem Ball mit
+  function buildKeepers() {
+    const g = $('gks'); g.innerHTML = '';
+    [['home', 180, 53, 180, '#e6b034', '#262c42'], ['you', 180, 747, 0, '#2449dc', '#f4f6fb']].forEach(k => {
+      const el = svg('g', {}, g), f = svg('g', { transform: `rotate(${k[3]})` }, el);
+      svg('ellipse', { cx: 1, cy: 4, rx: 17, ry: 9, fill: '#000', opacity: 0.22 }, el);
+      svg('path', { d: 'M-9 4 L-19 8 M9 4 L19 8', fill: 'none', stroke: OUTL, 'stroke-width': 8.6, 'stroke-linecap': 'round' }, f); svg('path', { d: 'M-9 4 L-19 8 M9 4 L19 8', fill: 'none', stroke: '#1c1d22', 'stroke-width': 6.2, 'stroke-linecap': 'round' }, f);
+      svg('path', { d: 'M-12 -1 L-19 -9 M12 -1 L19 -9', fill: 'none', stroke: OUTL, 'stroke-width': 7, 'stroke-linecap': 'round' }, f); svg('path', { d: 'M-12 -1 L-19 -9 M12 -1 L19 -9', fill: 'none', stroke: k[4], 'stroke-width': 4.8, 'stroke-linecap': 'round' }, f);
+      svg('circle', { cx: -19.5, cy: -9.5, r: 3, fill: '#15161a' }, f); svg('circle', { cx: 19.5, cy: -9.5, r: 3, fill: '#15161a' }, f);
+      svg('ellipse', { rx: 13.5, ry: 8.6, fill: k[5], stroke: OUTL, 'stroke-width': 1.6 }, f);
+      svg('circle', { cx: 0, cy: -1.5, r: 6.6, fill: k[4], stroke: OUTL, 'stroke-width': 1.4 }, f);
+      svg('path', { d: 'M-3.6 -5.6 H3.6 M-3.6 -3.4 H3.6', fill: 'none', stroke: '#eef1f7', 'stroke-width': 1 }, f);
+      keepers[k[0]] = { el, x: k[1], y: k[2] }; el.setAttribute('transform', `translate(${k[1]} ${k[2]})`);
+    });
+  }
+  function place(id, p) {
+    const o = pos[id], F = fig[id];
+    if (o && F) { const dx = p[0] - o[0], dy = p[1] - o[1], d = Math.hypot(dx, dy); if (d > 0.25) { F.dist += d; F.moved = performance.now(); if (d > 0.6) F.head = Math.atan2(dx, -dy) * 180 / Math.PI; } }
+    pos[id] = p; els[id].setAttribute('transform', `translate(${p[0].toFixed(1)} ${p[1].toFixed(1)})`);
+  }
+  const turn = (a, b, k) => a + ((((b - a) % 360) + 540) % 360 - 180) * k;
+  const angleTo = (a, b) => Math.atan2(b[0] - a[0], -(b[1] - a[1])) * 180 / Math.PI;
+  // Schaufelspitze eines Spielers auf dem Feld: dort liegt der Ball, wenn er ihn führt
+  function blade(id) { const F = fig[id], p = pos[id], a = F.a * Math.PI / 180, lx = F.hand * 11, ly = -38; return [p[0] + lx * Math.cos(a) - ly * Math.sin(a), p[1] + lx * Math.sin(a) + ly * Math.cos(a)]; }
+  /* Läuft ständig mit: dreht die Figuren (in Laufrichtung, sonst zum Ball, der Ballführende zum Tor), bewegt die Beine,
+     lässt Stehende leicht federn, hält den Ball an der Schaufel und schiebt die Goalies mit dem Ball mit. */
+  function life(now) {
+    if (!G || $('screen-match').hidden) { lifeRaf = 0; return; }
+    const t = now / 1000;
+    Object.keys(fig).forEach(id => {
+      const F = fig[id], p = pos[id], run = now - F.moved < 140;
+      const want = run && F.head !== undefined ? F.head : id === carrier ? angleTo(p, goalOf(sideOf(id))) : angleTo(p, ballP);
+      F.a = turn(F.a, want, run ? 0.3 : 0.12);
+      const step = run ? Math.sin(F.dist / 5.2) * 5.2 : 0; F.step = (F.step || 0) + (step - (F.step || 0)) * 0.5;
+      F.fl.setAttribute('cy', (1 - F.step).toFixed(1)); F.fr.setAttribute('cy', (1 + F.step).toFixed(1));
+      F.swing *= 0.86;
+      const bob = run ? 0 : Math.sin(t * 1.7 + F.seed) * 0.9;
+      F.f.setAttribute('transform', `translate(0 ${bob.toFixed(2)}) rotate(${F.a.toFixed(1)}) scale(1.22)`);
+      F.st.setAttribute('transform', `rotate(${(-F.hand * 38 * F.swing + (run ? Math.sin(F.dist / 5.2) * 5 : 0)).toFixed(1)})`);
+    });
+    if (carrier && fig[carrier] && !ballBusy && $('goalview').hidden) { const b = blade(carrier); ballAt([ballP[0] + (b[0] - ballP[0]) * 0.4, ballP[1] + (b[1] - ballP[1]) * 0.4]); }
+    Object.keys(keepers).forEach(k => { const K_ = keepers[k], x = 180 + Math.max(-17, Math.min(17, (ballP[0] - 180) * 0.22)); K_.x += (x - K_.x) * 0.12; K_.el.setAttribute('transform', `translate(${K_.x.toFixed(1)} ${K_.y})`); });
+    lifeRaf = requestAnimationFrame(life);
+  }
   /* Ganzes Feld 360 x 800: Du spielst nach oben aufs Tor bei (180, 40), der Gegner nach unten aufs Tor bei (180, 760).
      Die Engine rechnet jede Szene in einer Hälfte, in der nach oben angegriffen wird; hier wird sie aufs ganze Feld gelegt.
      Die Kamera zeigt einen Ausschnitt von 420 Einheiten Höhe und fährt dem Ball nach. */
@@ -66,19 +132,20 @@
   let ballP = [180, 380];
   function ballAt(p) { ballP = p; $('mball').setAttribute('cx', p[0].toFixed(1)); $('mball').setAttribute('cy', p[1].toFixed(1)); }
   const camFollow = k => camSet(cam + (camTarget() - cam) * k);
-  const atFoot = id => [pos[id][0] + 10, pos[id][1] - 12];
   function setCarrier(id) {
     Object.keys(els).forEach(k => els[k].querySelector('.carrier-ring').setAttribute('visibility', k === id ? 'visible' : 'hidden'));
-    if (id) ballAt(atFoot(id));
+    carrier = id || null;
   }
   const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   const bez = (a, c, b, t) => { const u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; };
   const io = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
   /* Bewegt Spieler und Ball. moves: [{ id, to, via }] (id 'ball' für den Ball). slow: Zeitlupe gegen Ende mit dunklem Rand. */
   function tween(moves, ms, slow) {
-    const from = moves.map(m => (m.id === 'ball' ? ballP : pos[m.id]).slice());
+    const from = moves.map(m => (m.id === 'ball' ? ballP : pos[m.id]).slice()), hasBall = moves.some(m => m.id === 'ball');
+    if (hasBall) { ballBusy = true; if (carrier && fig[carrier] && !moves.some(m => m.id === carrier)) fig[carrier].swing = 1; }
+    const free = () => { if (hasBall) ballBusy = false; };
     const apply = t => moves.forEach((m, i) => { const p = m.via ? bez(from[i], m.via, m.to, t) : lerp(from[i], m.to, t); if (m.id === 'ball') ballAt(p); else place(m.id, p); });
-    if (!T(ms)) { apply(1); camSet(camTarget()); return Promise.resolve(); }
+    if (!T(ms)) { apply(1); camSet(camTarget()); free(); return Promise.resolve(); }
     return new Promise(res => {
       const vig = $('vignette'); let t = 0, last = performance.now();
       (function tick(now) {
@@ -87,7 +154,7 @@
         t = fast ? 1 : Math.min(1, t + dt / ms * rate);
         if (slow) vig.style.opacity = (0.7 * Math.sin(Math.PI * Math.max(0, Math.min(1, (t - 0.45) / 0.55)))).toFixed(2);
         apply(io(t)); camFollow(t < 1 ? Math.min(1, dt / 140) : 1);
-        if (t < 1) requestAnimationFrame(tick); else { vig.style.opacity = 0; res(); }
+        if (t < 1) requestAnimationFrame(tick); else { vig.style.opacity = 0; free(); res(); }
       })(last);
     });
   }
@@ -132,13 +199,22 @@
   function renderScore() {
     $('sc-you').textContent = disp.you; $('sc-home').textContent = disp.home; $('sc-club').textContent = HOME;
     if (G.pen) { $('sc-period').textContent = 'Penaltys'; $('sc-time').textContent = penDisp.you + ' : ' + penDisp.home; }
-    else { $('sc-period').textContent = Math.min(3, Math.floor(G.scene / G.cfg.perPeriod) + 1) + '. Drittel'; $('sc-time').textContent = G.minute + '. Minute'; }
-    let h = '';
-    for (let i = 0; i < G.cfg.scenes; i++) {
-      const r = G.results[i], t = G.plan[i];
-      h += `<span class="dot ${r ? (r.goal ? 'g-' + r.goal : 'done') : (i === G.scene && !G.pen ? 'now' : (t === 'att' ? 'you' : 'home'))}"></span>`;
-    }
-    $('dots').innerHTML = h;
+    else { $('sc-period').textContent = Math.min(G.cfg.periods, G.period + 1) + '. Drittel'; $('sc-time').textContent = clockText(G.minute); }
+    // jede Chance ein Punkt: blau deine, gold die des Gegners, grün und rot die Tore, hell die laufende
+    const dots = G.results.slice(-14).map(r => `<span class="dot ${r.goal ? 'g-' + r.goal : r.type === 'att' ? 'you' : 'home'}"></span>`);
+    if (G.cur && !G.cur.done && !G.pen) dots.push('<span class="dot now"></span>');
+    $('dots').innerHTML = dots.join('');
+    renderTac();
+  }
+  const clockText = m => Math.max(0, Math.min(G.cfg.periods * G.cfg.periodMin, Math.round(m))) + '. Minute';
+  function renderTac() {
+    document.querySelectorAll('[data-tac]').forEach(b => { const on = b.dataset.tac === (G ? G.tactic.you : tactic); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+    const o = $('tac-opp'); if (o && G) o.textContent = `${HOME}: ${M.TACTICS[G.tactic.home].name.toLowerCase()}`;
+  }
+  function setTactic(v) {
+    tactic = v;
+    if (G && G.phase !== 'end' && !$('screen-match').hidden) { const r = M.act(G, { type: 'tactic', value: v }, rng); if (r.ok) { G = r.state; addTick(`Du spielst jetzt ${M.TACTICS[v].name.toLowerCase()}.`); } }
+    renderTac();
   }
   function addTick(text, goal) {
     ticker.unshift({ m: G.pen ? 'Pen' : G.minute + "'", text, goal });
@@ -167,7 +243,7 @@
     if (!att) { renderDefence(); return; }
     phase = 'decide';
     const last = sc.step >= sc.max - 1, xt = TR(X.id);
-    setTag(sc.counter ? 'Konter' : 'Angriff', 'you');
+    setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
     say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : ' Je breiter das grüne Feld, desto leichter das Timing.'));
     const sh = M.shotInfo(G, sc, X.id), cs = M.contest(G, { type: 'shoot' }), cd = M.contest(G, { type: 'dribble' }), mk = card('home', cd.by), bl = card('home', sh.by);
     let h = `<div class="actions2">
@@ -331,50 +407,66 @@
           await hold(900); hideStamp();
         }
       } else if (e.t === 'counter') {
-        const mine = e.side === 'you', X = card(e.side, e.x);
-        stamp('Konter', mine ? `${X.last} startet durch.` : `Grober Fehler: ${X.last} läuft allein auf dein Tor.`, mine ? 'good' : 'bad');
-        addTick(mine ? `Konter für dich über ${X.last}.` : `Konter ${HOME} über ${X.last}.`);
-        await hold(1000); hideStamp();
-        if (mine) { setKeeperColor(); await syncPositions(650); }
+        const mine = e.side === 'you', X = card(e.side, e.x), kt = KINDTXT[e.kind] || ['Konter', ''];
+        stamp(kt[0], mine ? `${X.last} startet durch, ${kt[1]}.` : `Grober Fehler: ${HOME} kontert über ${X.last}, ${kt[1]}.`, mine ? 'good' : 'bad');
+        addTick(mine ? `${kt[0]} für dich über ${X.last}.` : `${kt[0]} ${HOME} über ${X.last}.`);
+        await hold(1000); hideStamp(); renderScore();
+        if (G.cur && G.phase !== 'aim') { camMode = 'scene'; await syncPositions(700); }
       } else if (e.t === 'shot') await shotSeq(e);
     }
   }
   async function after() {
     if (G.phase === 'aim') { await toGoal(); return; }
     if (G.phase === 'decide') { leaveGoal(); await syncPositions(650); renderScore(); renderDecision(); return; }
+    if (G.phase === 'end') { finish(); return; }
     if (G.phase === 'done') {
       phase = 'pause'; fast = false;
-      const lastScene = !G.pen && G.scene + 1 >= G.cfg.scenes;
-      showHint(G.pen ? (M.penOver(G.pen) ? 'Tippe für das Resultat' : 'Tippe für den nächsten Penalty') : lastScene ? (G.score.you === G.score.home ? 'Tippe für das Penaltyschiessen' : 'Tippe für das Resultat') : 'Tippe für die nächste Szene', 1500);
+      showHint(G.pen ? (M.penOver(G.pen) ? 'Tippe für das Resultat' : 'Tippe für den nächsten Penalty') : 'Tippe: das Spiel läuft weiter', 1500);
       renderScore();
       await hold(1500);
       next();
     }
   }
   async function next() {
-    const r = M.act(G, { type: 'next' }, rng);
+    const pens = !!G.pen, r = M.act(G, { type: 'next' }, rng);
     if (!r.ok) return;
     G = r.state; hideStamp();
-    if (G.phase === 'end') { finish(); return; }
-    if (G.pen) {
-      if (!G.pen.results.length) { leaveGoal(); stamp('Penaltys', 'Unentschieden. Je drei Schüsse, dann sudden death.', 'warn'); addTick('Unentschieden, es gibt Penaltys.'); phase = 'play'; await hold(1500); }
-      await toGoal(); return;
-    }
-    startScene();
+    if (pens) { if (G.phase === 'end') finish(); else await toGoal(); return; }
+    await flow(r.events);
   }
-  async function startScene() {
+  const KINDTXT = { rush32: ['Konter 3 gegen 2', 'drei gegen zwei'], rush21: ['Konter 2 gegen 1', 'zwei gegen einen'], solo: ['Alleingang', 'allein vor dem Tor'] };
+  /* Das Spiel läuft, bis die Engine eine Chance meldet oder das Drittel vorbei ist. Die Uhr läuft mit. */
+  async function flow(evs) {
     phase = 'play'; fast = false;
-    leaveGoal(); renderScore(); setKeeperColor();
-    const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier);
-    setTag('Spiel läuft', 'warn'); $('panel').hidden = true;
+    leaveGoal(); renderScore(); setKeeperColor(); closeBar();
+    setTag('Spiel läuft', 'warn'); $('panel').hidden = true; $('hist').innerHTML = '';
     showHint('Tippe aufs Feld, um vorzuspulen');
-    $('sc-time').textContent = lastMinute + '. Minute';
+    (evs || []).forEach(e => { if (e.t === 'tactic') addTick(`${HOME} spielt jetzt ${M.TACTICS[e.value].name.toLowerCase()}.`); });
+    $('sc-time').textContent = clockText(lastMinute);
     camMode = 'follow';
     await leadIn();
+    if (!G.cur) { await periodEnd(); return; }
+    const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), kt = KINDTXT[sc.kind];
     camMode = 'scene';
     await tween([], 450);
-    addTick(att ? `Angriff: ${X.last} am Ball.` : `${HOME} greift an, ${X.last} am Ball.`);
-    renderDecision();
+    renderScore();
+    if (kt) { stamp(kt[0], att ? `${X.last} zieht los, ${kt[1]}.` : `${HOME} kontert über ${X.last}, ${kt[1]}.`, att ? 'good' : 'bad'); await hold(1000); hideStamp(); }
+    addTick(att ? `${kt ? kt[0] : 'Chance'}: ${X.last} am Ball.` : `${kt ? kt[0] + ' ' + HOME : HOME + ' greift an'}: ${X.last} am Ball.`);
+    if (G.phase === 'aim') await toGoal(); else renderDecision();
+  }
+  // Drittelsende: Zwischenstand, in der Pause lässt sich die Taktik ändern. Nach dem dritten Drittel Schluss oder Penaltys.
+  async function periodEnd() {
+    const sc = `${disp.you}:${disp.home}`;
+    renderScore();
+    if (G.phase === 'end') { stamp('Schluss', `Endstand ${sc}.`, 'warn'); addTick(`Schlusspfiff, ${sc}.`); await hold(1500); finish(); return; }
+    if (G.pen) { stamp('Penaltys', `${sc} nach 60 Minuten. Je drei Schüsse, dann sudden death.`, 'warn'); addTick('Unentschieden, es gibt Penaltys.'); await hold(1700); await toGoal(); return; }
+    stamp(`Ende ${G.period + 1}. Drittel`, `Zwischenstand ${sc}. Jetzt kannst du die Taktik ändern.`, 'warn'); addTick(`Ende ${G.period + 1}. Drittel, ${sc}.`);
+    phase = 'pause'; fast = false;
+    $('tac').classList.add('ask');
+    showHint('Taktik wählen, dann tippen für das nächste Drittel', 6000);
+    await hold(6000);
+    $('tac').classList.remove('ask');
+    next();
   }
 
   /* Offenes Spiel vor der Szene, ohne Eingriff: Die Engine liefert die Folge (Pässe, Ballverluste, Distanzschüsse),
@@ -392,7 +484,8 @@
   }
   function turnView(side) { view = side; }   // nur noch: wer hat den Ball; das Feld dreht nicht mehr
   async function leadIn() {
-    const sc = G.cur, ev = sc.open || [], m0 = lastMinute, m1 = G.minute, nm = id => card(sideOf(id), id).last, tm = side => (side === 'you' ? 'Du' : HOME);
+    const sc = G.cur, ev = (sc ? sc.open : G.fill) || [], m0 = lastMinute, m1 = G.minute, nm = id => card(sideOf(id), id).last, tm = side => (side === 'you' ? 'Du' : HOME);
+    if (!ev.length && !sc) { lastMinute = G.minute; return; }
     let holder = ev.length ? ev[0].from : sc.carrier;
     turnView(ev.length ? ev[0].side : M.atkSide(sc));
     await tween(Object.entries(formation(view, 0.95)).map(([id, to]) => ({ id, to })).concat([{ id: 'ball', to: null }]).filter(m => m.to), 700);
@@ -400,7 +493,7 @@
     say(`${tm(view)} ${view === 'you' ? 'hast' : 'hat'} den Ball, ${nm(holder)} baut auf.`);
     for (let k = 0; k < ev.length; k++) {
       const e = ev[k], last = k === ev.length - 1;
-      $('sc-time').textContent = Math.round(m0 + (m1 - m0) * (k + 1) / ev.length) + '. Minute';
+      $('sc-time').textContent = clockText(m0 + (m1 - m0) * (k + 1) / ev.length);
       if (e.kind === 'pass' || e.kind === 'hold') {
         const wp = e.final ? Object.fromEntries(Object.keys(sc.pos).map(id => [id, ep(sc, id)])) : formation(e.side, e.depth), to = e.kind === 'hold' ? e.from : e.to;
         if (e.kind === 'pass') say(`${nm(e.from)} spielt zu ${nm(to)}.`);
@@ -424,13 +517,13 @@
         say(e.kind === 'save' ? 'Der Goalie hält und leitet aus.' : 'Daneben. Abstoss.');
         await wait(350);
         turnView(e.side === 'you' ? 'home' : 'you');
-        const wp = formation(view, 0.95), nb = (G.cur.open[k + 1] || {}).from;
+        const wp = formation(view, 0.95), nb = (ev[k + 1] || {}).from;
         await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat(nb ? [{ id: 'ball', to: [wp[nb][0] + 10, wp[nb][1] - 12] }] : []), 850);
         if (nb) { setCarrier(nb); holder = nb; }
       }
     }
-    turnView(M.atkSide(sc)); setCarrier(sc.carrier);
-    lastMinute = G.minute;
+    if (sc) { turnView(M.atkSide(sc)); setCarrier(sc.carrier); }
+    $('sc-time').textContent = clockText(m1); lastMinute = G.minute;
   }
 
   // --- Tor von vorne: wie im Testduell ---
@@ -465,16 +558,17 @@
   /* Dein Schuss: Der Goalie pendelt genau so, wie die Engine rechnet (keeperX). Grün ist, wo er nicht hinkommt: unten und,
      etwas breiter, oben. Das Feld wächst auf der Seite, von der er wegpendelt. Gemessen wird der Moment des Loslassens. */
   let sway = { raf: 0, t0: 0, kx: 0 }, drag = null;
-  const rx = { timer: 0, t0: 0, flight: null, end: null };
+  const rx = { timer: 0, t0: 0, flight: null, end: null, tok: 0 };   // tok: laufende Nummer des Schusses (der Zustand wird bei jeder Eingabe kopiert)
   const FREE = ['free-l', 'free-lt', 'free-r', 'free-rt'];
   function hideFree() { FREE.forEach(id => { $(id).hidden = true; }); }
   function stopSway() { cancelAnimationFrame(sway.raf); sway.raf = 0; }
   function startSway() {
     const sh = G.shot, R = [M.reach(G, sh, false), M.reach(G, sh, true)], pc = g => (180 + g * 102) / 3.6; let last = null;
     const F = FREE.map((id, i) => ({ el: $(id), R: R[i % 2], left: i < 2 }));
+    const tok = rx.tok;
     stopSway(); sway.t0 = performance.now();
     (function loop(now) {
-      if (phase !== 'aim' || G.shot !== sh) return;
+      if (phase !== 'aim' || rx.tok !== tok || !G.shot) return;
       const kx = M.keeperX(sh.keeper, now - sway.t0), dir = last === null ? 0 : Math.sign(kx - last); sway.kx = kx; last = kx;
       kpr.set(KP.shuffle(180 + kx * 102, dir, kx * 102 / 9));
       F.forEach(f => { const a = f.left ? -1 : kx + f.R, b = f.left ? kx - f.R : 1, on = b > a + 0.01; f.el.hidden = !on; if (on) { f.el.style.left = pc(a).toFixed(2) + '%'; f.el.style.width = (pc(b) - pc(a)).toFixed(2) + '%'; } });
@@ -489,6 +583,7 @@
       anim(gv, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.1)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }], { duration: 280 });
     }
     setZoom(sh.q);
+    const tok = ++rx.tok;
     const kp = $('keeper'), ball = $('ball');
     [kp, ball].forEach(fresh);
     kp.style.transform = ''; kpr = KP.create(kp, mine ? 'home' : 'you'); kpr.set(KP.ready(180));
@@ -512,7 +607,7 @@
     phase = 'wait'; kpr.idle();
     const pulse = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf([START[0], START[1] + 5], 2.3) }], { duration: 300, iterations: Infinity, direction: 'alternate' });
     clearTimeout(rx.timer);
-    rx.timer = setTimeout(() => { pulse.cancel(); if (G.shot === sh && phase === 'wait') react(sh); }, 650 + Math.random() * 900);
+    rx.timer = setTimeout(() => { pulse.cancel(); if (rx.tok === tok && phase === 'wait' && G.shot) react(G.shot); }, 650 + Math.random() * 900);
   }
   // Endpunkt des Balls in der Ebene: bei Pfosten und Latte am Gestänge
   const postPt = (g, L) => (Math.abs(g[0]) >= 1 ? [g[0] > 0 ? 282 : 78, Math.max(92, Math.min(232, L[1]))] : [Math.max(82, Math.min(278, L[0])), 88]);
@@ -527,7 +622,8 @@
     const mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24];
     rx.flight = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf(mid, 1.5), offset: 0.5 }, { transform: ballTf(end, 0.95 * gz.s) }], { duration: sh.window, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
     clearTimeout(rx.timer);
-    rx.timer = setTimeout(() => { if (phase === 'react' && G.shot === sh) aimAt({ zone: null, rt: sh.window + 500 }); }, sh.window + 30);
+    const tok = rx.tok;
+    rx.timer = setTimeout(() => { if (phase === 'react' && rx.tok === tok) aimAt({ zone: null, rt: sh.window + 500 }); }, sh.window + 30);
   }
   function saveAt(z, ts) {
     if (phase !== 'react') return;
@@ -637,22 +733,24 @@
   const oppCards = id => C.oppCards(id, S.state().lineup);
   function renderIntro() {
     const sq = squad(), m = M.newMatch({ you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(opp) } }, E.makeRng(1));
-    $('intro-ovr').textContent = '· ' + C.teamOvr(S.state().lineup);
+    $('intro-ovr').textContent = `· Angriff ${Math.round(m.val.you.att)} · Abwehr ${Math.round(m.val.you.def)}`;
     $('lineup').innerHTML = m.teams.you.cards.slice().sort((a, b) => ['LW', 'C', 'RW', 'LD', 'RD'].indexOf(a.role) - ['LW', 'C', 'RW', 'LD', 'RD'].indexOf(b.role))
       .map(c => `<li>${S.cardHtml(c.id, { eager: 1 })}<i>${ROLE[c.role]}</i></li>`).join('');
     $('opps').innerHTML = OPPS.map(id => {
-      const mm = M.newMatch({ you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(id) } }, E.makeRng(1));
-      const str = Math.round(M.strength(mm.teams.home.cards)), atts = Math.round(mm.attShare * 12), o = C.OPPS.find(x => x.id === id);
-      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Etwa ${atts} von 12 Szenen greifst du an. Sieg: ${S.fmt(o.win)} Münzen.</span><i>${str}</i></button>`;
+      const mm = M.newMatch({ tactic, you: { goalie: { val: 88 }, cards: sq }, home: { goalie: { val: 88 }, cards: oppCards(id) } }, E.makeRng(1));
+      const r = M.rates(Object.assign({}, mm, { tactic: { you: tactic, home: 'bal' } })), n = x => (x * 60).toFixed(0), o = C.OPPS.find(x => x.id === id);
+      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Angriff ${Math.round(mm.val.home.att)} · Abwehr ${Math.round(mm.val.home.def)}. Etwa ${n(r.you)} Chancen für dich, ${n(r.home)} gegen dich. Sieg: ${S.fmt(o.win)} Münzen.</span><i>${Math.round(M.strength(mm.teams.home.cards))}</i></button>`;
     }).join('');
+    renderTac();
   }
   function start() {
     HOME = W.club(opp).short;
-    G = M.newMatch({ homeName: HOME, you: { goalie: { val: 88 }, cards: squad() }, home: { goalie: { val: 88 }, cards: oppCards(opp) } }, rng);
+    G = M.newMatch({ homeName: HOME, tactic, you: { goalie: { val: 88 }, cards: squad() }, home: { goalie: { val: 88 }, cards: oppCards(opp) } }, rng);
     disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0;
     buildPlayers(); show('match');
-    Object.keys(G.cur.pos).forEach(id => place(id, [G.cur.pos[id][0], 400])); ballAt([180, 400]); camSet(190);
-    startScene();
+    G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400]); camSet(190);
+    addTick(`Anpfiff. Du spielst ${M.TACTICS[G.tactic.you].name.toLowerCase()}.`);
+    flow([]);
   }
   function finish() {
     phase = 'end'; leaveGoal();
@@ -662,7 +760,7 @@
     $('res-score').textContent = G.pen ? (y + (won ? 1 : 0)) + ':' + (o + (won ? 0 : 1)) : y + ':' + o;
     $('res-sub').textContent = 'Du gegen ' + HOME + (G.pen ? ', Penaltys ' + G.pen.you + ':' + G.pen.home : '');
     $('stats').innerHTML = [
-      [`${st.att} von 12`, 'Szenen im Angriff'],
+      [`${G.chances.you} : ${G.chances.home}`, 'Chancen, du und Gegner'],
       [`${st.goals} von ${st.shots}`, 'eigene Schüsse im Tor'],
       [`${st.passOk} von ${st.passes}`, 'Pässe angekommen'],
       [`${st.hits} von ${st.bars}`, `Timing getroffen, ${st.perfects} perfekt`],
@@ -677,6 +775,7 @@
   // --- Verdrahtung ---
   $('opps').addEventListener('click', e => { const b = e.target.closest('[data-opp]'); if (b) { opp = b.getAttribute('data-opp'); renderIntro(); } });
   $('btn-start').addEventListener('click', start);
+  document.addEventListener('click', e => { const b = e.target.closest('[data-tac]'); if (b) { setTactic(b.dataset.tac); if ($('screen-match').hidden) renderIntro(); } });
   $('btn-again').addEventListener('click', start);
   $('btn-other').addEventListener('click', () => { renderIntro(); show('intro'); });
   $('panel').addEventListener('click', e => {
