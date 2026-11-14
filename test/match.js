@@ -18,7 +18,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     for (let m = 0; m < N; m++) {
       await p.evaluate(() => { const o = [...document.querySelectorAll('#opps [data-opp]')]; o[Math.floor(Math.random() * o.length)].click(); });
       await p.click(m === 0 ? '#btn-start' : '#btn-start');
-      for (let g = 0; g < 2000; g++) {
+      for (let g = 0; g < 5000; g++) {
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
@@ -46,7 +46,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (!run.reduce) { await p.waitForTimeout(700); await snap(mine ? '07-schuss-ende' : '08-goalie-ende'); }
           continue;
         }
-        if (Math.random() < 0.3) await p.mouse.click(5, 5);
+        if (Math.random() < 0.5) await p.evaluate(() => document.getElementById('stage').click());
         await p.waitForTimeout(60);
       }
     }

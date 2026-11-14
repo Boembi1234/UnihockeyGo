@@ -205,6 +205,37 @@
     s.minute = Math.floor(s.scene / s.cfg.perPeriod) * 20 + 2 + (s.scene % s.cfg.perPeriod) * 5 + Math.floor(rng() * 4);
     if (t === 'att') s.stats.att++; else s.stats.def++;
     makeScene(s, rng, t);
+    s.cur.open = openPlay(s, rng, t === 'att' ? 'you' : 'home');
+  }
+  /* Offenes Spiel vor der Szene, ohne Eingriff des Users: Pässe, Ballverluste, Distanzschüsse. Das schwächere Team verliert
+     den Ball öfter. Endet, wenn das Team der Szene nah genug vor dem Tor ist, mit dem Pass zum Ballführenden der Szene.
+     depth: 1 tief in der eigenen Hälfte, 0 in der Schlüsselposition. Reine Erzählung: entscheidet kein Tor. */
+  function openPlay(s, rng, target) {
+    const ev = [], str = side => strength(players(s, side)), pick = side => { const l = players(s, side); return l[Math.floor(rng() * l.length)].id; };
+    const back = side => { const l = players(s, side).filter(c => c.role === 'LD' || c.role === 'RD'); return l[Math.floor(rng() * l.length)].id; };
+    let side = rng() < 0.5 ? 'you' : 'home', holder = back(side), depth = 0.95, n = 0;
+    const minN = 2 + Math.floor(rng() * 2);
+    while (n < 7) {
+      if (n >= minN && side === target && depth <= 0.4) break;
+      n++;
+      const lose = clamp(0.18 + (str(other(side)) - str(side)) * 0.05, 0.06, 0.4) + (depth < 0.45 ? 0.06 : 0);
+      if (rng() < lose) {
+        const by = pick(other(side));
+        ev.push({ kind: rng() < 0.55 ? 'intercept' : 'tackle', side, from: holder, by, depth });
+        side = other(side); holder = by; depth = 0.7 + rng() * 0.25; continue;
+      }
+      if (depth < 0.5 && rng() < 0.2) {
+        ev.push({ kind: rng() < 0.6 ? 'save' : 'wide', side, from: holder, depth });
+        side = other(side); holder = back(side); depth = 0.95; continue;
+      }
+      const mates = players(s, side).filter(c => c.id !== holder), to = mates[Math.floor(rng() * mates.length)].id;
+      depth = Math.max(0.05, depth - (0.22 + rng() * 0.22));
+      ev.push({ kind: 'pass', side, from: holder, to, depth }); holder = to;
+    }
+    if (side !== target) { const by = pick(target); ev.push({ kind: 'intercept', side, from: holder, by, depth }); side = target; holder = by; depth = 0.45; }
+    if (holder !== s.cur.carrier) ev.push({ kind: 'pass', side, from: holder, to: s.cur.carrier, depth: 0, final: true });
+    else ev.push({ kind: 'hold', side, from: holder, depth: 0, final: true });
+    return ev;
   }
   function endScene(s, ev, why) {
     const goal = s.cur.goal || null;
@@ -343,5 +374,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, keeperWeights, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, keeperWeights, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

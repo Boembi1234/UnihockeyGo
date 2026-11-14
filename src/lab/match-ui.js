@@ -308,7 +308,7 @@
     phase = 'play'; fast = false;
     leaveGoal(); renderScore(); setKeeperColor();
     const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier);
-    setTag(att ? 'Spielaufbau' : HOME + ' baut auf', att ? 'you' : 'home'); $('panel').hidden = true;
+    setTag('Spiel läuft', 'warn'); $('panel').hidden = true;
     showHint('Tippe aufs Feld, um vorzuspulen');
     $('sc-time').textContent = lastMinute + '. Minute';
     await leadIn();
@@ -316,30 +316,61 @@
     renderDecision();
   }
 
-  /* Spielaufbau vor der Szene: Das angreifende Team spielt sich den Ball von hinten 3 bis 5 Mal zu und rückt vor,
-     die Gegenspieler verschieben mit, die Uhr läuft. Reine Darstellung: Am Ende stehen alle genau so, wie die Engine die Szene aufgestellt hat. */
-  let lastMinute = 0;
+  /* Offenes Spiel vor der Szene, ohne Eingriff: Die Engine liefert die Folge (Pässe, Ballverluste, Distanzschüsse),
+     hier wird sie gezeigt. Das angreifende Team spielt immer nach oben; wechselt der Ball, dreht die Ansicht mit.
+     Am Ende stehen alle genau so, wie die Engine die Szene aufgestellt hat. */
+  let lastMinute = 0, view = 'you';
+  const KIND = { intercept: 'fängt den Pass ab', tackle: 'gewinnt den Zweikampf' };
+  function formation(side, depth) {
+    const wp = {}, atk = G.teams[side].cards;
+    atk.forEach(c => { const b = M.FORM[c.role]; wp[c.id] = [Math.max(30, Math.min(330, b[0] + (Math.random() - 0.5) * 50)), Math.min(385, b[1] + depth * 160 + (Math.random() - 0.5) * 30)]; });
+    const opp = G.teams[side === 'you' ? 'home' : 'you'].cards, byRole = {}; opp.forEach(c => { byRole[c.role] = c; });
+    atk.forEach(c => { const d = byRole[M.MARKS[c.role]], a = wp[c.id], mp = lerp(a, [180, 40], 0.27), sd = a[0] < 170 ? 1 : -1; wp[d.id] = [mp[0] + sd * 20, mp[1] - 6]; });
+    return wp;
+  }
+  function turnView(side) {
+    view = side; const top = side === 'you' ? 'home' : 'you';
+    $('gk').setAttribute('fill', TEAM[top].fill); $('gk').setAttribute('stroke', TEAM[top].ring);
+  }
   async function leadIn() {
-    const sc = G.cur, as = M.atkSide(sc), atk = G.teams[as].cards, n = 3 + Math.floor(Math.random() * 3);
-    const name = id => card(as, id).last, back = atk.filter(c => c.role === 'LD' || c.role === 'RD');
-    let carrier = sc.counter ? sc.carrier : back[Math.floor(Math.random() * back.length)].id;
-    const steps = sc.counter ? 1 : n, m0 = lastMinute, m1 = G.minute;
-    say(sc.counter ? '' : `${as === 'you' ? 'Dein Team' : HOME} baut über ${name(carrier)} auf.`);
-    if (!sc.counter) addTick(`${as === 'you' ? 'Du baust' : HOME + ' baut'} über ${name(carrier)} auf.`);
-    setCarrier(null); ballAt(atFoot(carrier));
-    for (let k = 0; k < steps; k++) {
-      const lastStep = k === steps - 1, off = 150 * (1 - (k + 1) / steps), wp = {};
-      atk.forEach(c => { const b = sc.pos[c.id]; wp[c.id] = lastStep ? b : [Math.max(30, Math.min(330, b[0] + (Math.random() - 0.5) * 56)), b[1] + off + (Math.random() - 0.5) * 30]; });
-      atk.forEach(c => { const d = sc.mark[c.id]; if (lastStep) { wp[d] = sc.pos[d]; return; } const a = wp[c.id], mp = lerp(a, [180, 40], 0.27), sd = a[0] < 170 ? 1 : -1; wp[d] = [mp[0] + sd * 20, mp[1] - 6]; });
-      let nextC = sc.carrier;
-      if (!lastStep) { const opts = atk.filter(c => c.id !== carrier && c.id !== sc.carrier || (k === steps - 2 && c.id === sc.carrier)); nextC = opts[Math.floor(Math.random() * opts.length)].id; }
-      const moves = Object.keys(wp).map(id => ({ id, to: wp[id] }));
-      moves.push({ id: 'ball', to: [wp[nextC][0] + 10, wp[nextC][1] - 12] });
-      if (k > 0 || sc.counter) say(`${name(carrier)} spielt zu ${name(nextC)}.`);
-      await tween(moves, 950);
-      setCarrier(nextC); carrier = nextC;
-      $('sc-time').textContent = Math.round(m0 + (m1 - m0) * (k + 1) / steps) + '. Minute';
+    const sc = G.cur, ev = sc.open || [], m0 = lastMinute, m1 = G.minute, nm = id => card(sideOf(id), id).last, tm = side => (side === 'you' ? 'Du' : HOME);
+    let holder = ev.length ? ev[0].from : sc.carrier;
+    turnView(ev.length ? ev[0].side : M.atkSide(sc));
+    await tween(Object.entries(formation(view, 0.95)).map(([id, to]) => ({ id, to })).concat([{ id: 'ball', to: null }]).filter(m => m.to), 700);
+    setCarrier(holder);
+    say(`${tm(view)} ${view === 'you' ? 'hast' : 'hat'} den Ball, ${nm(holder)} baut auf.`);
+    for (let k = 0; k < ev.length; k++) {
+      const e = ev[k], last = k === ev.length - 1;
+      $('sc-time').textContent = Math.round(m0 + (m1 - m0) * (k + 1) / ev.length) + '. Minute';
+      if (e.kind === 'pass' || e.kind === 'hold') {
+        const wp = e.final ? Object.assign({}, sc.pos) : formation(e.side, e.depth), to = e.kind === 'hold' ? e.from : e.to;
+        if (e.kind === 'pass') say(`${nm(e.from)} spielt zu ${nm(to)}.`);
+        await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[to][0] + 10, wp[to][1] - 12] }]), last ? 750 : 820);
+        setCarrier(to); holder = to;
+      } else if (e.kind === 'intercept' || e.kind === 'tackle') {
+        const cut = e.kind === 'tackle' ? pos[e.from] : lerp(pos[e.from], [pos[e.from][0] + (Math.random() - 0.5) * 120, pos[e.from][1] - 70], 0.6);
+        say(`${nm(e.by)} ${KIND[e.kind]}. Ballwechsel.`);
+        await tween([{ id: e.by, to: cut }, { id: 'ball', to: cut }], 600);
+        setCarrier(e.by); addTick(`${nm(e.by)} ${KIND[e.kind]} gegen ${nm(e.from)}.`);
+        await wait(250);
+        turnView(e.side === 'you' ? 'home' : 'you');
+        const wp = formation(view, 0.85); wp[e.by] = wp[e.by] || pos[e.by];
+        await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[e.by][0] + 10, wp[e.by][1] - 12] }]), 800);
+        setCarrier(e.by); holder = e.by;
+      } else {
+        const tgt = e.kind === 'save' ? [180 + (Math.random() - 0.5) * 16, 50] : [180 + (Math.random() < 0.5 ? -40 : 40), 22];
+        say(`${nm(e.from)} versucht es aus der Distanz.`);
+        await tween([{ id: 'ball', to: tgt }], 520);
+        addTick(`Distanzschuss ${nm(e.from)}: ${e.kind === 'save' ? 'gehalten' : 'daneben'}.`);
+        say(e.kind === 'save' ? 'Der Goalie hält und leitet aus.' : 'Daneben. Abstoss.');
+        await wait(350);
+        turnView(e.side === 'you' ? 'home' : 'you');
+        const wp = formation(view, 0.95), nb = (G.cur.open[k + 1] || {}).from;
+        await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat(nb ? [{ id: 'ball', to: [wp[nb][0] + 10, wp[nb][1] - 12] }] : []), 850);
+        if (nb) { setCarrier(nb); holder = nb; }
+      }
     }
+    turnView(M.atkSide(sc)); setCarrier(sc.carrier);
     lastMinute = G.minute;
   }
 
