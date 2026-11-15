@@ -2,6 +2,7 @@
    Weil das Match vom Können abhängt, spielt hier ein Modell-Spieler mit einem Profil:
    s    Streuung beim Tippen auf einem Balken in ms (Timing-Balken und Schuss-Balken)
    aim  Zielfehler beim Setzen des Ziels im Tor, in halben Torbreiten (Tor von -1 bis 1)
+   vis  Verzögerung in ms, mit der er im Dribbling-Parcours auf die Bewegung der Verteidiger reagiert
    wait so viele Durchläufe des Schuss-Balkens schaut er zusätzlich zu, bevor er stoppt (der Goalie rückt in der Zeit zur Ecke)
    rt   Reaktionszeit bei der Parade in ms, rtSd ihre Streuung, zerr Anteil falsch angetippter Zonen
    Linien und Taktikkarten setzt er nach einfachen Regeln ein (siehe coach).
@@ -12,9 +13,9 @@ const box = {}; box.window = box; vm.createContext(box);
 ['src/engine.js', 'src/world.js', 'src/lab/match.js', 'src/lab/pool.js', 'src/lab/club.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), box));
 const E = box.HK, W = box.HKWorld, M = box.HKMatch;
 const PROFILES = {
-  stark: { s: 45, aim: 0.03, wait: 0, rt: 480, rtSd: 70, zerr: 0.03 },       // etwa die besten 10 %
-  mittel: { s: 70, aim: 0.05, wait: 0.5, rt: 560, rtSd: 85, zerr: 0.06 },
-  schwach: { s: 105, aim: 0.08, wait: 1, rt: 650, rtSd: 100, zerr: 0.1 }     // etwa die schwächsten 10 %
+  stark: { s: 45, aim: 0.03, vis: 150, wait: 0, rt: 480, rtSd: 70, zerr: 0.03 },       // etwa die besten 10 %
+  mittel: { s: 70, aim: 0.05, vis: 190, wait: 0.5, rt: 560, rtSd: 85, zerr: 0.06 },
+  schwach: { s: 105, aim: 0.08, vis: 240, wait: 1, rt: 650, rtSd: 100, zerr: 0.1 }     // etwa die schwächsten 10 %
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), pick = (l, r) => l[Math.floor(r() * l.length)];
 function gauss(r) { let u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
@@ -55,6 +56,34 @@ function chance(pf, s, sc, id, from) {
   sides.forEach(sg => TG.forEach(g => { const tg = [sg * g[0], g[1]]; if (!goal(tg, 0)) return; const p = (erf(edge(tg, 1) / (sd * Math.SQRT2)) + erf(edge(tg, -1) / (sd * Math.SQRT2))) / 2; if (p > best) best = p; }));
   return clamp(best * 0.9, 0.02, 0.95);
 }
+/* Modell-Spieler im Dribbling-Parcours. Bei jedem Verteidiger täuscht er zur einen Seite an und zieht dann zur anderen, wo
+   mehr Platz ist: so spät, wie er es sich mit seinem Timing zutraut. Er sieht die Verteidiger mit seiner Verzögerung (vis).
+   Gibt den Lauf (Ziel pro Schritt) und den Endzustand zurück. */
+function dribPlay(co, pf, r) {
+  // Steuern mit dem Finger ist ungenauer als ein Tipp im Takt: Der Moment des Hakens streut gut doppelt so stark wie auf dem Balken,
+  // ab und zu wählt er die engere Seite, und der Finger zittert etwas.
+  const st = M.dribInit(co), run = [], plan = co.defs.map(() => ({ side: 0, go: false, late: gauss(r) * pf.s * 2.2 / 1000, wrong: r() < pf.zerr * 1.5 })), seen = [], vis = Math.round(pf.vis / 1000 * co.hz);
+  let jit = 0;
+  while (!st.done) {
+    seen.push(st.d.map(o => o.x));
+    if (st.t % 8 === 0) jit = gauss(r) * 200 * pf.aim;
+    let k = -1; for (let i = 0; i < co.defs.length; i++) if (st.y <= co.defs[i].y + 4) { k = i; break; }
+    let target = st.x;
+    if (k >= 0) {
+      const D = co.defs[k], pl = plan[k], ox = seen[Math.max(0, seen.length - 1 - vis)][k];
+      if (!pl.side) pl.side = (ox >= (co.min + co.max) / 2 ? -1 : 1) * (pl.wrong ? -1 : 1);
+      // Ziel: seitlich am Verteidiger vorbei, mit Vorhalt, weil er bis dahin noch nachrückt
+      const tLine = Math.max(0, (D.y - st.y) / co.v), lead = D.vd * (tLine + pf.vis / 1000);
+      const goal = clamp(ox + pl.side * (D.brush + 8 + 60 * pf.aim + lead), co.min, co.max), need = Math.abs(goal - st.x) / co.va;
+      if (pl.go || tLine <= need + 0.06 + 1.5 * pf.s / 1000 + pl.late) { pl.go = true; target = goal; } else target = clamp(ox - pl.side * D.brush * 0.6, co.min, co.max);
+    }
+    target = clamp(target + jit, co.min, co.max);
+    run.push(Math.round(target)); M.dribTick(co, st, target);
+  }
+  return { run, st };
+}
+// Wie oft dieser Spieler durch diesen Parcours kommt (Ball behalten und Raum gewonnen), aus ein paar Probeläufen
+function dribOdds(co, pf, r, n) { let ok = 0; for (let i = 0; i < (n || 6); i++) { const g = M.dribGrade(co, dribPlay(co, pf, r).st).grade; if (g === 'perfect' || g === 'good') ok++; } return ok / (n || 6); }
 /* Trainer-Entscheide zwischen zwei Chancen: Linie nach der Energie (in den letzten Minuten eines knappen Spiels die erste)
    und Taktikkarten, wenn ihr Moment da ist. style: { rest, back } Schwellen der Energie, never: nie wechseln, cards: false = keine Karten. */
 const STYLE = { rest: 72, back: 90 };
@@ -86,8 +115,9 @@ function policy(pf, style) {
       if (!last) {
         // Pass: Was der Mitspieler aus dem Direktschuss macht. Dribbling: danach aus besserer Lage schiessen oder den frei gewordenen Mitspieler anspielen.
         s.teams.you.cards.forEach(c => { if (c.id === X) return; const a = { type: 'pass', to: c.id }, sh = chance(pf, s, sc, c.id, X), v = val(a) * sh * 0.92; mate = Math.max(mate, sh); if (v > best.v) best = { v, a }; });
-        const vd = val({ type: 'dribble' }) * Math.min(0.92, Math.max(now + 0.14, mate * 0.8)) * 0.9; if (vd > best.v) best = { v: vd, a: { type: 'dribble' } };
+        const co = M.dribCourse(s), vd = dribOdds(co, pf, r, 5) * Math.min(0.92, Math.max(now + 0.14, mate * 0.8)) * 0.9; if (vd > best.v) best = { v: vd, a: { type: 'dribble' } };
       }
+      if (best.a.type === 'dribble') return { type: 'dribble', run: dribPlay(M.dribCourse(s), pf, r).run };      // durch den Parcours steuern
       const c = M.contest(s, best.a);
       return c.free ? best.a : Object.assign({ hit: tap(c.pos, c.sweep) }, best.a);
     }
@@ -117,7 +147,7 @@ function play(squad, opp, pol, n, seed, cfg, tactic) {
   }
   return m;
 }
-module.exports = { box, PROFILES, STYLE, policy, coach, play, shift, shotPlan, tapTime, chance, gauss };
+module.exports = { box, PROFILES, STYLE, policy, coach, dribPlay, dribOdds, play, shift, shotPlan, tapTime, chance, gauss };
 if (require.main === module) {
   const n = +process.argv[2] || 1500, cfg = JSON.parse(JSON.stringify(M.CFG));
   process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); cfg[k] = +v; });

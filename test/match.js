@@ -28,6 +28,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
+          if (v(document.getElementById('dribview'))) return document.getElementById('drib-msg').hidden ? 'drib' : 'wait';
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
           if (document.getElementById('goalview').dataset.aim === '1' && !document.getElementById('goalview').hidden) return 'aim';
           if (document.getElementById('zones').classList.contains('armed')) return 'react';
@@ -42,6 +43,18 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (Math.random() < 0.25) await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
           else await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')]; l[Math.floor(Math.random() * l.length)].click(); });
           await p.waitForTimeout(40); continue;
+        }
+        if (st === 'drib') {
+          // Dribbling-Parcours: Feld berühren, erst zur einen Seite, dann spät zur anderen ziehen (mal früh, mal spät, mal gar nicht)
+          await snap('02-dribbling'); await over('dribbling'); n++;
+          const r = await p.locator('#stage').boundingBox(), side = Math.random() < 0.5 ? 0.22 : 0.78, y = r.y + r.height * 0.8;
+          if (Math.random() < 0.1) { await p.click('#drib-back'); await p.waitForTimeout(60); continue; }      // «Andere Aktion»
+          await p.mouse.move(r.x + r.width * 0.5, y); await p.mouse.down();
+          await p.waitForTimeout(150 + Math.random() * 250); await p.mouse.move(r.x + r.width * (1 - side), y, { steps: 3 });
+          await p.waitForTimeout(250 + Math.random() * 450); await snap('02-dribbling-lauf'); await p.mouse.move(r.x + r.width * side, y, { steps: 4 });
+          await p.waitForTimeout(500 + Math.random() * 400); await p.mouse.move(r.x + r.width * (Math.random() < 0.5 ? side : 1 - side), y, { steps: 4 });
+          for (let k = 0; k < 80; k++) { await p.waitForTimeout(50); if (await p.evaluate(() => document.getElementById('dribview').hidden || !document.getElementById('drib-msg').hidden)) break; }
+          await snap('02-dribbling-ende'); await p.mouse.up(); await p.waitForTimeout(120); continue;
         }
         if (st === 'bar-att' || st === 'bar-def') {
           await p.waitForTimeout(320); await snap(st === 'bar-att' ? '02-balken-angriff' : '03-balken-abwehr'); await over(st); n++;
@@ -91,7 +104,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();

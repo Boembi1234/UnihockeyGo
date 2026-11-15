@@ -59,28 +59,29 @@ Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner 
 **Angriff mit Spielzügen.** Früher war «dreimal dribbeln, dann schiessen» die beste Spielweise, Pässe brachten nichts. Jetzt hat jede Aktion ihren Zweck:
 
 - **Aufstellung:** Im Positionsangriff steht der Ballführende an der Bande, in der Mitte oder hinten. Der Center läuft in den Slot, der ballferne Flügel an den zweiten Pfosten, der ballnahe bleibt als Anspielstation, die Verteidiger sichern. Die Gegner decken gefährliche Spieler im Passweg. Kommt einer zu spät, ist sein Mann frei: grüner Ring und Schild «FREI» auf dem Feld, der Pass steht zuoberst in der Liste.
+- **Dribbling-Parcours:** Das Dribbling ist kein Balken mehr, sondern ein kurzer Lauf von oben gesehen. Der Spieler läuft von selbst nach vorne, du ziehst ihn mit dem Finger nach links und rechts (Maus oder Pfeiltasten gehen auch). Vor ihm stehen sein Gegenspieler und dahinter der Verteidiger, der aushilft; beim zweiten Dribbling desselben Spielers ist es einer mehr, im Konter 2 gegen 1 nur einer. Sie rücken mit Verzögerung dorthin, wo du gerade warst: Antäuschen und spät zur anderen Seite ziehen funktioniert. Roter Kreis berührt: Ball weg, frontal beim eigenen Gegenspieler sogar Konter. Gestrichelten Kreis des Gegenspielers gestreift: Ball behalten, kein Raumgewinn. Sauber an ihm vorbei: gelungen. Auch am Helfer sauber vorbei: perfekt. Die Karten bestimmen den Parcours: Aus dem Wertevergleich, dem Raum und den Fähigkeiten werden Reichweite, Tempo und Verzögerung der Gegner, aus dem Dribbling-Wert und der Energie die Wendigkeit des Dribblers. Der Bildschirm rechnet mit denselben Schritten wie die Engine, die den Lauf nachspielt.
 - **Dribbling zieht Hilfe:** Wer seinen Gegenspieler schlägt, kommt näher ans Tor, aber nicht tiefer als bis vor den Slot. Der nächste Verteidiger stellt sich ihm in den Weg und lässt dafür seinen Mann frei. Jedes weitere Dribbling desselben Spielers in der Chance hat ein um 40 % kleineres Feld.
 - **Direktschuss:** Ein Pass verschiebt den Goalie. Schiesst der Empfänger sofort, steht der Goalie noch auf der Seite, von der der Ball kam (umso weiter, je quer der Pass war), reicht weniger weit und rutscht nach einer halben Sekunde herüber. Wer schnell abzieht, hat die offene Seite. Ein knapp angekommener Pass gibt keinen Direktschuss.
 - **Passwege:** Der Verteidiger, der am besten im Weg steht, zählt voll, weitere zu einem Drittel. Grün ist ein offener Weg, gelb ein enger, rot ein zugestellter.
 - **Block:** Blocken kann nur, wer in der Schussbahn steht. Nach einem Querpass steht der Gegenspieler im Passweg, nicht in der Schussbahn.
 - **Der Gegner spielt gleich:** Er sucht den freien Mann und zieht nach einem Querpass direkt ab. Dann hast du bei der Parade weniger Zeit.
 
-Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (500 Matches je Zeile):
+Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je Zeile). Im Parcours steuert das Modell wie ein vernünftiger Spieler mit Verzögerung und Zittern; es kommt etwa so oft durch, wie die Chance aus den Karten vorgibt (bei 30 % in 20 % der Läufe, bei 45 % in 40 %, bei 60 % in 59 %, bei 75 % in 79 %):
 
 | Spielweise | Siegquote | Tor je Chance |
 |---|---|---|
-| klug mischen (4 Pässe, 2 Dribblings pro Match) | 44 % | 45 % |
-| Pass zum besten Mitspieler, dann Schuss | 42 % | 42 % |
-| Dribbling, Pass, Schuss | 39 % | 40 % |
+| klug mischen (4 Pässe, 2 Dribblings pro Match) | 48 % | 43 % |
+| Pass zum besten Mitspieler, dann Schuss | 43 % | 42 % |
+| Dribbling, Pass, Schuss | 34 % | 38 % |
+| ein Dribbling, dann Schuss | 29 % | 31 % |
 | sofort schiessen | 28 % | 29 % |
-| ein Dribbling, dann Schuss | 26 % | 29 % |
-| immer dribbeln | 23 % | 29 % |
+| immer dribbeln | 26 % | 25 % |
 
 **Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
 
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
 
-- **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
+- **Timing-Balken:** Jeder Pass, jeder Schuss und jede Abwehraktion läuft über einen Balken (das Dribbling über einen eigenen Parcours). Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
 - **Noten:** Mitte = perfekt (Vorteil: freier Mitspieler, mehr Raum, genauerer Schuss), im Feld = gelungen, knapp daneben = halb gelungen, daneben = Ball weg, grob daneben = Konter für den Gegner.
 - **Abwehr:** Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Nur die Mitte gewinnt den Ball (und gibt einen Konter). Sonst gilt: Je besser getroffen, desto mehr Zeit bekommt der Goalie beim Schuss.
 - **Eigener Schuss:** wie ein Penalty in einem Fussballspiel. Der gegnerische Goalie steht fast in der Mitte. Der dunkle Bereich um ihn ist seine Reichweite: Was dort landet, hält er. Hell ist, was frei bleibt: aus der Distanz nur die hohen Ecken, aus der Nähe viel mehr. Erst ins Tor tippen, wohin der Schuss gehen soll (schieben geht auch, die Zielmarke steht dann über dem Finger). Dann läuft der Schuss-Balken: Genau in der Mitte geht der Ball genau ins Ziel. Steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab, am Rand des grünen Felds um 12 % der Torbreite. Wer nah an den Pfosten zielt, riskiert also Pfosten oder Latte, wer Abstand lässt, den Goalie. Das Feld auf dem Balken ist aus der Nähe breit (bis 17 %) und aus der Distanz schmal (ab 3 %). Steht ein Gegner nah, wird es schmaler, und ein klar verpasster Stopp wird geblockt. Gewürfelt wird beim eigenen Schuss nichts.
@@ -102,13 +103,13 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 
 Ein müder Schütze (Energie 30) trifft aus der Nähe statt 31, 45, 62 und 70 % noch 24, 35, 47 und 57 %.
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 400 Matches je Feld, Siegquote:
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 300 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 32 % | 65 % | 91 % | 100 % | 100 % |
-| mittel | 3 % | 14 % | 47 % | 81 % | 97 % |
-| schwach | 0 % | 2 % | 9 % | 26 % | 63 % |
+| stark | 31 % | 69 % | 91 % | 99 % | 100 % |
+| mittel | 3 % | 18 % | 42 % | 79 % | 95 % |
+| schwach | 0 % | 3 % | 9 % | 31 % | 63 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

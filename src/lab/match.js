@@ -10,6 +10,9 @@
    Hilfe an, dessen Mann wird frei. Jedes weitere Dribbling desselben Spielers ist deutlich schwerer, und näher als bis vor
    den Slot kommt man so nicht. Ein Pass verschiebt den Goalie: Wer direkt nach einem Querpass schiesst (Direktschuss),
    findet ihn noch auf der anderen Seite, aber er rutscht schnell herüber.
+   Dribbling: kein Balken, sondern ein kurzer Parcours. Der Spieler läuft von selbst nach vorne, der User steuert ihn seitlich
+   an den Verteidigern vorbei: zuerst am Gegenspieler, dann an dem, der aushilft. Sie rücken mit Verzögerung nach; wer in
+   ihre Reichweite läuft, verliert den Ball. Die Karten bestimmen, wie wendig der Dribbler ist und wie gut die Gegner zumachen.
    Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst, der User trifft das Timing.
    Eigener Schuss: ins Tor tippen (Ziel), dann den Schuss-Balken stoppen. Genau in der Mitte geht der Ball genau ins Ziel;
    steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab. Bei einem schwachen oder müden
@@ -80,6 +83,14 @@
        Frei ist ein gefährlich stehender Mitspieler mit offenem Passweg (Risiko höchstens freeRisk). Enge Deckung
        (tightDist) macht den Pass riskanter. */
     dribStep: 62, dribStepPerfect: 84, dribStop: 88, dribRepeat: 0.6, helpRange: 135, freeRisk: 0.34, tightDist: 26, tightRisk: 0.1,
+    /* Dribbling-Parcours. Masse in Feldeinheiten (die Bahn ist 2 mal dbLane breit), Tempo pro Sekunde, gerechnet in dbHz
+       Schritten pro Sekunde. Der Dribbler läuft mit dbSpeed nach vorne und folgt dem Finger seitlich mit dbVa plus dbVaVal pro
+       Punkt Dribbling über 60 (müde: bis zu einem Fünftel langsamer). Verteidiger stehen im Abstand dbGap, der erste nach dbFirst. Aus der Chance p
+       (Wertevergleich, Raum, Fähigkeiten) wird ihre Stärke: Reichweite dbCore plus dbCoreP mal (1 - p), darum der Stockbereich
+       dbBrush, Seitentempo dbVd plus dbVdP mal (1 - p), Verzögerung dbLag plus dbLagP mal p Millisekunden. Beim Helfer ist die
+       Reichweite kleiner (mal dbHelp), der Stockbereich aber grösser (dbHelpBrush): An ihm kommt man selten ganz sauber vorbei. */
+    dbHz: 60, dbSpeed: 118, dbLane: 118, dbFirst: 125, dbGap: 100, dbEnd: 55, dbVa: 140, dbVaVal: 1.4,
+    dbCore: 21, dbCoreP: 9, dbBrush: 12, dbVd: 80, dbVdP: 75, dbLag: 110, dbLagP: 200, dbHelp: 0.75, dbHelpBrush: 34,
     /* Deckung: Wer gefährlich steht (näher als dangerDist am Tor), wird im Passweg gedeckt (denyAt: Anteil des Wegs zum
        Ball). Mit Wahrscheinlichkeit lateProb kommt sein Gegenspieler zu spät: Dann ist er frei. */
     dangerDist: 150, denyAt: 0.3, lateProb: 0.3,
@@ -347,6 +358,59 @@
     return { p, w: free ? 1 : clamp(zone(c, p) * (sc.boost || 1), c.barMin, c.barMax), pos: sc.bar.pos, start: sc.bar.start, by, free, sweep: Math.round(c.barSweep * tired(c, card(s, 'you', X))) };
   }
 
+  // --- Dribbling-Parcours ---
+  /* Der Parcours für das Dribbling des Ballführenden in der laufenden Szene. Bahn von x min bis max, Lauf von y 0 bis len.
+     defs: die Verteidiger in der Reihenfolge, in der er auf sie trifft. Zuerst sein Gegenspieler, dann wer aushilft (im Konter
+     2 gegen 1 niemand, beim zweiten Dribbling desselben Spielers einer mehr). core: wer so nah kommt, verliert den Ball.
+     brush: Stockbereich, wer ihn streift, wird gestört. vd: Seitentempo, lag: Verzögerung in Schritten. */
+  function dribCourse(s) {
+    const sc = s.cur, c = s.cfg, X = card(s, 'you', sc.carrier), di = dribInfo(s, sc, X.id);
+    const others = players(s, 'home').filter(d => d.id !== di.by).sort((a, b) => dist(P(sc, a.id), P(sc, X.id)) - dist(P(sc, b.id), P(sc, X.id)));
+    const n = (sc.kind === 'rush21' ? 1 : 2) + (di.again ? 1 : 0);
+    return courseOf(c, clamp(di.p * (sc.boost || 1), c.dribMin, c.dribMax), { ids: [di.by].concat(others.slice(0, n - 1).map(d => d.id)), val: dribVal(X), tired: tired(c, X), start: sc.bar.start, pos: sc.bar.pos, x: X.id });
+  }
+  // Der Parcours aus Zahlen: Chance p, Verteidiger ids, Dribbling-Wert val, Müdigkeit tired (1 = frisch), start und pos (0 bis 1) für die Aufstellung
+  function courseOf(c, p, o) {
+    const hard = 1 - p, sd = o.start < 0.5 ? -1 : 1, n = o.ids.length;
+    const defs = o.ids.map((id, i) => {
+      const k = i ? c.dbHelp : 1, core = (c.dbCore + c.dbCoreP * hard) * k;
+      return { id, y: c.dbFirst + i * c.dbGap, x: i ? (i % 2 ? sd : -sd) * (36 + 44 * o.pos) : (o.start - 0.5) * 44, core, brush: core + (i ? c.dbHelpBrush : c.dbBrush), vd: c.dbVd + c.dbVdP * hard, lag: Math.round((c.dbLag + c.dbLagP * p) / 1000 * c.dbHz) };
+    });
+    return { p, hz: c.dbHz, v: c.dbSpeed, va: (c.dbVa + (o.val - 60) * c.dbVaVal) * (0.5 + 0.5 * o.tired), min: -c.dbLane, max: c.dbLane, x0: 0, len: c.dbFirst + (n - 1) * c.dbGap + c.dbEnd, x: o.x, defs };
+  }
+  const dribInit = co => ({ t: 0, x: co.x0, y: 0, hist: [], d: co.defs.map(d => ({ x: d.x, min: Infinity })), done: false, out: null });
+  /* Ein Schritt: Der Dribbler läuft nach vorne und folgt dem Ziel (target, x in der Bahn) so schnell er kann. Jeder Verteidiger,
+     an dem er noch nicht vorbei ist, rückt dorthin, wo der Dribbler vor lag Schritten war. Berührung: Ball weg, Ende.
+     Wer an einem Verteidiger vorbei ist, hat ihn hinter sich: Der zählt nicht mehr. */
+  function dribTick(co, st, target) {
+    if (st.done) return st;
+    const dt = 1 / co.hz, tx = clamp(typeof target === 'number' && isFinite(target) ? target : st.x, co.min, co.max);
+    st.x += clamp(tx - st.x, -co.va * dt, co.va * dt); st.y += co.v * dt; st.hist.push(st.x); st.t++;
+    for (let i = 0; i < co.defs.length; i++) {
+      const D = co.defs[i], o = st.d[i];
+      if (st.y > D.y + 4) continue;                                     // schon vorbei: Er kommt nicht mehr an den Ball
+      const seen = st.hist[Math.max(0, st.hist.length - 1 - D.lag)]; o.x += clamp(seen - o.x, -D.vd * dt, D.vd * dt);
+      const d = Math.hypot(st.x - o.x, st.y - D.y); if (d < o.min) o.min = d;
+      if (d < D.core) { st.done = true; st.out = { hit: i, dx: st.x - o.x }; return st; }
+    }
+    if (st.y >= co.len) st.done = true;
+    return st;
+  }
+  /* Note nach dem Lauf. Berührt: Ball weg (bad), beim eigenen Gegenspieler frontal: grober Fehler (gross). Stockbereich des
+     Gegenspielers gestreift: knapp (near). An ihm sauber vorbei, vom Helfer gestört: gelungen (good). An allen sauber vorbei:
+     perfekt. by: wer den Ball hat oder am nächsten dran war. */
+  function dribGrade(co, st) {
+    if (st.out) return { grade: st.out.hit === 0 && Math.abs(st.out.dx) < co.defs[0].core * 0.45 ? 'gross' : 'bad', by: co.defs[st.out.hit].id };
+    const br = st.d.map((o, i) => o.min < co.defs[i].brush);
+    return { grade: br[0] ? 'near' : br.slice(1).some(Boolean) ? 'good' : 'perfect', by: co.defs[0].id };
+  }
+  // Spielt einen ganzen Lauf nach: run ist das Ziel pro Schritt (fehlt eines, bleibt das letzte)
+  function dribRun(co, run) {
+    const st = dribInit(co), max = Math.ceil(co.len / co.v * co.hz) + 5; let last = co.x0;
+    for (let i = 0; i < max && !st.done; i++) { if (i < run.length && typeof run[i] === 'number' && isFinite(run[i])) last = run[i]; dribTick(co, st, last); }
+    return st;
+  }
+
   // --- Schuss auf das Tor ---
   const zoneOf = (x, y) => (y >= 0.5 ? 't' : 'b') + (x < -0.34 ? 'l' : x > 0.34 ? 'r' : 'm');
   // Liegt der Ball in der gewählten Zone? Mit etwas Spielraum an den Grenzen: dort hält jede der beiden Zonen.
@@ -611,8 +675,11 @@
     const sc = s.cur, X = sc.carrier, me = card(s, 'you', X);
     if (a.type !== 'shoot' && sc.step >= sc.max - 1) return false;      // letzte Aktion der Szene: nur noch Schuss
     if (a.type === 'pass' && (!card(s, 'you', a.to) || a.to === X)) return false;
-    const c = contest(s, a); if (!c.free && !hitOk(a)) return false;
-    const g = c.free ? 'good' : grade(s.cfg, a.hit, c.pos, c.w), ok = g === 'perfect' || g === 'good' || g === 'near', D = card(s, 'home', c.by);
+    const c = contest(s, a), course = a.type === 'dribble' && Array.isArray(a.run) && a.run.length <= 2000 ? dribCourse(s) : null;
+    if (!c.free && !course && !hitOk(a)) return false;
+    // Dribbling: der gesteuerte Lauf durch den Parcours entscheidet (ohne Lauf, etwa in alten Tests: der Balken)
+    const dr = course ? dribGrade(course, dribRun(course, a.run)) : null; if (dr) c.by = dr.by;
+    const g = c.free ? 'good' : dr ? dr.grade : grade(s.cfg, a.hit, c.pos, c.w), ok = g === 'perfect' || g === 'good' || g === 'near', D = card(s, 'home', c.by);
     if (!c.free) tally(s, g);
     if (a.type === 'shoot') {
       const sh = shotInfo(s, sc, X);
@@ -726,7 +793,8 @@
 
   /* Einziger Einstieg für Eingaben. Gibt einen neuen Zustand und die Ereignisse zurück, der alte bleibt unverändert.
      hit ist die Stelle des Strichs auf dem Timing-Balken beim Tippen (0 bis 1), siehe contest().
-     Angriff:  { type: 'shoot', hit } | { type: 'pass', to, hit } | { type: 'dribble', hit }   freier Schuss: ohne hit
+     Angriff:  { type: 'shoot' } | { type: 'pass', to, hit } | { type: 'dribble', run }
+               run: der Lauf durch den Dribbling-Parcours, das Ziel (x in der Bahn) pro Schritt, siehe dribCourse und dribTick
      Abwehr:   { type: 'defend', hit }
      Schuss:   { type: 'aim', target: [x, y], hit, t } eigener Schuss: Ziel im Tor, Stelle des Strichs auf dem Schuss-Balken,
                Zeit in ms seit dem Setzen des Ziels
@@ -749,5 +817,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);
