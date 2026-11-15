@@ -108,6 +108,35 @@
 .kreach.hot{stroke:#ff8a8a;stroke-width:2.2}
 .tbov.hot{border-color:#ff8a8a;animation:tbhot .45s ease-in-out infinite alternate}
 @keyframes tbhot{to{box-shadow:0 0 0 4px rgba(255,138,138,.35)}}
+/* Tribüne hinter dem Tor: Fans der angreifenden Seite. Beim Tor springen sie, reissen die Arme hoch, schwenken Schals und Fahnen. */
+.stage.match .goalview > svg{overflow:visible}
+.crowd{--c1:#2f6dff;--c2:#eef2ff;--c3:#123aa8}
+.crowd.home{--c1:#f7d774;--c2:#151a30;--c3:#c9972a}
+.crowd .b1{fill:var(--c1)}.crowd .b2{fill:var(--c2)}.crowd .b3{fill:var(--c3)}
+.crowd .s1{stroke:var(--c1)}.crowd .s2{stroke:var(--c2)}.crowd .s3{stroke:var(--c3)}
+.crowd .row{animation:crowdsway 2.6s ease-in-out infinite alternate}
+.crowd .row:nth-child(even){animation-duration:3.2s;animation-direction:alternate-reverse}
+@keyframes crowdsway{from{transform:translateY(0)}to{transform:translateY(-1.4px)}}
+.crowd .arm{transition:transform .16s ease-out}
+.crowd .scarf{opacity:0;transition:opacity .15s}
+.crowd .fl{opacity:0}
+.crowd .flag{animation:flagwave 1.8s ease-in-out infinite alternate}
+@keyframes flagwave{from{transform:rotate(-8deg) skewY(-6deg)}to{transform:rotate(8deg) skewY(6deg)}}
+.crowd.cheer .fj{animation:fanjump var(--j) cubic-bezier(.3,0,.6,1) var(--d) infinite alternate}
+@keyframes fanjump{from{transform:translateY(0)}to{transform:translateY(var(--h))}}
+.crowd.cheer .al{animation:wavel var(--j) ease-in-out var(--d) infinite alternate}
+.crowd.cheer .ar{animation:waver var(--j) ease-in-out var(--d) infinite alternate}
+@keyframes wavel{from{transform:rotate(148deg)}to{transform:rotate(177deg)}}
+@keyframes waver{from{transform:rotate(-148deg)}to{transform:rotate(-177deg)}}
+.crowd.cheer .scarf{opacity:1}
+.crowd.cheer .flag{animation-duration:.3s}
+.crowd.cheer .fl{animation:camflash 1.2s linear var(--d) infinite}
+@keyframes camflash{0%,14%,100%{opacity:0}5%{opacity:1}}
+.crowd.groan .fj{transform:translateY(3px);transition:transform .25s}
+.crowd.groan .al{transform:rotate(168deg) scaleY(.62)}.crowd.groan .ar{transform:rotate(-168deg) scaleY(.62)}
+.confetti{position:absolute;left:0;right:0;top:-20%;bottom:0;z-index:7;pointer-events:none}
+.confetti i{position:absolute;top:0;display:block;border-radius:1px;will-change:transform}
+@media (prefers-reduced-motion:reduce){.crowd .row,.crowd .flag,.crowd.cheer .fj,.crowd.cheer .fl{animation:none}.crowd.cheer .al{animation:none;transform:rotate(165deg)}.crowd.cheer .ar{animation:none;transform:rotate(-165deg)}}
 @media (prefers-reduced-motion:reduce){.tbov.hot{animation:none}}
 
 .mark{position:absolute;left:0;top:0;width:11%;aspect-ratio:1;z-index:4;border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 0 2px rgba(5,8,24,.7),0 0 16px rgba(247,215,116,.8);pointer-events:none}
@@ -188,22 +217,26 @@
           <pattern id="mesh" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 0 L10 10 M10 0 L0 10" stroke="#ffffff" stroke-opacity=".32" stroke-width="1"/></pattern>
           <pattern id="meshb" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0 L8 8 M8 0 L0 8" stroke="#ffffff" stroke-opacity=".2" stroke-width=".8"/></pattern>
           <radialGradient id="kshade"><stop offset="0" stop-color="#070d2a" stop-opacity=".96"/><stop offset=".9" stop-color="#070d2a" stop-opacity=".92"/><stop offset="1" stop-color="#070d2a" stop-opacity=".8"/></radialGradient>
+          <linearGradient id="standbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#04061a"/><stop offset="1" stop-color="#0d1a4a"/></linearGradient>
+          <linearGradient id="standfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#04061a" stop-opacity=".92"/><stop offset=".45" stop-color="#04061a" stop-opacity=".45"/><stop offset="1" stop-color="#04061a" stop-opacity="0"/></linearGradient>
           <clipPath id="mouth"><rect x="81.5" y="91.5" width="197" height="144.5"/></clipPath>
         </defs>
-        <rect width="360" height="135" fill="url(#spot)"/>
+        <rect x="-90" y="-70" width="540" height="205" fill="url(#standbg)"/>
+        <g id="crowd" class="crowd you"></g>
+        <rect x="-90" y="-70" width="540" height="150" fill="url(#standfade)"/>
         <rect x="0" y="135" width="360" height="125" fill="url(#fl)"/>
         <rect x="0" y="118" width="360" height="22" fill="#e6ecfb"/>
         <g fill="#1a57ff"><rect x="8" y="122" width="54" height="14"/><rect x="298" y="122" width="54" height="14"/></g>
         <g fill="#0e1b47"><rect x="70" y="122" width="40" height="14"/><rect x="250" y="122" width="40" height="14"/></g>
         <g id="ggoal">
         <path d="M-700 236 H1060" stroke="#ffffff" stroke-opacity=".7" stroke-width="2"/>
-        <polygon points="96,104 264,104 270,224 90,224" fill="#0b1640" fill-opacity=".55"/>
-        <polygon points="96,104 264,104 270,224 90,224" fill="url(#meshb)"/>
+        <rect x="78" y="88" width="204" height="148" fill="#0a1236" fill-opacity=".8"/>
+        <polygon points="96,104 264,104 270,224 90,224" fill="#070d2a" fill-opacity=".55"/>
         <polygon points="78,88 96,104 90,224 78,236" fill="url(#meshb)"/>
         <polygon points="282,88 264,104 270,224 282,236" fill="url(#meshb)"/>
         <polygon points="78,88 282,88 264,104 96,104" fill="url(#meshb)"/>
         <g id="kzone" clip-path="url(#mouth)" visibility="hidden"><rect x="78" y="88" width="204" height="148" fill="#dfe8ff" fill-opacity=".2"/><ellipse id="kreach" class="kreach" cx="180" cy="191.6" rx="80" ry="90"/></g>
-        <rect x="78" y="88" width="204" height="148" fill="url(#mesh)"/>
+        <path id="net" fill="none" stroke="#ffffff" stroke-opacity=".5" stroke-width="1.1" stroke-linejoin="round"/>
         <path id="posts" d="M78 236 V88 H282 V236" fill="none" stroke="#e2231a" stroke-width="7" stroke-linejoin="round"/>
         </g>
       </svg>
@@ -218,6 +251,7 @@
       </div>
       </div>
       <div class="ball" id="ball" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#c4cde6" stroke-width="1"/><g fill="#9aa6c6"><circle cx="12" cy="6" r="1.8"/><circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9" cy="15.5" r="1.8"/><circle cx="15" cy="15.5" r="1.8"/><circle cx="12" cy="11.5" r="1.5"/></g></svg></div>
+      <div class="confetti" id="confetti" aria-hidden="true"></div>
       <svg class="aim" id="aim" viewBox="0 0 360 260" aria-hidden="true" hidden>
         <line id="aim-line" x1="180" y1="270" x2="180" y2="160" stroke="#f7d774" stroke-opacity=".55" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
         <circle id="aim-spread" cx="180" cy="160" r="10" fill="rgba(247,215,116,.18)" stroke="#f7d774" stroke-width="2.5"/>

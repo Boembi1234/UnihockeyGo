@@ -543,6 +543,7 @@
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
     $('shooter').hidden = true; $('tell').hidden = true; $('power').hidden = true; $('zones').className = 'zones off'; $('aim').toggleAttribute('hidden', true);
     clearTimeout(rx.timer); hideReach(); $('mark').hidden = true; drag = null; target = null;
+    netRest(); crowdSet('you');
   }
   const shotLabel = v => (v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach');
   /* Torsicht. Das Tor ist je nach Lage des Schützen gross (nah) oder klein und weiter oben (fern). Alles am Tor (Goalie,
@@ -585,6 +586,91 @@
     })(t0);
   }
   function buzz(p) { if (reduce || !navigator.vibrate) return; try { navigator.vibrate(p); } catch (e) { /* nicht erlaubt */ } }
+
+  /* --- Netz ---
+     Das Netz ist ein Gitter aus Punkten. Beim Tor drückt der Ball es an der Stelle des Einschlags in Flugrichtung nach
+     hinten; von dort läuft eine Welle über das Netz, und es zappelt nach, bis es wieder ruhig hängt. Am Gestänge ist es fest. */
+  const NET = (() => {
+    const x0 = 78, x1 = 282, y0 = 88, y1 = 236, lines = [];
+    const add = (ya, yb, fx) => { if (yb - ya < 2) return; const n = Math.max(1, Math.ceil((yb - ya) / 7)), pts = []; for (let k = 0; k <= n; k++) { const y = ya + (yb - ya) * k / n; pts.push([fx(y), y]); } lines.push(pts); };
+    for (let c = x0 - (y1 - y0) + 2; c < x1; c += 10) add(Math.max(y0, y0 + x0 - c), Math.min(y1, y0 + x1 - c), y => c + (y - y0));        // Maschen nach rechts unten
+    for (let c = x0 + 8; c < x1 + (y1 - y0); c += 10) add(Math.max(y0, y0 + c - x1), Math.min(y1, y0 + c - x0), y => c - (y - y0));       // Maschen nach links unten
+    const rest = lines.map(l => 'M' + l[0][0].toFixed(1) + ' ' + l[0][1].toFixed(1) + 'L' + l[l.length - 1][0].toFixed(1) + ' ' + l[l.length - 1][1].toFixed(1)).join('');
+    return { x0, x1, y0, y1, lines, rest, raf: 0 };
+  })();
+  function netRest() { cancelAnimationFrame(NET.raf); NET.raf = 0; $('net').setAttribute('d', NET.rest); }
+  // P: Einschlag, v: Flugrichtung des Balls (Länge 1), beides in der Ebene des Tors
+  function netHit(P, v) {
+    if (reduce) return;
+    cancelAnimationFrame(NET.raf);
+    const el = $('net'), A = 27, tau = 520, om = 2 * Math.PI * 3.2 / 1000, t0 = performance.now(), px = -v[1], py = v[0];
+    const pre = NET.lines.map(l => l.map(p => { const d = Math.hypot(p[0] - P[0], p[1] - P[1]), edge = Math.min(1, Math.min(p[0] - NET.x0, NET.x1 - p[0], p[1] - NET.y0, NET.y1 - p[1]) / 14); return [Math.exp(-d * d / 3200) * edge, Math.exp(-d * d / 20000) * edge, d / 30]; }));
+    (function loop(now) {
+      const t = now - t0;
+      if (t > 2300) { netRest(); return; }
+      const env = Math.exp(-t / tau) * Math.min(1, t / 40), c0 = Math.cos(om * t); let d = '';
+      for (let i = 0; i < NET.lines.length; i++) {
+        const l = NET.lines[i], w = pre[i];
+        for (let k = 0; k < l.length; k++) {
+          const a = A * env * (w[k][0] * c0 + 0.55 * w[k][1] * Math.cos(om * t - w[k][2])), b = A * 0.3 * env * w[k][1] * Math.sin(2 * om * t - w[k][2]);
+          d += (k ? 'L' : 'M') + (l[k][0] + v[0] * a + px * b).toFixed(1) + ' ' + (l[k][1] + v[1] * a + py * b).toFixed(1);
+        }
+      }
+      el.setAttribute('d', d);
+      NET.raf = requestAnimationFrame(loop);
+    })(t0);
+  }
+
+  /* --- Tribüne ---
+     Hinter dem Tor stehen die Fans der Seite, die gerade angreift (deine in Blau, die des Gegners in Gold). Sie stehen in
+     Reihen und wiegen leicht. Bei einem Tor springen sie, reissen die Arme hoch, Schals und Fahnen gehen hoch, es blitzt und
+     es regnet Konfetti. Bei einer Parade oder einem Fehlschuss sinken sie zusammen, Hände am Kopf. */
+  const SKIN = ['#f1c9a5', '#e0ac69', '#c68642', '#8d5524', '#f6d7bd'], HAIRS = ['#2a1b12', '#111318', '#6b4a2a', '#c9a352', '#7a2f1c'];
+  function buildCrowd() {
+    const g = $('crowd'); if (g.firstChild) return;
+    let seed = 20261;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }, pick = l => l[Math.floor(rnd() * l.length)];
+    [[-16, 0.8, 0.42], [9, 0.88, 0.58], [35, 0.96, 0.74], [62, 1.05, 0.88], [91, 1.15, 1]].forEach(([y, sc, op], ri) => {
+      const row = svg('g', { class: 'row', opacity: op }, g), gap = 17.5 * sc;
+      svg('rect', { x: -90, y: y + 15 * sc, width: 540, height: 2, fill: '#ffffff', 'fill-opacity': 0.07 }, row);   // Geländer der Reihe
+      for (let x = -30 + (ri % 2) * gap / 2; x < 392; x += gap) {
+        const f = svg('g', { transform: `translate(${(x + (rnd() - 0.5) * 4).toFixed(1)} ${(y + (rnd() - 0.5) * 3).toFixed(1)}) scale(${sc})` }, row);
+        const b = rnd() < 0.62 ? 1 : rnd() < 0.6 ? 2 : 3, skin = pick(SKIN), j = (0.3 + rnd() * 0.2).toFixed(2), d = (-rnd() * 0.6).toFixed(2), h = (-(5 + rnd() * 6)).toFixed(1);
+        const fj = svg('g', { class: 'fj', style: `--j:${j}s;--d:${d}s;--h:${h}px` }, f);
+        [-1, 1].forEach(sd => { const sh = svg('g', { transform: `translate(${sd * 7.4} 7)` }, fj), arm = svg('g', { class: 'arm ' + (sd < 0 ? 'al' : 'ar'), style: `--j:${j}s;--d:${d}s` }, sh); svg('path', { d: 'M0 0 V13', class: 's' + b, 'stroke-width': 3.8, 'stroke-linecap': 'round', fill: 'none' }, arm); svg('circle', { cy: 15, r: 2.1, fill: skin }, arm); });
+        svg('path', { d: 'M-8.6 24 V9.5 Q-8.6 4 -3.6 4 H3.6 Q8.6 4 8.6 9.5 V24 Z', class: 'b' + b }, fj);
+        if (rnd() < 0.35) svg('path', { d: 'M-8.6 12 H8.6', class: 's' + (b === 2 ? 1 : 2), 'stroke-width': 2.4, fill: 'none' }, fj);   // Brustring
+        svg('circle', { cy: -1, r: 4.7, fill: skin }, fj);
+        if (rnd() < 0.3) svg('path', { d: 'M-5 -1.6 A5 5 0 0 1 5 -1.6 Z', class: 'b1' }, fj); else svg('path', { d: 'M-4.7 -1.8 A4.7 4.7 0 0 1 4.7 -1.8 Q0 -3.6 -4.7 -1.8 Z', fill: pick(HAIRS) }, fj);   // Mütze oder Haare
+        if (rnd() < 0.24) { const sf = svg('g', { class: 'scarf' }, fj); svg('rect', { x: -10.5, y: -11.5, width: 21, height: 3.6, rx: 1.2, class: 'b1' }, sf); svg('path', { d: 'M-5.5 -11.5 v3.6 M0 -11.5 v3.6 M5.5 -11.5 v3.6', class: 's2', 'stroke-width': 1.6, fill: 'none' }, sf); }
+      }
+    });
+    // Fahnen: Stange mit Tuch in den Farben der Fans
+    [[58, 40], [196, 12], [322, 46], [128, 66]].forEach(([x, y], i) => {
+      const f = svg('g', { transform: `translate(${x} ${y})`, opacity: 0.75 + 0.06 * i }, g), fl = svg('g', { class: 'flag', style: `animation-delay:${-0.4 * i}s` }, f);
+      svg('path', { d: 'M0 14 V-34', stroke: '#d9dff0', 'stroke-width': 1.6, 'stroke-linecap': 'round' }, fl);
+      svg('path', { d: 'M0 -34 q7 -3.5 13 0 t13 0 v15 q-7 3.5 -13 0 t-13 0 Z', class: 'b1' }, fl); svg('path', { d: 'M0 -27.5 q7 -3.5 13 0 t13 0 v4 q-7 3.5 -13 0 t-13 0 Z', class: 'b2' }, fl);
+    });
+    // Blitzlichter
+    for (let i = 0; i < 12; i++) svg('circle', { class: 'fl', cx: (20 + rnd() * 320).toFixed(0), cy: (-20 + rnd() * 118).toFixed(0), r: (1.8 + rnd() * 1.8).toFixed(1), fill: '#ffffff', style: `--d:${(-rnd() * 1.2).toFixed(2)}s` }, g);
+  }
+  let crowdTimer = 0;
+  function crowdSet(side) { clearTimeout(crowdTimer); $('crowd').setAttribute('class', 'crowd ' + side); $('confetti').innerHTML = ''; }
+  function crowdGroan() { const c = $('crowd'); c.classList.add('groan'); clearTimeout(crowdTimer); crowdTimer = setTimeout(() => c.classList.remove('groan'), 1500); }
+  function crowdCheer(side) {
+    const c = $('crowd'), box = $('confetti'), cols = side === 'you' ? ['#2f6dff', '#ffffff', '#9dbbff', '#f7d774'] : ['#f7d774', '#ffffff', '#ffe9a6', '#151a30'];
+    clearTimeout(crowdTimer); c.classList.remove('groan'); c.classList.add('cheer');
+    if (reduce) return;
+    const H = box.clientHeight + 40, W = box.clientWidth;
+    box.innerHTML = '';
+    for (let i = 0; i < 54; i++) {
+      const p = document.createElement('i'), w = 4 + Math.random() * 5, x = (0.1 + Math.random() * 0.8) * W, drift = (Math.random() - 0.5) * 90, turn = (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 720);
+      p.style.cssText = `left:${x.toFixed(0)}px;width:${w.toFixed(1)}px;height:${(w * (0.45 + Math.random() * 0.5)).toFixed(1)}px;background:${cols[i % cols.length]}`;
+      box.appendChild(p);
+      p.animate([{ transform: 'translate(0,-30px) rotate(0deg)', opacity: 1 }, { transform: `translate(${(drift * 0.6).toFixed(0)}px,${(H * 0.6).toFixed(0)}px) rotate(${(turn * 0.6).toFixed(0)}deg)`, opacity: 1, offset: 0.6 }, { transform: `translate(${drift.toFixed(0)}px,${H}px) rotate(${turn.toFixed(0)}deg)`, opacity: 0.9 }],
+        { duration: 1500 + Math.random() * 1300, delay: Math.random() * 500, easing: 'cubic-bezier(.25,.4,.6,1)', fill: 'both' }).finished.then(() => p.remove()).catch(() => {});
+    }
+  }
   async function toGoal() {
     const sh = G.shot, mine = sh.side === 'you', X = card(sh.side, sh.x), gv = $('goalview');
     hideStamp(); $('panel').hidden = true; closeBar();
@@ -592,7 +678,7 @@
       $('pitch').style.visibility = 'hidden'; $('stage').classList.add('goalmode'); gv.hidden = false; fresh(gv);
       anim(gv, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.1)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }], { duration: 280 });
     }
-    setZoom(sh.q);
+    setZoom(sh.q); buildCrowd(); crowdSet(sh.side); netRest();
     const tok = ++rx.tok;
     const kp = $('keeper'), ball = $('ball');
     [kp, ball].forEach(fresh);
@@ -678,9 +764,16 @@
       if (e.result === 'save' || e.result === 'catch') kpr.to(KP.save(180, L, {}), 190); else if (e.guess) kpr.to(KP.save(180, toScene(M.ZC[e.guess]), {}), 190); else kpr.stop();
       await rx.flight; rx.flight = null; fresh($('mark')); $('mark').hidden = true;
     }
-    if (e.result === 'goal') { anim(ball, [{ transform: ballTf(end, bs) }, { transform: ballTf([end[0], end[1] + 6 * gz.s], bs * 0.82) }], { duration: 160 }); burst('ripple', endL, 22, 0.3, 1.25, 520); scored(e.side, e.ctx); if (mine) { buzz([30, 50, 90]); shake(); } }
+    if (e.result === 'goal') {
+      // Der Ball drückt das Netz nach hinten, wird zurückgefedert und fällt ins Tor. Das Netz zappelt nach, die Fans jubeln.
+      const sL = toLayer(START), fl = Math.hypot(endL[0] - sL[0], endL[1] - sL[1]) || 1, v = [(endL[0] - sL[0]) / fl, (endL[1] - sL[1]) / fl];
+      const deep = toView([endL[0] + v[0] * 9, endL[1] + v[1] * 9]), floor = toView([Math.max(92, Math.min(268, endL[0] - v[0] * 4)), 229]), hop = [floor[0], floor[1] - 7 * gz.s];
+      netHit(endL, v); crowdCheer(e.side); scored(e.side, e.ctx); shake(); if (mine) buzz([30, 50, 90]);
+      anim(ball, [{ transform: ballTf(end, bs) }, { transform: ballTf(deep, bs * 0.84), offset: 0.1 }, { transform: ballTf(end, bs * 0.9), offset: 0.24, easing: 'cubic-bezier(.5,0,.9,.5)' }, { transform: ballTf(floor, bs * 0.92), offset: 0.74 }, { transform: ballTf(hop, bs * 0.92), offset: 0.86 }, { transform: ballTf(floor, bs * 0.92) }], { duration: 900, easing: 'linear' });
+    }
     else if (e.result !== 'catch') {
       if (e.miss === 'post') { burst('spark', endL, 12, 0.4, 1.4, 380); if (mine) { buzz(60); shake(); } }
+      crowdGroan();
       anim(ball, [{ transform: ballTf(end, bs), opacity: 1 }, { transform: ballTf(out, fadeOut ? 0.6 * gz.s : 1.1 * gz.s), opacity: fadeOut ? 0 : 1 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
     }
     const goal = e.result === 'goal', saved = e.result === 'save' || e.result === 'catch';
@@ -697,7 +790,8 @@
     stamp(main, sub, mine === goal ? 'good' : 'bad', 'top');
     if (e.ctx !== 'so') addTick(goal ? (mine ? `Tor! ${X.last} trifft zum ${disp.you}:${disp.home}.` : `Tor ${HOME}: ${X.last}, ${disp.you}:${disp.home}.`) : `${X.last} schiesst: ${main}.`, goal);
     else addTick(`Penalty ${X.last}: ${goal ? 'Tor' : main}.`, goal);
-    await hold(1400);
+    if (e.result === 'catch') crowdGroan();
+    await hold(goal ? 2700 : 1400);
   }
 
   /* --- Eingaben in der Torsicht ---
