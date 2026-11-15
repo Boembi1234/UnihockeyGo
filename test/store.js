@@ -18,7 +18,7 @@ const OUT = path.join(__dirname, 'shots', 'store'); fs.mkdirSync(OUT, { recursiv
     const phase = () => p.evaluate(() => (document.getElementById('packov').classList.contains('done') ? 'done' : document.getElementById('po-say').textContent));
     await p.evaluate(() => window.HKStore.earn(4000, false));   // genug Münzen für ein Star-Pack
     await snap('00-intro', true); await over('intro');
-    await p.click('#screen-intro [data-go="store"]'); await p.waitForTimeout(400); await snap('01-shop', true); await over('shop');
+    await p.click('#tabs [data-tab="store"]'); await p.waitForTimeout(400); await snap('01-shop', true); await over('shop');
     const s0 = await state();
     // 1. Premium: tippen
     await p.click('[data-pack="premium"]');
@@ -67,7 +67,7 @@ const OUT = path.join(__dirname, 'shots', 'store'); fs.mkdirSync(OUT, { recursiv
     const other = await p.$('#team-all .pick-card:not(.inline)'); if (other) await other.click();
     const s3 = await state(); if (s3.lineup.length !== 5) errors.push('Linie kaputt');
     await p.click('#team-all .pick-card >> nth=0'); await p.waitForTimeout(600); await snap('18-blatt-team'); await p.click('#sheet-x');
-    await p.click('#screen-team [data-go="back"]'); await p.waitForTimeout(100);
+    await p.click('#tabs [data-tab="play"]'); await p.waitForTimeout(100); if (!(await p.isVisible('#btn-start'))) errors.push('Tab Spielen fehlt');
     await p.reload({ waitUntil: 'load' });
     const s4 = await state(); if (s4.owned.length !== s3.owned.length || s4.coins !== s3.coins) errors.push('nicht gespeichert');
     await p.waitForTimeout(300); await snap('19-intro-danach', true);

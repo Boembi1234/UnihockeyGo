@@ -15,7 +15,10 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     await p.evaluate(() => Promise.all(['600', '700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
     const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + '-' + name + '.png'), fullPage: !!full }); };
     const over = async w => { const x = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth); if (x > 0) errors.push('Überlauf ' + w + ' +' + x); };
-    await snap('00-intro', true); await over('intro');
+    await snap('00-team', true); await over('team');
+    await p.click('#tabs [data-tab="store"]'); await p.waitForTimeout(150); await snap('00-shop', true); await over('shop');
+    await p.click('#tabs [data-tab="play"]'); await p.waitForTimeout(150); await snap('00-spielen', true); await over('spielen');
+    if (await p.isVisible('#screen-team') || !(await p.isVisible('#btn-start'))) errors.push('Tab Spielen zeigt nicht den Spielen-Bildschirm');
     for (let m = 0; m < N; m++) {
       if (m > 0) { if (!(await p.isVisible('#btn-other'))) { errors.push('Match ' + m + ' kam nicht ans Ende: ' + await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-period').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent].join(' / '))); break; } await p.click('#btn-other'); }
       await p.evaluate(() => { const o = [...document.querySelectorAll('#opps [data-opp]')]; o[Math.floor(Math.random() * o.length)].click(); });

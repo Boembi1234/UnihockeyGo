@@ -975,10 +975,10 @@
   const setup = id => ({ homeName: W.club(id).short, tactic, you: side(S.lines(), S.tac()), home: side(C.oppLines(id, mineIds()), C.oppTac(id)) });
   function renderIntro() {
     const m = M.newMatch(setup(opp), E.makeRng(1)), order = ['LW', 'C', 'RW', 'LD', 'RD'], st = S.state();
-    $('intro-ovr').textContent = `· Angriff ${Math.round(m.val.you.att)} · Abwehr ${Math.round(m.val.you.def)}`;
-    $('lineup').innerHTML = m.teams.you.cards.slice().sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role)).map(c => `<li>${S.cardHtml(c.id, { eager: 1 })}<i>${ROLE[c.role]}</i></li>`).join('');
-    const l2 = m.teams.you.bench || [];
-    $('line2').innerHTML = `<b>2. Linie</b><span>${l2.slice().sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role)).map(c => `${esc(c.last)} <i>${c.ovr}</i>`).join(' · ')}</span><em>Angriff ${Math.round(M.attackVal(l2))} · Abwehr ${Math.round(M.defenceVal(l2))}</em>`;
+    const names = l => l.slice().sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role)).map(c => `${esc(c.last)} <i>${c.ovr}</i>`).join(' · '), l2 = m.teams.you.bench || [];
+    $('play-lines').innerHTML = `<strong>1. Linie · Angriff ${Math.round(m.val.you.att)} · Abwehr ${Math.round(m.val.you.def)}</strong><span>${names(m.teams.you.cards)}</span><strong>2. Linie · Angriff ${Math.round(M.attackVal(l2))} · Abwehr ${Math.round(M.defenceVal(l2))}</strong><span>${names(l2)}</span>`;
+    $('tac-note').textContent = { def: 'Defensiv: weniger Chancen auf beiden Seiten, deine kommen öfter aus Kontern.', bal: 'Normal: ausgeglichen. Du kannst im Match jederzeit umstellen.', off: 'Offensiv: mehr Chancen für dich, aber hinten offen, der Gegner kontert öfter.' }[tactic];
+    $('btn-start').textContent = 'Anpfiff gegen ' + W.club(opp).short;
     $('tac-pick').innerHTML = C.TAC.map(t => {
       const own = st.tacOwned.indexOf(t.id) >= 0, on = st.tac.indexOf(t.id) >= 0;
       return `<button type="button" class="tcp" data-pickcard="${t.id}" aria-pressed="${on}" aria-label="${esc(M.CARDS[t.id].name)}${own ? '' : ', im Shop kaufen'}">${S.tacHtml(t.id, { state: on ? 'on' : own ? 'own' : 'lock' })}</button>`;
@@ -988,7 +988,7 @@
     $('opps').innerHTML = OPPS.map(id => {
       const mm = M.newMatch(setup(id), E.makeRng(1));
       const r = M.rates(Object.assign({}, mm, { tactic: { you: tactic, home: 'bal' } })), n = x => (x * 60).toFixed(0), o = C.OPPS.find(x => x.id === id), b = mm.teams.home.bench;
-      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Angriff ${Math.round(mm.val.home.att)} · Abwehr ${Math.round(mm.val.home.def)}, 2. Linie ${Math.round(M.strength(b))}. Etwa ${n(r.you)} Chancen für dich, ${n(r.home)} gegen dich. Karten: ${o.tac.map(t => M.CARDS[t].name).join(', ')}. Sieg: ${S.fmt(o.win)} Münzen.</span><i>${Math.round(M.strength(mm.teams.home.cards))}</i></button>`;
+      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Sieg: ${S.fmt(o.win)} Münzen · 2. Linie ${Math.round(M.strength(b))} · etwa ${n(r.you)} Chancen für dich, ${n(r.home)} gegen dich</span><i>${Math.round(M.strength(mm.teams.home.cards))}</i></button>`;
     }).join('');
     renderTac();
   }

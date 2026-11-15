@@ -112,6 +112,8 @@ Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wer
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 
+**Menü:** Drei Tabs unten. Team ist die Startseite (Stärke beider Linien, Bilanz, Aufstellung, Sammlung), Spielen in der Mitte (Gegner, Aufstellung, Taktik, Taktikkarten, Anpfiff), Shop rechts (Packs und Taktikkarten). Im Match und beim Resultat ist die Leiste ausgeblendet.
+
 **Shop und Team:**
 
 - **Team aus Packs:** Du startest mit zehn Bronze-Karten (erste Linie um 77, zweite um 72), drei Taktikkarten und 1500 Münzen. Ein alter Spielstand mit einer Linie wird umgestellt: Die zweite Linie kommt aus der Sammlung, fehlende Plätze werden mit Bronze-Karten um 72 aufgefüllt. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.

@@ -18,7 +18,15 @@
   const set = s => { st = s; C.save(store || mem, st); badges(); listeners.forEach(f => f(st)); };
 
   // --- Bildschirme ---
-  function show(name) { document.querySelectorAll('#app > section.screen').forEach(s => { s.hidden = s.id !== 'screen-' + name; }); window.scrollTo(0, 0); }
+  // Team, Spielen (intro) und Shop sind die drei Tabs des Menüs. Im Match und beim Resultat ist die Leiste weg.
+  const TABS = { team: 'team', intro: 'play', store: 'store' };
+  function show(name) {
+    document.querySelectorAll('#app > section.screen').forEach(s => { s.hidden = s.id !== 'screen-' + name; });
+    const tab = TABS[name] || null, nav = $('tabs');
+    nav.hidden = !tab; document.body.classList.toggle('has-tabs', !!tab);
+    nav.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    window.scrollTo(0, 0);
+  }
   const COIN = '<svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f7d774" stroke="#9c6a14" stroke-width="1.5"/><circle cx="10" cy="10" r="5.6" fill="none" stroke="#9c6a14" stroke-width="1.3"/></svg>';
   const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '’');
   function badges() { document.querySelectorAll('[data-coins]').forEach(el => { el.innerHTML = COIN + '<b>' + fmt(st.coins) + '</b>'; }); }
@@ -145,7 +153,7 @@
   const canImprove = () => { const b = C.bestLines(st.owned); return sum(b.lineup) > sum(st.lineup) || sum(b.lineup) + sum(b.line2) > sum(st.lineup) + sum(st.line2); };
   function renderTeam() {
     const slotHtml = c => `<button type="button" class="tslot${slot === c.id ? ' on' : ''}" data-slot="${c.id}" aria-pressed="${slot === c.id}" aria-label="${esc(c.first + ' ' + c.last)}, ${posName(c)}, ${c.ovr}">${cardHtml(c.id, { eager: 1 })}</button>`;
-    $('team-ovr').textContent = C.teamOvr(st.lineup); $('team-ovr2').textContent = C.teamOvr(st.line2);
+    $('team-ovr').textContent = C.teamOvr(st.lineup); $('team-ovr2').textContent = C.teamOvr(st.line2); $('team-rec').textContent = `${st.won || 0} · ${st.played || 0}`;
     $('team-line').innerHTML = sorted(C.lineCards(st)).map(slotHtml).join('');
     $('team-line2').innerHTML = sorted(C.line2Cards(st)).map(slotHtml).join('');
     $('team-hint').textContent = slot ? `Tippe auf einen anderen Platz, um mit ${C.get(slot).last} zu tauschen, oder wähle unten eine Karte.` : 'Tippe auf einen Platz, um ihn neu zu besetzen oder zwei Spieler zu tauschen. Im Match wechselst du zwischen den Linien: Wer auf der Bank sitzt, erholt sich.';
@@ -338,6 +346,8 @@
   // --- Verdrahtung ---
   function go(name, from) { if (from) back = from; if (name === 'store') renderStore(); if (name === 'team') { slot = null; renderTeam(); } show(name); }
   document.addEventListener('click', e => {
+    const tb = e.target.closest('[data-tab]');
+    if (tb) { const name = tb.dataset.tab === 'play' ? 'intro' : tb.dataset.tab; go(name); if (name === 'intro') listeners.forEach(f => f(st)); return; }
     const n = e.target.closest('[data-go]'); if (!n) return;
     const t = n.dataset.go; if (t === 'back') { show(back); listeners.forEach(f => f(st)); } else go(t, n.dataset.from);
   });
@@ -380,7 +390,7 @@
     if (Date.now() - resetArm > 3000) { resetArm = Date.now(); $('btn-reset').textContent = 'Wirklich? Nochmals tippen'; return; }
     set(C.fresh(Math.floor(Math.random() * 1e9))); $('btn-reset').textContent = 'Neu beginnen'; renderStore();
   });
-  badges();
+  badges(); go('team');      // Startseite: das eigene Team
 
   window.HKStore = {
     state: () => st,
