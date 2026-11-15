@@ -26,7 +26,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
-          if (/Wohin soll der Schuss/.test(document.getElementById('say').textContent) && !document.getElementById('goalview').hidden && document.getElementById('shooter').hidden === false) return 'aim';
+          if (document.getElementById('goalview').dataset.aim === '1' && !document.getElementById('goalview').hidden) return 'aim';
           if (document.getElementById('zones').classList.contains('armed')) return 'react';
           const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
           return 'wait';

@@ -37,7 +37,7 @@
   const sideOf = id => (card('you', id) ? 'you' : 'home');
 
   // --- Spielfeld ---
-  const TEAM = { you: { fill: '#1a57ff', ring: '#ffffff', text: '#ffffff', blade: '#ffffff' }, home: { fill: '#1b2033', ring: '#f7d774', text: '#f7d774', blade: '#f7d774' } };
+  const TEAM = { you: { fill: '#1a57ff', ring: '#ffffff', text: '#ffffff', blade: '#ffffff', grad: 'url(#jy)', pants: '#0b1c5e', sock: '#ffffff' }, home: { fill: '#1b2033', ring: '#f7d774', text: '#f7d774', blade: '#f7d774', grad: 'url(#jh)', pants: '#f7d774', sock: '#f7d774' } };
   const svg = (tag, a, parent) => { const n = document.createElementNS(NS, tag); for (const k in a) n.setAttribute(k, a[k]); if (parent) parent.appendChild(n); return n; };
   /* Spieler von oben: Schultern, Kopf, Arme, Beine und ein Stock mit Schaufel. Die Figur dreht sich in Laufrichtung oder zum
      Ball, die Beine laufen mit dem zurückgelegten Weg, beim Pass und Schuss schwingt der Stock. Name und Markierung drehen
@@ -52,9 +52,10 @@
     ['home', 'you'].forEach(side => G.teams[side].cards.forEach(c => {
       const t = TEAM[side], h = hashOf(c.id), hand = h % 3 === 0 ? -1 : 1, el = svg('g', { class: 'pl', 'data-id': c.id }, g);
       svg('circle', { r: 22, fill: 'none', stroke: '#f7d774', 'stroke-width': 2.5, class: 'carrier-ring', visibility: 'hidden' }, el);
-      svg('ellipse', { cx: 2, cy: 5, rx: 14, ry: 9, fill: '#000', opacity: 0.22 }, el);
+      svg('ellipse', { cx: 6, cy: 9, rx: 17, ry: 11, fill: '#000', opacity: 0.16 }, el); svg('ellipse', { cx: 4, cy: 7, rx: 13, ry: 8.5, fill: '#000', opacity: 0.22 }, el);      // Schatten: Licht von oben links
       const f = svg('g', { class: 'fig' }, el);
-      const fl = svg('ellipse', { cx: -5.4, cy: 1, rx: 3.7, ry: 5.8, fill: '#0b0f20', stroke: OUTL, 'stroke-width': 1 }, f), fr = svg('ellipse', { cx: 5.4, cy: 1, rx: 3.7, ry: 5.8, fill: '#0b0f20', stroke: OUTL, 'stroke-width': 1 }, f);
+      const fl = svg('ellipse', { cx: -5.4, cy: 1, rx: 3.7, ry: 5.8, fill: t.sock, stroke: OUTL, 'stroke-width': 1 }, f), fr = svg('ellipse', { cx: 5.4, cy: 1, rx: 3.7, ry: 5.8, fill: t.sock, stroke: OUTL, 'stroke-width': 1 }, f);
+      svg('ellipse', { cy: 8.4, rx: 9.6, ry: 5, fill: t.pants, stroke: OUTL, 'stroke-width': 1.2 }, f);      // Hose: schaut hinter dem Oberkörper hervor
       // Stock: Schaft von den Händen zum Boden, vorne die Schaufel
       const st = svg('g', {}, f), shaft = `M${hand * 3.5} -3 L${hand * 15} -27`, bl = `M${hand * 15} -27 q${-hand * 1.5} -5 ${-hand * 8.5} -4`;
       svg('path', { d: shaft, fill: 'none', stroke: OUTL, 'stroke-width': 4.4, 'stroke-linecap': 'round' }, st); svg('path', { d: bl, fill: 'none', stroke: OUTL, 'stroke-width': 5.8, 'stroke-linecap': 'round' }, st);
@@ -63,10 +64,12 @@
       const arms = `M${hand * 11} -1 L${hand * 11} -15 M${-hand * 11} -1 L${hand * 5.5} -7`;
       svg('path', { d: arms, fill: 'none', stroke: OUTL, 'stroke-width': 7, 'stroke-linecap': 'round' }, st); svg('path', { d: arms, fill: 'none', stroke: t.fill, 'stroke-width': 4.8, 'stroke-linecap': 'round' }, st);
       svg('circle', { cx: hand * 11, cy: -15.5, r: 2.5, fill: '#15161a' }, st); svg('circle', { cx: hand * 5.5, cy: -7.5, r: 2.5, fill: '#15161a' }, st);
-      svg('ellipse', { rx: 13.2, ry: 8.2, fill: t.fill, stroke: t.ring, 'stroke-width': 2, class: 'body' }, f);
-      svg('path', { d: 'M-8.5 2.6 H8.5', stroke: t.ring, 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: 0.7 }, f);
-      svg('circle', { cx: 0, cy: -1.6, r: 6.2, fill: HAIR[h % HAIR.length], stroke: OUTL, 'stroke-width': 1.3 }, f);
-      svg('path', { d: 'M-3.4 -6.4 Q0 -8.6 3.4 -6.4', fill: 'none', stroke: '#e9c3a2', 'stroke-width': 2, 'stroke-linecap': 'round' }, f);   // Stirn: zeigt die Blickrichtung
+      svg('path', { d: 'M-13.4 -1.5 C-13.4 -8 -7 -9.5 0 -9.5 C7 -9.5 13.4 -8 13.4 -1.5 C13.4 5.5 8.5 11 0 11 C-8.5 11 -13.4 5.5 -13.4 -1.5 Z', fill: t.grad, stroke: t.ring, 'stroke-width': 2, class: 'body' }, f);
+      svg('path', { d: 'M-10.5 -4.6 Q-9 -7.6 -4 -8', fill: 'none', stroke: '#ffffff', 'stroke-width': 1.7, 'stroke-linecap': 'round', opacity: 0.4 }, f);      // Glanz auf den Schultern
+      const nb = svg('text', { y: 8, 'text-anchor': 'middle', class: 'num', fill: t.text }, f); nb.textContent = c.no || (h % 89) + 2;      // Rückennummer
+      svg('circle', { cx: 0, cy: -5, r: 5.9, fill: HAIR[h % HAIR.length], stroke: OUTL, 'stroke-width': 1.3 }, f);
+      svg('path', { d: 'M-3.2 -7.2 Q-1.6 -9.2 1 -9', fill: 'none', stroke: '#ffffff', 'stroke-width': 1.1, 'stroke-linecap': 'round', opacity: 0.3 }, f);      // Glanz im Haar
+      svg('path', { d: 'M-3.4 -9.6 Q0 -11.8 3.4 -9.6', fill: 'none', stroke: '#e9c3a2', 'stroke-width': 2, 'stroke-linecap': 'round' }, f);   // Stirn: zeigt die Blickrichtung
       const l = svg('text', { y: 33, 'text-anchor': 'middle', class: 'lab' }, el); l.textContent = c.last;
       // Energie: kleiner Balken unter dem Namen, nur bei deinen Spielern
       let en = null; if (side === 'you') { svg('rect', { x: -12, y: 36.5, width: 24, height: 5, rx: 2.5, fill: '#070b1f', stroke: OUTL, 'stroke-width': 1 }, el); en = svg('rect', { x: -11, y: 37.5, width: 22, height: 3, rx: 1.5, fill: '#34d399' }, el); }
@@ -124,6 +127,7 @@
       F.f.setAttribute('transform', `translate(0 ${bob.toFixed(2)}) rotate(${F.a.toFixed(1)}) scale(1.22)`);
       F.st.setAttribute('transform', `rotate(${(-F.hand * 38 * F.swing + (run ? Math.sin(F.dist / 5.2) * 5 : 0)).toFixed(1)})`);
     });
+    drawTrail(now);
     if (carrier && fig[carrier] && !ballBusy && $('goalview').hidden) { const b = blade(carrier); ballAt([ballP[0] + (b[0] - ballP[0]) * 0.4, ballP[1] + (b[1] - ballP[1]) * 0.4]); }
     Object.keys(keepers).forEach(k => { const K_ = keepers[k], x = 180 + Math.max(-17, Math.min(17, (ballP[0] - 180) * 0.22)); K_.x += (x - K_.x) * 0.12; K_.el.setAttribute('transform', `translate(${K_.x.toFixed(1)} ${K_.y})`); });
     lifeRaf = requestAnimationFrame(life);
@@ -139,7 +143,21 @@
   const camTarget = () => (camMode === 'follow' ? Math.max(0, Math.min(380, ballP[1] - 230)) : (G && G.cur && G.cur.type === 'def' ? 380 : 0));
   function camSet(y) { cam = y; $('pitch').setAttribute('viewBox', `0 ${cam.toFixed(1)} 360 420`); }
   let ballP = [180, 380];
-  function ballAt(p) { ballP = p; $('mball').setAttribute('cx', p[0].toFixed(1)); $('mball').setAttribute('cy', p[1].toFixed(1)); }
+  /* Der Ball zieht bei Pässen und Schüssen eine Leuchtspur: die Stellen der letzten Augenblicke, je älter, desto blasser.
+     Blau, wenn du den Ball hast, gold beim Gegner. */
+  const trail = [];
+  function ballAt(p) {
+    const now = performance.now(), l = trail[trail.length - 1];
+    if (!l || Math.hypot(p[0] - l[0], p[1] - l[1]) > 1.5) trail.push([p[0], p[1], now]);
+    ballP = p; $('mball').setAttribute('cx', p[0].toFixed(1)); $('mball').setAttribute('cy', p[1].toFixed(1)); $('mball-s').setAttribute('cx', (p[0] + 2.5).toFixed(1)); $('mball-s').setAttribute('cy', (p[1] + 4).toFixed(1));
+  }
+  function drawTrail(now) {
+    while (trail.length && now - trail[0][2] > 240) trail.shift();
+    const fast = trail.length > 2 && Math.hypot(trail[trail.length - 1][0] - trail[0][0], trail[trail.length - 1][1] - trail[0][1]) > 26 && !reduce;
+    const d = k => (fast ? 'M' + trail.slice(Math.floor(trail.length * k)).map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L') : '');
+    const col = carrier && sideOf(carrier) === 'home' ? '#ffd76a' : '#9fd4ff';
+    [['trail-a', 0], ['trail-b', 0.35], ['trail-c', 0.65]].forEach(v => { const el = $(v[0]); el.setAttribute('d', d(v[1])); el.setAttribute('stroke', v[1] > 0.6 ? '#ffffff' : col); });
+  }
   const camFollow = k => camSet(cam + (camTarget() - cam) * k);
   function setCarrier(id) {
     Object.keys(els).forEach(k => els[k].querySelector('.carrier-ring').setAttribute('visibility', k === id ? 'visible' : 'hidden'));
@@ -181,9 +199,16 @@
     if (last) return;
     G.teams[as].cards.forEach(c => {
       if (c.id === sc.carrier) return;
-      const a = pos[sc.carrier], b = pos[c.id], pi = M.passInfo(G, sc, sc.carrier, c.id);
-      const col = as === 'you' ? (pi.risk < 0.25 ? '#34d399' : pi.risk < 0.5 ? '#f7d774' : '#ef4444') : '#ffffff';
-      svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: col, 'stroke-width': as === 'you' ? 3 : 2, 'stroke-dasharray': '6 6', opacity: as === 'you' ? 0.85 : 0.4, 'stroke-linecap': 'round' }, g);
+      const a = pos[sc.carrier], b = pos[c.id], pi = M.passInfo(G, sc, sc.carrier, c.id), free = as === 'you' && M.isFree(G, sc, c.id);
+      const col = as === 'you' ? (pi.risk < 0.3 ? '#34d399' : pi.risk < 0.55 ? '#f7d774' : '#ef4444') : '#ffffff';
+      svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: col, 'stroke-width': as === 'you' ? (free ? 4 : 3) : 2, 'stroke-dasharray': free ? '10 5' : '6 6', opacity: as === 'you' ? 0.85 : 0.4, 'stroke-linecap': 'round' }, g);
+      if (free) {
+        // frei: grüner Ring und Schild, damit man den Mitspieler sofort sieht
+        const r = svg('circle', { cx: b[0], cy: b[1], r: 23, fill: 'none', stroke: '#34d399', 'stroke-width': 3, class: 'freering' }, g), lw = 32;
+        svg('rect', { x: b[0] - lw / 2, y: b[1] - 41, width: lw, height: 13, rx: 3, fill: '#34d399', stroke: '#03130c', 'stroke-width': 1 }, g);
+        const t = svg('text', { x: b[0], y: b[1] - 31, 'text-anchor': 'middle', class: 'freelab' }, g); t.textContent = 'FREI';
+        if (!reduce) r.animate([{ opacity: 1, strokeWidth: 3 }, { opacity: 0.35, strokeWidth: 5 }], { duration: 620, iterations: Infinity, direction: 'alternate' });
+      }
     });
   }
   function setKeeperColor() { /* feste Seiten: oben der Goalie des Gegners, unten deiner */ }
@@ -193,13 +218,14 @@
   function setTag(text, tone) { $('tag').textContent = text; $('tag').className = 'tag ' + tone; }
   const say = t => { $('say').textContent = t; };
   function stamp(main, sub, tone, where) {
+    if (main === 'Tor') { hideStamp(); const l = $('led'); l.className = 'led' + (tone === 'bad' ? ' bad' : ''); $('led-s').textContent = sub || ''; l.hidden = false; const t = $('led-t'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = ''; return; }      // Tor: grosse Anzeigetafel
     const el = $('stamp'); el.className = 'stamp ' + tone + (where ? ' ' + where : '');
     el.querySelector('b').textContent = main; el.querySelector('span').textContent = sub || ''; el.hidden = false; fresh(el);
     const base = where === 'low' ? 'translate(-50%,0)' : 'translate(-50%,-50%)';
     anim(el, [{ transform: base + ' scale(1.7) rotate(-4deg)', opacity: 0 }, { transform: base + ' scale(1) rotate(-4deg)', opacity: 1 }], { duration: 240, easing: 'cubic-bezier(.2,1.6,.4,1)' });
     $('live').textContent = main + '. ' + (sub || '');
   }
-  function hideStamp() { const el = $('stamp'); fresh(el); el.hidden = true; }
+  function hideStamp() { const el = $('stamp'); fresh(el); el.hidden = true; $('led').hidden = true; }
   function showHint(text, ms) {
     $('hint').hidden = false; $('hint-text').textContent = text;
     const bar = $('hint-bar'); fresh(bar); bar.parentNode.hidden = !ms;
@@ -307,16 +333,21 @@
     phase = 'decide';
     const last = sc.step >= sc.max - 1, xt = TR(X.id);
     setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
-    say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : ' Je breiter das grüne Feld, desto leichter das Timing.'));
-    const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), mk = card('home', cd.by), bl = card('home', pv.by);
+    const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), di = M.dribInfo(G, sc, X.id), mk = card('home', cd.by), bl = card('home', pv.by), direct = Math.abs(pv.oneT) >= 0.25;
+    const anyFree = !last && G.teams.you.cards.some(c => c.id !== X.id && M.isFree(G, sc, c.id));
+    say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.'));
     let h = `<div class="actions2">
-<button type="button" class="act${M.trait(X) === 'kanone' ? ' fit' : ''}" data-a="shoot"><b>${ic('shoot')}Schuss</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
-<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><span class="pct">${fieldPct(cd)}</span>${mini(cd)}<small>${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
+<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
+<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><span class="pct">${fieldPct(cd)}</span>${mini(cd)}<small>${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
     if (!last) {
-      h += '<p class="passes-head">Pass, tippe auch direkt auf dem Feld</p><div class="passes">' + G.teams.you.cards.filter(c => c.id !== X.id).map(c => {
-        const cp = M.contest(G, { type: 'pass', to: c.id }), q = M.shotInfo(G, sc, c.id), by = card('home', cp.by);
+      // Pässe: freie Mitspieler zuerst, dann nach Lage. Dazu, was der Pass bringt: Direktschuss nach Querpass oder sicherer Rückpass.
+      const opts = G.teams.you.cards.filter(c => c.id !== X.id).map(c => { const cp = M.contest(G, { type: 'pass', to: c.id }), v = M.shotPreview(G, c.id, X.id); return { c, cp, v, free: M.isFree(G, sc, c.id) }; })
+        .sort((a, b) => (b.free - a.free) || (b.v.q - a.v.q));
+      h += '<p class="passes-head">Pass, tippe auch direkt auf dem Feld</p><div class="passes">' + opts.map(o => {
+        const c = o.c, by = card('home', o.cp.by), cross = Math.abs(o.v.oneT) >= 0.4 && o.v.q >= 0.45;
         els[c.id].classList.add('pick');
-        return `<button type="button" class="pass" data-to="${c.id}"><span><b class="nm">${esc(c.last)}${enPill(c)}</b><small>${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))} · dort Lage ${lage(q.q)}</small>${mini(cp)}</span><em class="pct">${fieldPct(cp)}</em></button>`;
+        const what = o.free ? '<i class="tr">frei</i>' : '', gain = cross ? 'Direktschuss, Goalie muss rüber' : o.v.q >= 0.45 ? 'Abschluss aus dem Slot' : o.v.q < 0.25 ? 'sicherer Rückpass' : 'Anspielstation';
+        return `<button type="button" class="pass${o.free ? ' free' : ''}" data-to="${c.id}"><span><b class="nm">${esc(c.last)}${enPill(c)}${what}</b><small>${gain} · Lage ${lage(o.v.q)} · ${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))}</small>${mini(o.cp)}</span><em class="pct">${fieldPct(o.cp)}</em></button>`;
       }).join('') + '</div>';
     }
     panel.innerHTML = h;
@@ -423,7 +454,8 @@
           const to = ep(G.cur, e.x), via = [pos[e.by][0] + (pos[e.x][0] < 180 ? 34 : -34), pos[e.by][1]];
           await tween([{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
           setCarrier(e.x);
-          stamp(e.grade === 'perfect' ? 'Perfekt' : 'Vorbei', `${X.last} lässt ${mk.last} stehen.`, 'good', 'low');
+          const hp = e.help ? card(sideOf(e.help), e.help) : null, fr = (e.freed || []).map(id => card(side, id)).filter(Boolean)[0];
+          stamp(e.grade === 'perfect' ? 'Perfekt' : 'Vorbei', `${X.last} lässt ${mk.last} stehen.` + (hp && fr && side === 'you' ? ` ${hp.last} hilft aus: ${fr.last} wird frei.` : ''), 'good', 'low');
           await hold(800); hideStamp();
         } else if (e.ok) {
           const meet = lerp(pos[e.x], pos[e.by], 0.35);
@@ -609,7 +641,7 @@
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
     $('shooter').hidden = true; $('tell').hidden = true; $('power').hidden = true; $('zones').className = 'zones off'; $('aim').toggleAttribute('hidden', true);
     clearTimeout(rx.timer); hideReach(); $('mark').hidden = true; drag = null; target = null;
-    netRest(); crowdSet('you');
+    netRest(); crowdSet('you'); gv.dataset.aim = '0';
   }
   const shotLabel = v => (v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach');
   /* Torsicht. Das Tor ist je nach Lage des Schützen gross (nah) oder klein und weiter oben (fern). Alles am Tor (Goalie,
@@ -754,7 +786,7 @@
     $('ripple').hidden = true; $('spark').hidden = true; $('mark').hidden = true; hideReach(); $('tell').hidden = true;
     const sco = Math.round(M.shotVal(X)), far = sh.q < 0.4 ? 'aus der Distanz' : sh.q < 0.75 ? 'aus mittlerer Distanz' : 'aus der Nähe';
     $('shooter').innerHTML = `<b>${sco}</b><span>${esc(X.last)}<i>Schuss ${shotLabel(sco)}, ${far}</i></span>`; $('shooter').hidden = false;
-    setTag(sh.ctx === 'so' ? 'Penalty' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
+    setTag(sh.ctx === 'so' ? 'Penalty' : sh.oneT ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
     $('aim').toggleAttribute('hidden', true); $('power').hidden = true; $('hint').hidden = true;
     const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Parade ') + ZNAME[b.getAttribute('data-z')]); });
     z.className = 'zones off';
@@ -765,7 +797,7 @@
     }
     // Schuss des Gegners: erst ein kurzer, unterschiedlich langer Anlauf, dann fliegt der Ball. Die Flugzeit ist dein Zeitfenster.
     say(sh.empty ? `${X.last} schiesst aufs leere Tor.` : `${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`);
-    $('hist').innerHTML = sh.empty ? '<em>Dein Goalie ist draussen: Nur ein Fehlschuss rettet dich.</em>' : `<em>${sh.press > 0 ? 'Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? 'Freie Bahn für den Schützen: du hast weniger Zeit.' : 'Der goldene Ring zeigt, wo der Ball hinfliegt.'}</em>`;
+    $('hist').innerHTML = sh.empty ? '<em>Dein Goalie ist draussen: Nur ein Fehlschuss rettet dich.</em>' : `<em>${sh.oneT ? 'Direktschuss nach einem Querpass: Du hast weniger Zeit. ' : ''}${sh.press > 0 ? 'Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? 'Freie Bahn für den Schützen: du hast weniger Zeit.' : 'Der goldene Ring zeigt, wo der Ball hinfliegt.'}</em>`;
     phase = 'wait'; kpr.idle();
     const pulse = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf([START[0], START[1] + 5], 2.3) }], { duration: 300, iterations: Infinity, direction: 'alternate' });
     clearTimeout(rx.timer);
@@ -881,19 +913,20 @@
   }
   // Zurück zum Zielen: am Anfang des Schusses und über «Ziel ändern»
   function reAim() {
-    target = null; drag = null; phase = 'aim';
+    target = null; drag = null; phase = 'aim'; $('goalview').dataset.aim = '1';      // Zielphase (auch für den Browser-Test erkennbar)
     $('aim').toggleAttribute('hidden', true); $('panel').hidden = true;
     say('Tippe ins Tor: Wohin soll der Schuss?');
     if (G.shot.empty) { $('hist').innerHTML = '<em>Der Goalie ist draussen: Das Tor ist leer. Triff einfach das Tor.</em>'; return; }
+    if (G.shot.oneT) { say('Direktschuss! Tippe schnell auf die offene Seite.'); $('hist').innerHTML = '<em>Der Goalie steht noch auf der Seite, von der der Pass kam, und rutscht schon herüber. Je schneller du abziehst, desto mehr ist offen.</em>'; return; }
     $('hist').innerHTML = `<em>Im dunklen Bereich hält der Goalie. ${G.shot.q < 0.45 ? 'Aus der Distanz bleiben nur die Ecken.' : G.shot.q < 0.75 ? 'Frei sind die Ecken, am meisten oben.' : 'Aus der Nähe kommt er nicht weit: weg von ihm reicht.'}</em>`;
   }
   // Ziel steht (g in Torkoordinaten): Jetzt läuft der Schuss-Balken. Schwacher oder müder Schütze: der Strich läuft schneller.
   function setTarget(g) {
     if (phase !== 'aim' || !G.shot || G.shot.side !== 'you') return;
     const sh = G.shot, X = card('you', sh.x), b = M.shotBar(G), by = b.pressed && sh.by ? card('home', sh.by) : null;
-    target = [Math.max(-1.15, Math.min(1.15, g[0])), Math.max(0.04, Math.min(1.15, g[1]))]; drag = null;
+    target = [Math.max(-1.15, Math.min(1.15, g[0])), Math.max(0.04, Math.min(1.15, g[1]))]; drag = null; $('goalview').dataset.aim = '0';
     aimDraw(toView(toScene(target)));
-    say(by ? `${by.last} ist nah: Stoppe den Strich im Feld, sonst blockt er.` : sh.empty ? 'Stoppe den Strich im Feld: Das Tor ist leer.' : 'Stoppe den Strich in der Mitte. Nicht zu lange warten!');
+    say(by ? `${by.last} ist nah: Stoppe den Strich im Feld, sonst blockt er.` : sh.empty ? 'Stoppe den Strich im Feld: Das Tor ist leer.' : sh.oneT ? 'Schnell stoppen: Der Goalie kommt herüber!' : 'Stoppe den Strich in der Mitte. Nicht zu lange warten!');
     $('hist').innerHTML = '<em>Genau in der Mitte geht der Ball genau ins Ziel, daneben weicht er nach links oder rechts ab. Der Goalie ahnt die Ecke: Wartest du zu lange, rückt er hin.</em>';
     openBar({ type: 'aim', target }, { c: b, shot: true, at: 'top', title: `Schuss ${esc(X.last)} ${r0(M.shotVal(X))}${trChip(X.id, 'kanone')}`, sub: `Strich ${tempoTxt(b.sweep)}${sh.calm ? ' (kaltblütig)' : ''} · Energie ${Math.round(X.en)} %${by ? ` · Block ${esc(by.last)}` : ''}`, back: false });
     if (!sh.empty) startCreep(bar.t0);

@@ -27,10 +27,11 @@ const CAND = [];
 [-1, 1].forEach(sd => { [0.06, 0.1, 0.15, 0.22, 0.32, 0.45].forEach(m => { CAND.push([sd * (1 - m), 1 - m * 0.75]); CAND.push([sd * (1 - m), 0.1]); }); });
 const GQ = [-1.9, -1.25, -0.75, -0.35, 0, 0.35, 0.75, 1.25, 1.9], GW = GQ.map(x => Math.exp(-x * x / 2)), GS = GW.reduce((a, b) => a + b, 0);
 // Zeit vom Setzen des Ziels bis zum Stopp: kurz hinschauen, dann beim nächsten Durchgang durch die Mitte tippen
-const tapTime = (pf, sweep, u) => 350 + sweep * (u + pf.wait);
+// Bei einem Direktschuss (quick) wartet er kaum: Der Goalie rutscht schon herüber.
+const tapTime = (pf, sweep, u, quick) => 350 + sweep * (u + pf.wait * (quick ? 0.3 : 1));
 // Torchance für ein Ziel: gemittelt über die eigene Streuung auf dem Balken und den eigenen Zielfehler
 function odds(pf, s, target, pre) {
-  const b = pre.b, sd = pf.s / b.sweep, t = tapTime(pf, b.sweep, 0.5), sg = target[0] < 0 ? -1 : 1, up = target[1] > 0.5 ? 1 : 0; let p = 0, n = 0;
+  const b = pre.b, sd = pf.s / b.sweep, t = tapTime(pf, b.sweep, 0.5, !!s.shot.oneT), sg = target[0] < 0 ? -1 : 1, up = target[1] > 0.5 ? 1 : 0; let p = 0, n = 0;
   for (let k = -1; k <= 1; k++) {
     const tg = [target[0] + sg * k * pf.aim, target[1] + up * k * pf.aim * 0.7];
     for (let i = 0; i < GQ.length; i++) { const v = M.evalShot(s, tg, clamp(b.pos + GQ[i] * sd, 0, 1), t, pre); n += GW[i]; if (!v.blocked && v.result === 'goal') p += GW[i]; }
@@ -42,13 +43,17 @@ function shotPlan(pf, s) {
   CAND.forEach(tg => { if (tg[0] * far < 0) return; const p = odds(pf, s, tg, pre); if (p > best.p) best = { p, target: tg }; });   // nur die Seite, auf der der Goalie nicht steht
   return best;
 }
-/* Grobe Torchance für einen Schuss von Spieler id aus seiner Lage, ohne alles durchzurechnen: Wie weit darf der Ball vom
-   Ziel abweichen, wenn er in die hohe Ecke soll, und wie oft stoppt dieser Spieler den Strich nah genug an der Mitte? */
-function chance(pf, s, sc, id) {
-  const c = s.cfg, pv = M.shotPreview(s, id), t = tapTime(pf, pv.sweep, 0.5), creep = Math.min(c.creepMax, Math.max(0, t - c.creepDelay) / 1000 * c.creepSpeed);
-  const slack = Math.hypot(1 - creep, (1 - c.kY) * c.kYs) - pv.reach, dev = Math.max(0.005, Math.min(slack, 0.5) / 2 - pf.aim * 0.7), core = pv.w * c.barCore / 2;
-  if (slack <= 0) return 0.02;
-  return clamp(erf((core + dev / c.devEdge * (pv.w / 2 - core)) * pv.sweep / (Math.SQRT2 * pf.s)) * (pv.pressed ? 0.85 : 1), 0.03, 0.95);
+/* Torchance für einen Schuss von Spieler id aus seiner Lage: Für ein paar Ziele auf der offenen Seite wird gesucht, wie weit
+   der Strich links und rechts neben der Mitte stehen darf, damit es noch ein Tor ist. Daraus folgt mit der eigenen
+   Streuung die Chance. from: als käme der Ball jetzt per Pass von diesem Spieler (Direktschuss). */
+const TG = [[0.84, 0.86], [0.9, 0.12], [0.7, 0.8], [0.62, 0.14]];
+function chance(pf, s, sc, id, from) {
+  const pv = M.shotPreview(s, id, from), s2 = Object.assign({}, s, { shot: pv.sh }), pre = { b: M.shotBar(s2), R: pv.reach }, sd = pf.s / pre.b.sweep, t = tapTime(pf, pre.b.sweep, 0.5, !!pv.oneT);
+  const kx = pv.sh.keeper.x, sides = kx > 0.1 ? [-1] : kx < -0.1 ? [1] : [-1, 1], goal = (tg, e) => { const v = M.evalShot(s2, tg, clamp(pre.b.pos + e, 0, 1), t, pre); return !v.blocked && v.result === 'goal'; };
+  const edge = (tg, sg) => { let lo = 0, hi = Math.min(0.5, 3 * sd); if (goal(tg, sg * hi)) return hi; for (let i = 0; i < 6; i++) { const m = (lo + hi) / 2; if (goal(tg, sg * m)) lo = m; else hi = m; } return lo; };
+  let best = 0;
+  sides.forEach(sg => TG.forEach(g => { const tg = [sg * g[0], g[1]]; if (!goal(tg, 0)) return; const p = (erf(edge(tg, 1) / (sd * Math.SQRT2)) + erf(edge(tg, -1) / (sd * Math.SQRT2))) / 2; if (p > best) best = p; }));
+  return clamp(best * 0.9, 0.02, 0.95);
 }
 /* Trainer-Entscheide zwischen zwei Chancen: Linie nach der Energie (in den letzten Minuten eines knappen Spiels die erste)
    und Taktikkarten, wenn ihr Moment da ist. style: { rest, back } Schwellen der Energie, never: nie wechseln, cards: false = keine Karten. */
@@ -77,10 +82,11 @@ function policy(pf, style) {
     if (s.phase === 'decide' && sc.type === 'att') {
       const X = sc.carrier, last = sc.step >= sc.max - 1;
       const val = a => { const c = M.contest(s, a); return c.free ? 1 : pHit(pf, c.w, c.sweep); };
-      let best = { v: chance(pf, s, sc, X) * 1.05, a: { type: 'shoot' } };
+      const now = chance(pf, s, sc, X); let best = { v: now * 1.05, a: { type: 'shoot' } }, mate = 0;
       if (!last) {
-        s.teams.you.cards.forEach(c => { if (c.id === X) return; const a = { type: 'pass', to: c.id }, v = val(a) * chance(pf, s, sc, c.id) * 0.9; if (v > best.v) best = { v, a }; });
-        const vd = val({ type: 'dribble' }) * Math.min(0.95, chance(pf, s, sc, X) + 0.2) * 0.9; if (vd > best.v) best = { v: vd, a: { type: 'dribble' } };
+        // Pass: Was der Mitspieler aus dem Direktschuss macht. Dribbling: danach aus besserer Lage schiessen oder den frei gewordenen Mitspieler anspielen.
+        s.teams.you.cards.forEach(c => { if (c.id === X) return; const a = { type: 'pass', to: c.id }, sh = chance(pf, s, sc, c.id, X), v = val(a) * sh * 0.92; mate = Math.max(mate, sh); if (v > best.v) best = { v, a }; });
+        const vd = val({ type: 'dribble' }) * Math.min(0.92, Math.max(now + 0.14, mate * 0.8)) * 0.9; if (vd > best.v) best = { v: vd, a: { type: 'dribble' } };
       }
       const c = M.contest(s, best.a);
       return c.free ? best.a : Object.assign({ hit: tap(c.pos, c.sweep) }, best.a);
@@ -90,7 +96,7 @@ function policy(pf, style) {
       // Kaltblütig: für einen Schuss aus guter Lage oder im Penaltyschiessen
       if ((!style || style.cards !== false) && !s.shot.calm && s.tac.you.some(x => x.id === 'calm' && !x.used) && (s.shot.q >= 0.6 || s.shot.ctx === 'so')) return { type: 'card', id: 'calm' };
       const pl = shotPlan(pf, s), b = M.shotBar(s);
-      return { type: 'aim', hit: tap(b.pos, b.sweep), t: tapTime(pf, b.sweep, r()), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] };
+      return { type: 'aim', hit: tap(b.pos, b.sweep), t: tapTime(pf, b.sweep, r(), !!s.shot.oneT), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] };
     }
     if (s.phase === 'aim') { const sh = s.shot; return { type: 'aim', zone: r() < pf.zerr ? pick(M.ZONES.filter(z => z !== sh.zone), r) : sh.zone, rt: Math.max(160, pf.rt + gauss(r) * pf.rtSd) }; }
     return coach(s, style) || { type: 'next' };

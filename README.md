@@ -56,6 +56,28 @@ Wirkung der Taktik für den mittleren Modell-Spieler (zwei Linien um 81 und 76 g
 
 Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner den Goalie raus, schiesst du aufs leere Tor.
 
+**Angriff mit Spielzügen.** Früher war «dreimal dribbeln, dann schiessen» die beste Spielweise, Pässe brachten nichts. Jetzt hat jede Aktion ihren Zweck:
+
+- **Aufstellung:** Im Positionsangriff steht der Ballführende an der Bande, in der Mitte oder hinten. Der Center läuft in den Slot, der ballferne Flügel an den zweiten Pfosten, der ballnahe bleibt als Anspielstation, die Verteidiger sichern. Die Gegner decken gefährliche Spieler im Passweg. Kommt einer zu spät, ist sein Mann frei: grüner Ring und Schild «FREI» auf dem Feld, der Pass steht zuoberst in der Liste.
+- **Dribbling zieht Hilfe:** Wer seinen Gegenspieler schlägt, kommt näher ans Tor, aber nicht tiefer als bis vor den Slot. Der nächste Verteidiger stellt sich ihm in den Weg und lässt dafür seinen Mann frei. Jedes weitere Dribbling desselben Spielers in der Chance hat ein um 40 % kleineres Feld.
+- **Direktschuss:** Ein Pass verschiebt den Goalie. Schiesst der Empfänger sofort, steht der Goalie noch auf der Seite, von der der Ball kam (umso weiter, je quer der Pass war), reicht weniger weit und rutscht nach einer halben Sekunde herüber. Wer schnell abzieht, hat die offene Seite. Ein knapp angekommener Pass gibt keinen Direktschuss.
+- **Passwege:** Der Verteidiger, der am besten im Weg steht, zählt voll, weitere zu einem Drittel. Grün ist ein offener Weg, gelb ein enger, rot ein zugestellter.
+- **Block:** Blocken kann nur, wer in der Schussbahn steht. Nach einem Querpass steht der Gegenspieler im Passweg, nicht in der Schussbahn.
+- **Der Gegner spielt gleich:** Er sucht den freien Mann und zieht nach einem Querpass direkt ab. Dann hast du bei der Parade weniger Zeit.
+
+Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (500 Matches je Zeile):
+
+| Spielweise | Siegquote | Tor je Chance |
+|---|---|---|
+| klug mischen (4 Pässe, 2 Dribblings pro Match) | 44 % | 45 % |
+| Pass zum besten Mitspieler, dann Schuss | 42 % | 42 % |
+| Dribbling, Pass, Schuss | 39 % | 40 % |
+| sofort schiessen | 28 % | 29 % |
+| ein Dribbling, dann Schuss | 26 % | 29 % |
+| immer dribbeln | 23 % | 29 % |
+
+**Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
+
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
 
 - **Timing-Balken:** Jeder Pass, jedes Dribbling, jeder Schuss und jede Abwehraktion läuft über einen Balken. Ein Strich läuft hin und her, getippt wird irgendwo auf dem Bildschirm, ohne Zeitlimit. Die Karten bestimmen die Breite des grünen Felds: Grundlage ist der Wertevergleich (zum Beispiel Pass gegen Antizipation), eine Spezialfähigkeit macht es breiter.
@@ -80,13 +102,13 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 
 Ein müder Schütze (Energie 30) trifft aus der Nähe statt 31, 45, 62 und 70 % noch 24, 35, 47 und 57 %.
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 500 Matches je Feld, Siegquote:
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 400 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 30 % | 62 % | 95 % | 98 % | 100 % |
-| mittel | 3 % | 17 % | 43 % | 81 % | 98 % |
-| schwach | 0 % | 1 % | 6 % | 32 % | 66 % |
+| stark | 32 % | 65 % | 91 % | 100 % | 100 % |
+| mittel | 3 % | 14 % | 47 % | 81 % | 97 % |
+| schwach | 0 % | 2 % | 9 % | 26 % | 63 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

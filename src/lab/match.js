@@ -5,7 +5,11 @@
    Eine Chance ist ein Positionsangriff, ein Konter 3 gegen 2, ein Konter 2 gegen 1 oder selten ein Alleingang.
    Nichts wird gewürfelt, was der User selbst entscheiden kann. Jeder Zweikampf läuft über einen Timing-Balken: Ein Strich
    läuft hin und her, der User tippt, wenn er im grünen Feld ist. Die Karten bestimmen, wie breit das Feld ist.
-   Angriff: Der Ballführende kann schiessen, passen oder dribbeln.
+   Angriff: Der Ballführende kann schiessen, passen oder dribbeln. Die Mitspieler laufen sich frei: einer in den Slot, der
+   ballferne Flügel an den zweiten Pfosten. Ein Dribbling schlägt den Gegenspieler und zieht den nächsten Verteidiger als
+   Hilfe an, dessen Mann wird frei. Jedes weitere Dribbling desselben Spielers ist deutlich schwerer, und näher als bis vor
+   den Slot kommt man so nicht. Ein Pass verschiebt den Goalie: Wer direkt nach einem Querpass schiesst (Direktschuss),
+   findet ihn noch auf der anderen Seite, aber er rutscht schnell herüber.
    Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst, der User trifft das Timing.
    Eigener Schuss: ins Tor tippen (Ziel), dann den Schuss-Balken stoppen. Genau in der Mitte geht der Ball genau ins Ziel;
    steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab. Bei einem schwachen oder müden
@@ -39,7 +43,7 @@
     // Timing-Balken: Durchlauf in ms, Streuung eines durchschnittlichen Spielers in ms (bei ihr trifft er so oft wie die
     // Chance aus dem Wertevergleich), kleinstes und grösstes Feld, Anteil des perfekten Kerns, «knapp daneben»
     barSweep: 900, barRef: 80, barMin: 0.045, barMax: 0.34, barCore: 0.26, barNear: 0.07, barGross: 0.2,
-    blockFree: 0.08,                                                  // darunter ist der Schuss frei, ohne Balken
+    blockFree: 0.2,                                                  // darunter ist der Schuss frei, ohne Balken
     defScale: 0.8, defBlock: 0.7,                                     // Feld in der Abwehr, gegen Schüsse etwas schmaler
     pressGood: 130, pressNear: 60,                                    // gestörter Gegner: so viele ms mehr Zeit für die Parade
     // Streuung der Schüsse des Gegners (Radius um sein Ziel, Tor von -1 bis 1), vor allem nach dem Abschlusswert
@@ -68,10 +72,22 @@
        fxEmptyAtt. Mauern: Chancen des Gegners mal fxWallOpp, eigene mal fxWallOwn. */
     fxTimeout: 30, fxPress: 2, fxPressAi: 0.8, fxPlay: 1.25, fxPlayAi: 0.85, fxCalm: 1.4, fxEmptyOwn: 2, fxEmptyAtt: 1.15, fxWallOpp: 0.5, fxWallOwn: 0.6,
     // Reaktionsparade: Zeit in ms, bis der Ball im Tor ist
-    aiPowMin: 0.1, rxBase: 355, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
+    aiPowMin: 0.1, rxBase: 400, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
     blockBase: 0.65,                                                  // Schuss geblockt, wenn ein Gegner ganz nah steht
     // Pass und Dribbling
-    laneRange: 40, intercept: 0.55, passLong: 700,
+    /* Dribbling: Raumgewinn in Feldeinheiten (perfekt mehr), aber nie näher ans Tor als dribStop. Jedes weitere Dribbling
+       desselben Spielers in der Chance: Chance mal dribRepeat. Ein Verteidiger im Umkreis helpRange hilft aus.
+       Frei ist ein gefährlich stehender Mitspieler mit offenem Passweg (Risiko höchstens freeRisk). Enge Deckung
+       (tightDist) macht den Pass riskanter. */
+    dribStep: 62, dribStepPerfect: 84, dribStop: 88, dribRepeat: 0.6, helpRange: 135, freeRisk: 0.34, tightDist: 26, tightRisk: 0.1,
+    /* Deckung: Wer gefährlich steht (näher als dangerDist am Tor), wird im Passweg gedeckt (denyAt: Anteil des Wegs zum
+       Ball). Mit Wahrscheinlichkeit lateProb kommt sein Gegenspieler zu spät: Dann ist er frei. */
+    dangerDist: 150, denyAt: 0.3, lateProb: 0.3,
+    /* Direktschuss nach einem Pass: Der Goalie steht noch auf der Seite, von der der Ball kam (kOneT mal Querbewegung des
+       Passes), reicht weniger weit (reachOneT) und rutscht nach oneTDelay ms mit oneTSpeed herüber, höchstens oneTMax.
+       Schuss des Gegners direkt nach einem Querpass: rxOneT ms weniger Zeit für die Parade. */
+    kOneT: 0.58, reachOneT: 0.16, oneTDelay: 500, oneTSpeed: 0.35, oneTMax: 0.9, rxOneT: 110,
+    laneRange: 36, laneMore: 0.35, intercept: 0.55, passLong: 700,
     drib: 0.52, dribSlope: 0.022, dribMin: 0.12, dribMax: 0.9,
     // Abwehrszene: richtige Abwehr stoppt so oft, verschoben um den Wertevergleich
     stopRight: 0.5, stopSlope: 0.02, stopMin: 0.25, stopMax: 0.92, stopHalf: 0.15,
@@ -152,7 +168,13 @@
   function shotInfo(s, sc, id) {
     const side = atkSide(sc), X = card(s, side, id), p = P(sc, id), d = dist(p, GOAL);
     const q = clamp(1 - (d - 55) / 250, 0.12, 1) * clamp(1 - Math.abs(p[0] - 180) / 280, 0.5, 1);
-    const n = nearest(s, sc, other(side), p), press = clamp(1 - n.d / 55, 0, 1);
+    // Blocken kann, wer in der Schussbahn steht (je näher am Schützen, desto eher) oder ihm direkt auf den Füssen steht
+    const n = { c: null, d: Infinity }; let press = 0;
+    players(s, other(side)).forEach(x => {
+      const q_ = P(sc, x.id), near = dist(q_, p), v = Math.max(clamp(1 - distSeg(q_, p, GOAL) / 30, 0, 1) * clamp(1.25 - near / 130, 0.25, 1), clamp(1 - near / 22, 0, 1));
+      if (v > press || (!n.c && near < n.d)) { if (v >= press) { press = v; n.c = x; n.d = near; } }
+    });
+    if (!n.c) { const m = nearest(s, sc, other(side), p); n.c = m.c; n.d = m.d; }
     const block = clamp(press * s.cfg.blockBase * clamp(1 + (stanceVal(n.c, 'block') - shotVal(X)) * 0.02, 0.5, 1.5) * (has(n.c, 'wand') ? 1.4 : 1), 0, 0.75);
     // Grobe Torchance für die Anzeige, bei einem guten Schuss in eine freie Ecke
     const est = (1 - block) * clamp(0.5 + (shotVal(X) - 88) * 0.012 + (q - 0.6) * 0.7 + (has(X, 'kanone') ? 0.1 : 0), 0.05, 0.9);
@@ -161,33 +183,75 @@
   // Risiko, dass der Pass abgefangen wird: Gegner nahe der Passlinie, Länge des Passes, Vorlagen des Passgebers
   function passInfo(s, sc, from, to) {
     const side = atkSide(sc), a = P(sc, from), b = P(sc, to), X = card(s, side, from);
-    let keep = 1, by = null, worst = 0;
+    // Der Verteidiger, der am besten im Passweg steht, zählt voll, jeder weitere nur zu einem Teil (laneMore)
+    let by = null, worst = 0; const rs = [];
     players(s, other(side)).forEach(d => {
-      const r = clamp(1 - distSeg(P(sc, d.id), a, b) / s.cfg.laneRange, 0, 1) * clamp(s.cfg.intercept + (stanceVal(d, 'pass') - 88) * 0.025, 0.15, 0.95) * (has(d, 'anti') ? 1.35 : 1);
-      keep *= 1 - r; if (r > worst) { worst = r; by = d.id; }
+      const r = clamp(1 - distSeg(P(sc, d.id), a, b) / s.cfg.laneRange, 0, 1) * clamp(s.cfg.intercept + (stanceVal(d, 'pass') - 88) * 0.025, 0.15, 0.95) * (has(d, 'anti') ? 1.35 : 1) * (d.id === sc.mark[from] ? 0.5 : 1);      // der eigene Gegenspieler steht zum Ball, nicht im Passweg
+      rs.push(r); if (r > worst) { worst = r; by = d.id; }
     });
-    const risk = ((1 - keep) * clamp(1.4 - (passVal(X) - 70) / 60, 0.5, 1.3) + Math.max(0, dist(a, b) - 160) / s.cfg.passLong) * (has(X, 'passer') ? 0.5 : 1);
+    rs.sort((x, y) => y - x); const keep = (1 - Math.min(0.97, rs[0] || 0)) * rs.slice(1).reduce((k, r) => k * (1 - s.cfg.laneMore * Math.min(0.97, r)), 1);
+    const tight = nearest(s, sc, other(side), b).d < s.cfg.tightDist ? s.cfg.tightRisk : 0;          // eng gedeckter Empfänger
+    const risk = ((1 - keep) * clamp(1.4 - (passVal(X) - 70) / 60, 0.5, 1.3) + Math.max(0, dist(a, b) - 160) / s.cfg.passLong + tight) * (has(X, 'passer') ? 0.5 : 1);
     if (!by) by = nearest(s, sc, other(side), lerp(a, b, 0.5)).c.id;   // langer Pass ohne Gegner in der Linie: der nächste läuft ihn ab
-    return { risk: clamp(risk, 0.03, 0.9), by };
+    return { risk: clamp(risk, 0.03, 0.9), by, lat: clamp((b[0] - a[0]) / 160, -1, 1) };   // lat: Querbewegung des Balls, -1 ganz nach links bis 1 ganz nach rechts
   }
+  // Frei ist, wer keinen Gegner in der Nähe hat
+  // Frei ist ein Mitspieler, der gefährlich steht, einen offenen Passweg vom Ballführenden hat und keinen Gegner direkt bei sich
+  const isFree = (s, sc, id) => id !== sc.carrier && dist(P(sc, id), GOAL) <= (sc.kind === 'set' ? s.cfg.dangerDist : 230) && passInfo(s, sc, sc.carrier, id).risk <= s.cfg.freeRisk && nearest(s, sc, other(atkSide(sc)), P(sc, id)).d > s.cfg.tightDist;
+  // Querbewegung des letzten Passes, wenn id ihn gerade bekommen hat und sofort schiesst (Direktschuss), sonst 0
+  const oneTimer = (sc, id) => (sc.last && sc.last.type === 'pass' && sc.last.to === id ? sc.last.lat : 0);
   function dribInfo(s, sc, id) {
     const side = atkSide(sc), X = card(s, side, id), M = card(s, other(side), sc.mark[id]);
     const space = (dist(P(sc, id), P(sc, M.id)) - 40) / 200;
     const bonus = (has(X, 'dribbler') ? s.cfg.traitBonus : 0) - (has(M, 'kampf') ? s.cfg.traitBonus : 0);
-    return { p: clamp(s.cfg.drib + (dribVal(X) - stanceVal(M, 'zwei')) * s.cfg.dribSlope + space + bonus, s.cfg.dribMin, s.cfg.dribMax), by: M.id, edge: dribVal(X) - stanceVal(M, 'zwei'), av: dribVal(X), dv: stanceVal(M, 'zwei') };
+    const again = (sc.dribs && sc.dribs[id]) || 0;                                          // wie oft er in dieser Chance schon gedribbelt hat
+    return { p: clamp((s.cfg.drib + (dribVal(X) - stanceVal(M, 'zwei')) * s.cfg.dribSlope + clamp(space, -0.12, 0.3) + bonus) * Math.pow(s.cfg.dribRepeat, again), s.cfg.dribMin, s.cfg.dribMax), by: M.id, again, edge: dribVal(X) - stanceVal(M, 'zwei'), av: dribVal(X), dv: stanceVal(M, 'zwei') };
   }
 
-  // Laufwege: Nach jeder gelungenen Aktion bewegen sich die anderen Angreifer, ihre Gegenspieler folgen ihnen.
+  /* Wohin ein Angreifer ohne Ball im Positionsangriff läuft: der Center in den Slot, der ballferne Flügel an den zweiten
+     Pfosten, der ballnahe bleibt als Anspielstation an der Bande, die Verteidiger sichern hinten. */
+  function spotOf(role, left) {
+    if (role === 'LD' || role === 'RD') return [role === 'LD' ? 104 : 256, 290];
+    if (role === 'C') return [180 + (left ? 18 : -18), 130];
+    return (role === 'LW') !== left ? [role === 'LW' ? 124 : 236, 94] : [role === 'LW' ? 62 : 298, 152];
+  }
+  /* Wo der Gegenspieler eines Angreifers ohne Ball steht. Steht der Angreifer gefährlich, stellt er den Passweg zu: ein
+     Stück auf der Linie zum Ball, leicht torseitig. Kommt er zu spät (late), bleibt er auf halbem Weg hängen, und sein Mann
+     ist frei. Wer weit hinten steht, wird nur locker gedeckt. */
+  function coverPos(s, sc, id, d, late) {
+    const c = s.cfg, a = P(sc, id), ball = P(sc, sc.carrier);
+    if (dist(a, GOAL) > c.dangerDist) return lerp(a, GOAL, 0.36);
+    const t = lerp(a, ball, c.denyAt), deny = lerp(t, GOAL, 0.1);
+    if (!late) return deny;
+    // zu spät: Er steht tief und vom Ball abgewandt, der Passweg ist offen
+    const deep = lerp(a, GOAL, 0.55), away = a[0] >= ball[0] ? 1 : -1;
+    return [clamp(deep[0] + away * 32, 60, 300), deep[1]];
+  }
+  // Laufwege: Nach jeder gelungenen Aktion laufen sich die anderen Angreifer frei (im Konter: alle aufs Tor), die Gegenspieler folgen.
   function shift(s, sc, rng) {
-    const n = {}; Object.keys(sc.mark).forEach(a => { n[sc.mark[a]] = (n[sc.mark[a]] || 0) + 1; });
-    players(s, atkSide(sc)).forEach(c => {
+    const as = atkSide(sc), left = P(sc, sc.carrier)[0] < 180, n = {}, busy = sc.mark[sc.carrier];
+    Object.keys(sc.mark).forEach(a => { n[sc.mark[a]] = (n[sc.mark[a]] || 0) + 1; });
+    players(s, as).forEach(c => {
       if (c.id === sc.carrier) return;
-      const t = lerp(P(sc, c.id), GOAL, 0.06);
-      sc.pos[c.id] = [clamp(t[0] + (rng() - 0.5) * 40, 30, 330), clamp(t[1] + (rng() - 0.5) * 26, 90, 360)];
-      const d = sc.mark[c.id]; if (n[d] > 1) return;       // im Konter deckt ein Verteidiger mehrere: er bleibt, wo er ist
-      const mp = lerp(sc.pos[c.id], GOAL, 0.22 + rng() * 0.12), side = sc.pos[c.id][0] < 170 ? 1 : -1;
-      sc.pos[d] = [mp[0] + side * 18, mp[1] - 6];
+      const p = sc.kind === 'set' ? lerp(P(sc, c.id), spotOf(c.role, left), 0.6) : lerp(P(sc, c.id), GOAL, 0.2);
+      sc.pos[c.id] = [clamp(p[0] + (rng() - 0.5) * 16, 30, 330), clamp(p[1] + (rng() - 0.5) * 12, 84, 360)];
+      const d = sc.mark[c.id]; if (!d || n[d] > 1 || d === busy) return;       // deckt mehrere oder ist beim Ballführenden: bleibt
+      sc.pos[d] = sc.kind === 'set' ? coverPos(s, sc, c.id, d, (sc.freed || []).indexOf(c.id) !== -1 || rng() < s.cfg.lateProb) : lerp(sc.pos[c.id], GOAL, 0.24);
     });
+    sc.freed = null;
+  }
+  /* Nach einem gelungenen Dribbling: Der nächste Verteidiger in der Nähe stellt sich dem Ballführenden in den Weg. Wen er
+     dafür stehen lässt, den muss der Überspielte übernehmen, und der kommt zu spät. Ist keiner nah genug, ist die Bahn frei. */
+  function help(s, sc, X, beaten) {
+    const ds = other(atkSide(sc)), p = P(sc, X); let h = null, hd = s.cfg.helpRange;
+    players(s, ds).forEach(d => { if (d.id === beaten) return; const v = dist(P(sc, d.id), p); if (v < hd) { hd = v; h = d.id; } });
+    if (!h) return null;
+    const left = Object.keys(sc.mark).filter(a => sc.mark[a] === h && a !== X);
+    sc.pos[h] = lerp(p, GOAL, clamp(30 / dist(p, GOAL), 0.1, 0.6));
+    sc.mark[X] = h;
+    left.forEach(a => { sc.mark[a] = beaten; });
+    sc.freed = left;                                            // beim nächsten Verschieben kommt der Überspielte zu spät
+    return { by: h, free: left };
   }
 
   // --- Szenen ---
@@ -195,18 +259,17 @@
      der Spieler ist vorne dabei, der Rest läuft hinterher) oder solo (Alleingang, führt direkt zum Schuss). */
   function makeScene(s, rng, type, opt) {
     const o = opt || {}, kind = o.kind || 'set', as = type === 'att' ? 'you' : 'home', ds = other(as), c = s.cfg;
-    const sc = { type, kind, step: 0, max: kind === 'set' ? (type === 'def' ? c.defSteps : c.maxSteps) : c.counterSteps, counter: kind !== 'set', pos: {}, mark: {}, carrier: null, intent: null, press: 0 };
+    const sc = { type, kind, step: 0, max: kind === 'set' ? (type === 'def' ? c.defSteps : c.maxSteps) : c.counterSteps, counter: kind !== 'set', pos: {}, mark: {}, carrier: null, intent: null, press: 0, dribs: {}, last: null };
     const byRole = side => { const m = {}; players(s, side).forEach(x => { m[x.role] = x; }); return m; };
     const A = byRole(as), D = byRole(ds);
     if (kind === 'set') {
-      ROLES.forEach(r => { sc.pos[A[r].id] = jit(rng, FORM[r], 16); });
-      ROLES.forEach(r => {
-        const a = A[r], d = D[MARKS[r]], pa = sc.pos[a.id];
-        sc.mark[a.id] = d.id;
-        const mp = lerp(pa, GOAL, 0.2 + rng() * 0.14), side = pa[0] < 170 ? 1 : pa[0] > 190 ? -1 : (rng() < 0.5 ? -1 : 1);
-        sc.pos[d.id] = jit(rng, [mp[0] + side * 20, mp[1] - 6], 5);   // leicht zur Mitte versetzt, damit sich die Namen nicht überdecken
-      });
-      sc.carrier = o.carrier && card(s, as, o.carrier) ? o.carrier : A[sample({ C: 0.3, LW: 0.2, RW: 0.2, LD: 0.15, RD: 0.15 }, rng)].id;
+      /* Der Ballführende steht auf seinem Platz (Bande, Mitte oder hinten). Die anderen haben sich schon freigelaufen:
+         Center im Slot, ballferner Flügel am zweiten Pfosten. Ihre Gegenspieler stellen die Passwege zu, nicht jeder rechtzeitig. */
+      const car = o.carrier && card(s, as, o.carrier) ? card(s, as, o.carrier) : A[sample({ C: 0.22, LW: 0.24, RW: 0.24, LD: 0.15, RD: 0.15 }, rng)];
+      sc.carrier = car.id; sc.pos[car.id] = jit(rng, FORM[car.role], 12);
+      const left = car.role === 'C' ? rng() < 0.5 : sc.pos[car.id][0] < 180;
+      ROLES.forEach(r => { if (A[r].id !== car.id) sc.pos[A[r].id] = jit(rng, spotOf(r, left), 9); sc.mark[A[r].id] = D[MARKS[r]].id; });
+      ROLES.forEach(r => { const a = A[r], d = sc.mark[a.id]; sc.pos[d] = a.id === car.id ? jit(rng, lerp(sc.pos[a.id], GOAL, clamp(34 / dist(sc.pos[a.id], GOAL), 0.1, 0.5)), 4) : jit(rng, coverPos(s, sc, a.id, d, rng() < c.lateProb), 4); });
     } else {
       const nA = kind === 'rush32' ? 3 : kind === 'rush21' ? 2 : 1, nD = kind === 'rush32' ? 2 : kind === 'rush21' ? 1 : 0;
       const car = o.carrier && card(s, as, o.carrier) ? card(s, as, o.carrier) : A[sample({ C: 0.4, LW: 0.3, RW: 0.3 }, rng)];
@@ -234,10 +297,10 @@
   function aiIntent(s, rng) {
     const sc = s.cur, X = card(s, 'home', sc.carrier), sh = shotInfo(s, sc, sc.carrier), w = {};
     if (sc.step >= sc.max - 1) { sc.intent = { kind: 'shoot' }; return; }
-    w.shoot = sh.q * sh.q * (shotVal(X) / 90) * 1.6 * (1 - sh.block) + sc.step * 0.15;
+    w.shoot = (sh.q * sh.q * (shotVal(X) / 90) * 1.6 * (1 - sh.block) + sc.step * 0.15) * (1 + 1.5 * Math.abs(oneTimer(sc, sc.carrier)));      // nach einem Querpass zieht er gern direkt ab
     let bestTo = null, bestV = 0;
-    players(s, 'home').forEach(c => { if (c.id === sc.carrier) return; const v = (1 - passInfo(s, sc, sc.carrier, c.id).risk) * shotInfo(s, sc, c.id).q; if (v > bestV) { bestV = v; bestTo = c.id; } });
-    w.pass = bestV * 0.9;
+    players(s, 'home').forEach(c => { if (c.id === sc.carrier) return; const pi = passInfo(s, sc, sc.carrier, c.id), v = (1 - pi.risk) * shotInfo(s, sc, c.id).q * (1 + 0.5 * Math.abs(pi.lat)) * (isFree(s, sc, c.id) ? 1.3 : 1); if (v > bestV) { bestV = v; bestTo = c.id; } });
+    w.pass = bestV * 1.1;
     w.dribble = dribInfo(s, sc, sc.carrier).p * 0.45;
     const kind = sample(w, rng);
     sc.intent = kind === 'pass' ? { kind, to: bestTo } : { kind };
@@ -306,11 +369,12 @@
   function reach(s, sh) {
     const c = s.cfg, X = card(s, 'you', sh.x);
     if (sh.empty) return -1;                                                            // Goalie des Gegners ist draussen: leeres Tor
-    return clamp(c.reach + c.reachDist * (1 - sh.q) - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0), c.reachMin, c.reachMax);
+    return clamp(c.reach + c.reachDist * (1 - sh.q) - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0) - c.reachOneT * Math.abs(sh.oneT || 0), c.reachMin, c.reachMax);
   }
   // Wo der Goalie t ms nach dem Setzen des Ziels steht: Er rückt zur Seite des Ziels, aber nie darüber hinaus.
   function keeperAt(s, sh, target, t) {
-    const c = s.cfg, k0 = sh.keeper.x, gap = target[0] - k0, move = Math.min(c.creepMax, Math.max(0, (t || 0) - c.creepDelay) / 1000 * c.creepSpeed, Math.abs(gap));
+    const c = s.cfg, k0 = sh.keeper.x, gap = target[0] - k0, one = !!sh.oneT;                 // nach einem Querpass rutscht er sofort und schnell herüber
+    const move = Math.min(one ? c.oneTMax : c.creepMax, Math.max(0, (t || 0) - (one ? c.oneTDelay : c.creepDelay)) / 1000 * (one ? c.oneTSpeed : c.creepSpeed), Math.abs(gap));
     return k0 + Math.sign(gap) * move;
   }
   // Abstand eines Punkts im Tor vom Körper des Goalies, wie er für die Parade zählt
@@ -336,11 +400,13 @@
     const tempo = clamp(1 + (shotVal(X) - 88) * c.shotTempo, c.tempoMin, c.tempoMax) * (has(X, 'kanone') ? 1.15 : 1) * tired(c, X) * (sh.calm ? c.fxCalm : 1);
     return { w: clamp((c.shotW + c.shotWq * sh.q) * (1 - c.shotPress * clamp(sh.block / 0.75, 0, 1)), c.shotWMin, c.barMax), pos: 0.5, start: sh.start, sweep: Math.round(Math.max(c.sweepMin, c.barSweep * tempo)), pressed: sh.block >= c.blockFree, by: sh.by };
   }
-  // Vorschau für einen Schuss von Spieler id aus der laufenden Szene: Lage, Druck, Reichweite des Goalies und Schuss-Balken
-  function shotPreview(s, id) {
-    const sc = s.cur, si = shotInfo(s, sc, id), sh = { side: 'you', x: id, q: si.q, ctx: sc.counter ? 'counter' : 'attack', block: si.block, by: si.by, start: 0, calm: !!(s.fx && s.fx.you.calm > 0), empty: !!(s.fx && s.fx.home.empty) };
+  /* Vorschau für einen Schuss von Spieler id aus der laufenden Szene: Lage, Druck, Reichweite des Goalies und Schuss-Balken.
+     from: als käme der Ball jetzt per Pass von diesem Spieler (Direktschuss). sh ist der gedachte Schuss für evalShot. */
+  function shotPreview(s, id, from) {
+    const sc = s.cur, si = shotInfo(s, sc, id), oneT = from ? passInfo(s, sc, from, id).lat : oneTimer(sc, id);
+    const sh = { side: 'you', x: id, q: si.q, ctx: sc.counter ? 'counter' : 'attack', block: si.block, by: si.by, start: 0, oneT, keeper: { x: clamp(-oneT * s.cfg.kOneT, -0.6, 0.6) }, calm: !!(s.fx && s.fx.you.calm > 0), empty: !!(s.fx && s.fx.home.empty) };
     const b = shotBar(Object.assign({}, s, { shot: sh }));
-    return { q: si.q, block: si.block, by: si.by, reach: reach(s, sh), sweep: b.sweep, w: b.w, pressed: b.pressed };
+    return { q: si.q, block: si.block, by: si.by, reach: reach(s, sh), sweep: b.sweep, w: b.w, pressed: b.pressed, oneT, free: isFree(s, sc, id), sh };
   }
   /* Bereitet einen Schuss vor.
      Dein Schuss: Der Goalie steht fast in der Mitte (keeper.x). block und by: Druck des nächsten Gegners.
@@ -358,10 +424,12 @@
       sh.power = power; sh.land = land; sh.miss = missOf(c, land); sh.zone = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])); sh.dv = dv;
       sh.window = Math.round(clamp(c.rxBase - c.rxPow * (power - 0.5) - (shotVal(X) - 88) * c.rxVal + (dv - 93) * c.rxVal + c.rxDist * (1 - q)
         - (ctx === 'counter' ? c.rxCounter : 0) - (has(X, 'kanone') ? c.rxTrait : 0) + (o.press || 0), c.rxMin, c.rxMax));
+      if (o.oneT) { sh.oneT = o.oneT; sh.window = Math.round(clamp(sh.window - c.rxOneT * Math.abs(o.oneT), c.rxMin, c.rxMax)); }      // Direktschuss: weniger Zeit
       sh.press = o.press || 0; sh.empty = !!(s.fx && s.fx.you.empty);                    // dein Goalie ist draussen: jeder Schuss aufs Tor ist drin
     } else {
       sh.block = o.block || 0; sh.by = o.by || null; sh.start = rng();
-      sh.keeper = { x: (rng() * 2 - 1) * c.kOff };
+      sh.oneT = o.oneT || 0;
+      sh.keeper = { x: sh.oneT ? clamp(-sh.oneT * c.kOneT + (rng() * 2 - 1) * 0.05, -0.6, 0.6) : (rng() * 2 - 1) * c.kOff };
       if (s.fx) { sh.calm = s.fx.you.calm > 0; if (sh.calm) s.fx.you.calm--; sh.empty = s.fx.home.empty; }
     }
     s.shot = sh; s.phase = 'aim';
@@ -549,26 +617,33 @@
     if (a.type === 'shoot') {
       const sh = shotInfo(s, sc, X);
       ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
-      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', { block: sh.block, by: sh.by }); return;
+      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', { block: sh.block, by: sh.by, oneT: oneTimer(sc, X) }); return;
     }
     if (a.type === 'pass') {
       s.stats.passes++; drain(me, s.cfg.enPass); drain(card(s, 'you', a.to), s.cfg.enRecv);
       ev.push({ t: 'pass', from: X, to: a.to, ok, grade: g, w: c.w, risk: 1 - c.p, by: c.by, av: passVal(me), dv: stanceVal(D, 'pass'), trait: has(me, 'passer') ? 'passer' : null, dtrait: has(D, 'anti') ? 'anti' : null });
       if (!ok) { sc.pos[c.by] = lerp(P(sc, X), P(sc, a.to), 0.5); return lost(s, rng, ev, c.by, g === 'gross' || s.fx.you.empty); }
       s.stats.passOk++;
-      // Der Gegenspieler des Empfängers: nach einem perfekten Pass weit weg, sonst einen Schritt zu spät, nach einem knappen Pass eng dran
-      const m = sc.mark[a.to]; sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), g === 'perfect' ? -0.7 : g === 'near' ? 0.92 : 0.4);
-      sc.carrier = a.to; shift(s, sc, rng); sc.step++; sc.bar = newBar(rng); return;
+      // Der Gegenspieler des Empfängers rückt nach: nach einem perfekten Pass kaum, nach einem knappen Pass steht er eng dran
+      const m = sc.mark[a.to], lat = passInfo(s, sc, X, a.to).lat; if (m) sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), g === 'perfect' ? 0.05 : g === 'near' ? 0.92 : 0.2);
+      sc.carrier = a.to; shift(s, sc, rng); sc.step++; sc.bar = newBar(rng);
+      sc.last = { type: 'pass', to: a.to, lat: g === 'near' ? 0 : lat };       // knapper Pass: Annahme dauert, kein Direktschuss
+      return;
     }
     s.stats.dribbles++; drain(me, s.cfg.enDrib);
     ev.push({ t: 'dribble', x: X, by: c.by, ok, grade: g, w: c.w, p: c.p, av: dribVal(me), dv: stanceVal(D, 'zwei'), trait: has(me, 'dribbler') ? 'dribbler' : null, dtrait: has(D, 'kampf') ? 'kampf' : null });
     if (!ok) return lost(s, rng, ev, c.by, g === 'gross' || s.fx.you.empty);
+    sc.dribs[X] = (sc.dribs[X] || 0) + 1; sc.last = { type: 'dribble', x: X };
     if (g !== 'near') {
       s.stats.dribOk++;
-      // Vorbei: ein Stück näher ans Tor, der Gegenspieler steht dahinter. Perfekt: noch näher.
-      const p = P(sc, X), to = lerp(p, GOAL, clamp((g === 'perfect' ? 100 : 70) / dist(p, GOAL), 0.2, 0.62));
-      sc.pos[X] = [to[0] + (p[0] < 180 ? 14 : -14), Math.max(80, to[1])];
-      sc.pos[c.by] = [P(sc, c.by)[0], P(sc, c.by)[1] + (g === 'perfect' ? 70 : 46)];
+      /* Vorbei: ein Stück näher ans Tor (perfekt mehr), aber nicht tiefer als bis vor den Slot; von dort geht es nur noch zur
+         Mitte. Der Gegenspieler bleibt stehen, der nächste Verteidiger hilft aus und lässt dafür seinen Mann frei. */
+      const cf = s.cfg, p = P(sc, X), dG = dist(p, GOAL), fwd = Math.min(g === 'perfect' ? cf.dribStepPerfect : cf.dribStep, Math.max(0, dG - cf.dribStop));
+      const to = fwd > 12 ? lerp(p, GOAL, fwd / dG) : [p[0] + Math.sign(180 - p[0]) * 26, p[1]];
+      sc.pos[c.by] = [p[0], p[1] + 6];
+      sc.pos[X] = [clamp(to[0] + (p[0] < 180 ? 12 : -12), 40, 320), Math.max(80, to[1])];
+      const h = help(s, sc, X, c.by);
+      ev[ev.length - 1].help = h ? h.by : null; ev[ev.length - 1].freed = h ? h.free : [];
     }
     shift(s, sc, rng); sc.step++; sc.bar = newBar(rng);
   }
@@ -589,10 +664,14 @@
       s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id, kind });
       closeChance(s, null); startChance(s, rng, 'you', kind, D.id, true); return;
     }
-    if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack', { press: sc.press }); return; }
+    if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack', { press: sc.press, oneT: oneTimer(sc, X.id) }); return; }
     const tight = g === 'good' ? 1 : g === 'near' ? 0.5 : 0;      // gestört: Empfänger enger gedeckt, weniger Raumgewinn
-    if (it.kind === 'pass') { const m = sc.mark[it.to]; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3 + 0.55 * tight); sc.carrier = it.to; }
-    else { const p = P(sc, X.id), to = lerp(p, GOAL, clamp((70 - 40 * tight) / dist(p, GOAL), 0.08, 0.55)); sc.pos[X.id] = [to[0], Math.max(80, to[1])]; sc.pos[D.id] = [P(sc, D.id)[0], P(sc, D.id)[1] + 40 - 30 * tight]; }
+    if (it.kind === 'pass') { const m = sc.mark[it.to], lat = passInfo(s, sc, X.id, it.to).lat; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3 + 0.55 * tight); sc.carrier = it.to; sc.last = { type: 'pass', to: it.to, lat: tight >= 1 ? 0 : lat }; }
+    else {
+      const p = P(sc, X.id), dG = dist(p, GOAL), fwd = Math.min(c.dribStep - 34 * tight, Math.max(0, dG - c.dribStop)), to = fwd > 12 ? lerp(p, GOAL, fwd / dG) : [p[0] + Math.sign(180 - p[0]) * 22, p[1]];
+      sc.pos[X.id] = [to[0], Math.max(80, to[1])]; sc.pos[D.id] = [p[0], p[1] + 6]; sc.dribs[X.id] = (sc.dribs[X.id] || 0) + 1; sc.last = { type: 'dribble', x: X.id };
+      if (!tight) help(s, sc, X.id, D.id);
+    }
     shift(s, sc, rng);
     sc.step++; sc.bar = newBar(rng);
     aiIntent(s, rng);
@@ -670,5 +749,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);
