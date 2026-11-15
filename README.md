@@ -112,6 +112,8 @@ Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wer
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 
+**Hosting:** Die Seite baut mit `node build.js` in den Ordner `dist`. `netlify.toml` und `vercel.json` enthalten dieselbe Einstellung für Netlify und Vercel.
+
 **Menü:** Drei Tabs unten. Team ist die Startseite (Stärke beider Linien, Bilanz, Aufstellung, Sammlung), Spielen in der Mitte (Gegner, Aufstellung, Taktik, Taktikkarten, Anpfiff), Shop rechts (Packs und Taktikkarten). Im Match und beim Resultat ist die Leiste ausgeblendet.
 
 **Shop und Team:**
