@@ -45,16 +45,16 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           await p.waitForTimeout(40); continue;
         }
         if (st === 'drib') {
-          // Dribbling-Parcours: Feld berühren, erst zur einen Seite, dann spät zur anderen ziehen (mal früh, mal spät, mal gar nicht)
+          // Dribbling-Parcours: wischen. Erst nach vorne, dann schräg zur einen Seite, dann zur anderen, danach weiter nach vorne.
           await snap('02-dribbling'); await over('dribbling'); n++;
-          const r = await p.locator('#stage').boundingBox(), side = Math.random() < 0.5 ? 0.22 : 0.78, y = r.y + r.height * 0.8;
+          const r = await p.locator('#stage').boundingBox(), cx = r.x + r.width / 2, cy = r.y + r.height * 0.78, side = Math.random() < 0.5 ? -1 : 1;
+          const over_ = () => p.evaluate(() => document.getElementById('dribview').hidden || !document.getElementById('drib-msg').hidden);
           if (Math.random() < 0.1) { await p.click('#drib-back'); await p.waitForTimeout(60); continue; }      // «Andere Aktion»
-          await p.mouse.move(r.x + r.width * 0.5, y); await p.mouse.down();
-          await p.waitForTimeout(150 + Math.random() * 250); await p.mouse.move(r.x + r.width * (1 - side), y, { steps: 3 });
-          await p.waitForTimeout(250 + Math.random() * 450); await snap('02-dribbling-lauf'); await p.mouse.move(r.x + r.width * side, y, { steps: 4 });
-          await p.waitForTimeout(500 + Math.random() * 400); await p.mouse.move(r.x + r.width * (Math.random() < 0.5 ? side : 1 - side), y, { steps: 4 });
-          for (let k = 0; k < 80; k++) { await p.waitForTimeout(50); if (await p.evaluate(() => document.getElementById('dribview').hidden || !document.getElementById('drib-msg').hidden)) break; }
-          await snap('02-dribbling-ende'); await p.mouse.up(); await p.waitForTimeout(120); continue;
+          await p.mouse.move(cx, cy); await p.mouse.down(); await p.mouse.move(cx, cy - 70, { steps: 3 }); await p.waitForTimeout(150 + Math.random() * 250);
+          await p.mouse.move(cx + side * 70, cy - 110, { steps: 3 }); await p.waitForTimeout(250 + Math.random() * 300); await snap('02-dribbling-lauf');
+          await p.mouse.move(cx - side * 40, cy - 190, { steps: 4 }); await p.waitForTimeout(350 + Math.random() * 300); await p.mouse.up();
+          for (let k = 0; k < 30 && !(await over_()); k++) { await p.mouse.move(cx, cy); await p.mouse.down(); await p.mouse.move(cx + (Math.random() - 0.5) * 70, cy - 70, { steps: 2 }); await p.waitForTimeout(220); await p.mouse.up(); }
+          await snap('02-dribbling-ende'); await p.waitForTimeout(120); continue;
         }
         if (st === 'bar-att' || st === 'bar-def') {
           await p.waitForTimeout(320); await snap(st === 'bar-att' ? '02-balken-angriff' : '03-balken-abwehr'); await over(st); n++;

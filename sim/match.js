@@ -56,29 +56,31 @@ function chance(pf, s, sc, id, from) {
   sides.forEach(sg => TG.forEach(g => { const tg = [sg * g[0], g[1]]; if (!goal(tg, 0)) return; const p = (erf(edge(tg, 1) / (sd * Math.SQRT2)) + erf(edge(tg, -1) / (sd * Math.SQRT2))) / 2; if (p > best) best = p; }));
   return clamp(best * 0.9, 0.02, 0.95);
 }
-/* Modell-Spieler im Dribbling-Parcours. Bei jedem Verteidiger täuscht er zur einen Seite an und zieht dann zur anderen, wo
-   mehr Platz ist: so spät, wie er es sich mit seinem Timing zutraut. Er sieht die Verteidiger mit seiner Verzögerung (vis).
-   Gibt den Lauf (Ziel pro Schritt) und den Endzustand zurück. */
+/* Modell-Spieler im Dribbling-Parcours. Er wischt nach vorne und lenkt seitlich: Bei jedem Verteidiger täuscht er zur einen
+   Seite an und zieht dann zur anderen, wo mehr Platz ist, so spät, wie er es sich mit seinem Timing zutraut. Er sieht die
+   Verteidiger mit seiner Verzögerung (vis). Gibt den Lauf (gewischte Richtung pro Schritt) und den Endzustand zurück. */
 function dribPlay(co, pf, r) {
-  // Steuern mit dem Finger ist ungenauer als ein Tipp im Takt: Der Moment des Hakens streut gut doppelt so stark wie auf dem Balken,
-  // ab und zu wählt er die engere Seite, und der Finger zittert etwas.
-  const st = M.dribInit(co), run = [], plan = co.defs.map(() => ({ side: 0, go: false, late: gauss(r) * pf.s * 2.2 / 1000, wrong: r() < pf.zerr * 1.5 })), seen = [], vis = Math.round(pf.vis / 1000 * co.hz);
+  // Wischen ist ungenauer als ein Tipp im Takt: Der Moment des Hakens streut gut doppelt so stark wie auf dem Balken,
+  // ab und zu wählt er die engere Seite, und die Richtung zittert etwas.
+  const st = M.dribInit(co), run = [], plan = co.defs.map(() => ({ side: 0, go: false, late: gauss(r) * pf.s * 2.2 / 1000, wrong: r() < pf.zerr * 1.5 })), seen = [], vis = Math.round(pf.vis / 1000 * co.hz), fwd = co.vmax * 0.8;
   let jit = 0;
   while (!st.done) {
     seen.push(st.d.map(o => o.x));
     if (st.t % 8 === 0) jit = gauss(r) * 200 * pf.aim;
-    let k = -1; for (let i = 0; i < co.defs.length; i++) if (st.y <= co.defs[i].y + 4) { k = i; break; }
+    let k = -1; for (let i = 0; i < co.defs.length; i++) if (st.y <= st.d[i].y + 4) { k = i; break; }
     let target = st.x;
     if (k >= 0) {
       const D = co.defs[k], pl = plan[k], ox = seen[Math.max(0, seen.length - 1 - vis)][k];
       if (!pl.side) pl.side = (ox >= (co.min + co.max) / 2 ? -1 : 1) * (pl.wrong ? -1 : 1);
       // Ziel: seitlich am Verteidiger vorbei, mit Vorhalt, weil er bis dahin noch nachrückt
-      const tLine = Math.max(0, (D.y - st.y) / co.v), lead = D.vd * (tLine + pf.vis / 1000);
-      const goal = clamp(ox + pl.side * (D.brush + 8 + 60 * pf.aim + lead), co.min, co.max), need = Math.abs(goal - st.x) / co.va;
+      const tLine = Math.max(0, (st.d[k].y - st.y) / (fwd + (k ? 0 : co.adv))), lead = D.vd * (tLine + pf.vis / 1000);
+      const goal = clamp(ox + pl.side * (D.brush + 8 + 60 * pf.aim + lead), co.min, co.max), need = Math.abs(goal - st.x) / (co.vmax * 0.8);
       if (pl.go || tLine <= need + 0.06 + 1.5 * pf.s / 1000 + pl.late) { pl.go = true; target = goal; } else target = clamp(ox - pl.side * D.brush * 0.6, co.min, co.max);
     }
     target = clamp(target + jit, co.min, co.max);
-    run.push(Math.round(target)); M.dribTick(co, st, target);
+    // Wischrichtung: seitlich zum Ziel, mit dem Rest der Kraft nach vorne
+    const ux = Math.round(clamp((target - st.x) / 22, -1, 1) * 100), uy = Math.round(Math.sqrt(Math.max(0.09, 1 - ux * ux / 10000)) * 100);
+    run.push(ux, uy); M.dribTick(co, st, ux / 100, uy / 100);
   }
   return { run, st };
 }

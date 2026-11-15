@@ -116,7 +116,9 @@
 .tbov.hot{border-color:#ff8a8a;animation:tbhot .45s ease-in-out infinite alternate}
 @keyframes tbhot{to{box-shadow:0 0 0 4px rgba(255,138,138,.35)}}
 /* Dribbling-Parcours: Bahn von oben, gesteuert mit dem Finger */
-.dribview{position:absolute;inset:0;z-index:5;touch-action:none;cursor:ew-resize}
+.dribview{position:absolute;inset:0;z-index:5;touch-action:none;cursor:grab}
+.drib-timer{position:absolute;left:8px;right:8px;top:62px;height:5px;border-radius:3px;background:rgba(5,8,24,.7);overflow:hidden;pointer-events:none}
+.drib-timer i{display:block;height:100%;width:100%;background:var(--gold)}
 .dribview svg{display:block;width:100%;height:100%}
 .stage.dribmode{touch-action:none}
 .dblab{font-family:'Saira Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;fill:#fff;text-transform:uppercase;paint-order:stroke;stroke:#050818;stroke-width:3px}
@@ -311,6 +313,7 @@
     <div class="dribview" id="dribview" hidden>
       <svg viewBox="0 0 360 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect x="-200" y="-50" width="760" height="900" fill="url(#floorg)"/><rect x="-200" y="-50" width="760" height="900" fill="url(#planks)"/><ellipse cx="200" cy="220" rx="190" ry="130" fill="url(#gloss)"/><g id="drib-g"></g></svg>
       <p class="drib-top" id="drib-top"></p>
+      <div class="drib-timer" aria-hidden="true"><i id="drib-time"></i></div>
       <p class="drib-msg" id="drib-msg" hidden></p>
     </div>
     <div class="goalview" id="goalview" hidden>

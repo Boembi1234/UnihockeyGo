@@ -59,23 +59,23 @@ Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner 
 **Angriff mit Spielzügen.** Früher war «dreimal dribbeln, dann schiessen» die beste Spielweise, Pässe brachten nichts. Jetzt hat jede Aktion ihren Zweck:
 
 - **Aufstellung:** Im Positionsangriff steht der Ballführende an der Bande, in der Mitte oder hinten. Der Center läuft in den Slot, der ballferne Flügel an den zweiten Pfosten, der ballnahe bleibt als Anspielstation, die Verteidiger sichern. Die Gegner decken gefährliche Spieler im Passweg. Kommt einer zu spät, ist sein Mann frei: grüner Ring und Schild «FREI» auf dem Feld, der Pass steht zuoberst in der Liste.
-- **Dribbling-Parcours:** Das Dribbling ist kein Balken mehr, sondern ein kurzer Lauf von oben gesehen. Der Spieler läuft von selbst nach vorne, du ziehst ihn mit dem Finger nach links und rechts (Maus oder Pfeiltasten gehen auch). Vor ihm stehen sein Gegenspieler und dahinter der Verteidiger, der aushilft; beim zweiten Dribbling desselben Spielers ist es einer mehr, im Konter 2 gegen 1 nur einer. Sie rücken mit Verzögerung dorthin, wo du gerade warst: Antäuschen und spät zur anderen Seite ziehen funktioniert. Roter Kreis berührt: Ball weg, frontal beim eigenen Gegenspieler sogar Konter. Gestrichelten Kreis des Gegenspielers gestreift: Ball behalten, kein Raumgewinn. Sauber an ihm vorbei: gelungen. Auch am Helfer sauber vorbei: perfekt. Die Karten bestimmen den Parcours: Aus dem Wertevergleich, dem Raum und den Fähigkeiten werden Reichweite, Tempo und Verzögerung der Gegner, aus dem Dribbling-Wert und der Energie die Wendigkeit des Dribblers. Der Bildschirm rechnet mit denselben Schritten wie die Engine, die den Lauf nachspielt.
+- **Dribbling-Parcours:** Das Dribbling ist kein Balken, sondern ein kurzer Lauf von oben gesehen, gesteuert mit Wischen. Du wischst auf dem Feld in die Richtung, in die der Spieler laufen soll: Der Weg des Fingers ist Richtung und Tempo (ab knapp 60 Bildpunkten volles Tempo), ein goldener Pfeil am Spieler zeigt beides. Lässt du los, läuft er aus; wer weiter wischt, bleibt schnell. Maus mit gedrückter Taste und Pfeiltasten gehen auch. Vor ihm steht sein Gegenspieler, der ihm entgegenkommt, dahinter der Verteidiger, der aushilft; beim zweiten Dribbling desselben Spielers ist es einer mehr, im Konter 2 gegen 1 nur einer. Sie rücken mit Verzögerung dorthin, wo du gerade warst: Antäuschen und spät zur anderen Seite ziehen funktioniert. Roter Kreis berührt: Ball weg, frontal beim eigenen Gegenspieler sogar Konter. Gestrichelten Kreis des Gegenspielers gestreift oder nach sechs Sekunden nicht an ihm vorbei: Ball behalten, kein Raumgewinn. Sauber an ihm vorbei: gelungen. Auch am Helfer sauber vorbei: perfekt. Die Karten bestimmen den Parcours: Aus dem Wertevergleich, dem Raum und den Fähigkeiten werden Reichweite, Tempo und Verzögerung der Gegner, aus dem Dribbling-Wert und der Energie Tempo und Antritt des Dribblers. Der Bildschirm rechnet mit denselben Schritten wie die Engine, die den Lauf nachspielt.
 - **Dribbling zieht Hilfe:** Wer seinen Gegenspieler schlägt, kommt näher ans Tor, aber nicht tiefer als bis vor den Slot. Der nächste Verteidiger stellt sich ihm in den Weg und lässt dafür seinen Mann frei. Jedes weitere Dribbling desselben Spielers in der Chance hat ein um 40 % kleineres Feld.
 - **Direktschuss:** Ein Pass verschiebt den Goalie. Schiesst der Empfänger sofort, steht der Goalie noch auf der Seite, von der der Ball kam (umso weiter, je quer der Pass war), reicht weniger weit und rutscht nach einer halben Sekunde herüber. Wer schnell abzieht, hat die offene Seite. Ein knapp angekommener Pass gibt keinen Direktschuss.
 - **Passwege:** Der Verteidiger, der am besten im Weg steht, zählt voll, weitere zu einem Drittel. Grün ist ein offener Weg, gelb ein enger, rot ein zugestellter.
 - **Block:** Blocken kann nur, wer in der Schussbahn steht. Nach einem Querpass steht der Gegenspieler im Passweg, nicht in der Schussbahn.
 - **Der Gegner spielt gleich:** Er sucht den freien Mann und zieht nach einem Querpass direkt ab. Dann hast du bei der Parade weniger Zeit.
 
-Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je Zeile). Im Parcours steuert das Modell wie ein vernünftiger Spieler mit Verzögerung und Zittern; es kommt etwa so oft durch, wie die Chance aus den Karten vorgibt (bei 30 % in 20 % der Läufe, bei 45 % in 40 %, bei 60 % in 59 %, bei 75 % in 79 %):
+Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je Zeile). Im Parcours steuert das Modell wie ein vernünftiger Spieler mit Verzögerung und Zittern (bei einer Chance von 45 % kommt es in 43 % der Läufe durch, bei 60 % in 79 %, bei 30 % nur in 4 %, behält dann aber meist den Ball):
 
 | Spielweise | Siegquote | Tor je Chance |
 |---|---|---|
-| klug mischen (4 Pässe, 2 Dribblings pro Match) | 48 % | 43 % |
+| klug mischen (4 Pässe, 3 Dribblings pro Match) | 44 % | 43 % |
 | Pass zum besten Mitspieler, dann Schuss | 43 % | 42 % |
-| Dribbling, Pass, Schuss | 34 % | 38 % |
-| ein Dribbling, dann Schuss | 29 % | 31 % |
+| Dribbling, Pass, Schuss | 41 % | 43 % |
+| ein Dribbling, dann Schuss | 31 % | 32 % |
 | sofort schiessen | 28 % | 29 % |
-| immer dribbeln | 26 % | 25 % |
+| immer dribbeln | 25 % | 29 % |
 
 **Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
 
@@ -107,9 +107,9 @@ Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wer
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 31 % | 69 % | 91 % | 99 % | 100 % |
-| mittel | 3 % | 18 % | 42 % | 79 % | 95 % |
-| schwach | 0 % | 3 % | 9 % | 31 % | 63 % |
+| stark | 36 % | 63 % | 93 % | 99 % | 100 % |
+| mittel | 4 % | 12 % | 46 % | 77 % | 95 % |
+| schwach | 0 % | 2 % | 6 % | 29 % | 59 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

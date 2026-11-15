@@ -392,12 +392,14 @@
   }
 
   /* --- Dribbling-Parcours ---
-     Der Dribbler läuft von unten nach oben, der User zieht ihn mit dem Finger nach links und rechts. Die Verteidiger rücken
-     nach; ihr roter Kreis ist die Reichweite (Ball weg), der gestrichelte der Stockbereich (gestört). Gerechnet wird in festen
-     Schritten mit denselben Funktionen wie in der Engine (dribTick); die Ziele pro Schritt gehen als Lauf an die Engine,
-     die ihn nachspielt. So zeigt der Bildschirm genau das, was nachher gilt. */
+     Der User wischt in die Richtung, in die der Dribbler laufen soll: Der Weg des Fingers seit dem Aufsetzen ist Richtung und
+     Tempo (ab SWIPE Bildpunkten volles Tempo; der Ansatzpunkt wandert mit, damit ein Richtungswechsel sofort greift). Lässt
+     er los, läuft der Spieler aus; wer weiter wischt, bleibt schnell. Ein Pfeil am Spieler zeigt Richtung und Stärke.
+     Die Verteidiger rücken nach; ihr roter Kreis ist die Reichweite (Ball weg), der gestrichelte der Stockbereich (gestört).
+     Gerechnet wird in festen Schritten mit denselben Funktionen wie in der Engine (dribTick); die gewischte Richtung pro
+     Schritt geht als Lauf an die Engine, die ihn nachspielt. So zeigt der Bildschirm genau das, was nachher gilt. */
   let db = null;
-  const DBMSG = { perfect: ['Durch!', 'good'], good: ['Vorbei', 'good'], near: ['Gestört', 'warn'], bad: ['Ball weg', 'bad'], gross: ['Ball weg', 'bad'] };
+  const SWIPE = 58, DBMSG = { perfect: ['Durch!', 'good'], good: ['Vorbei', 'good'], near: ['Gestört', 'warn'], bad: ['Ball weg', 'bad'], gross: ['Ball weg', 'bad'] };
   function openDribble() {
     const co = M.dribCourse(G), sc = G.cur, X = card('you', sc.carrier), g = $('drib-g'), k = Math.min(1, 292 / co.len);
     phase = 'drib'; closeBar(); $('lanes').innerHTML = ''; $('hint').hidden = true;
@@ -411,40 +413,58 @@
       const c = card('home', D.id), el = svg('g', {}, g);
       const brush = svg('circle', { r: D.brush, fill: 'rgba(255,255,255,.05)', stroke: '#ffffff', 'stroke-opacity': 0.55, 'stroke-width': 1.5, 'stroke-dasharray': '4 5' }, el), core = svg('circle', { r: D.core, fill: 'rgba(239,68,68,.3)', stroke: '#ff6b6b', 'stroke-width': 2 }, el);
       const F = figBody(c, 'home', el), l = svg('text', { y: -D.core - 8, 'text-anchor': 'middle', class: 'dblab' }, el); l.textContent = c.last + (i ? '' : ' ' + r0(M.stanceVal(c, 'zwei')));
-      return { el, F, brush, core, x: D.x, passed: false };
+      return { el, F, brush, core, x: D.x, y: D.y, passed: false };
     });
+    const arrow = svg('path', { fill: 'none', stroke: '#f7d774', 'stroke-width': 4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.9 }, g);
     const me = svg('g', {}, g), MF = figBody(X, 'you', me), ball = svg('circle', { r: 4.8, fill: 'url(#ballg)', stroke: '#050818', 'stroke-width': 1.3 }, g);
-    db = { co, st: M.dribInit(co), run: [], target: co.x0, started: false, over: false, acc: 0, last: performance.now(), raf: 0, defs, me, MF, ball, k, auto: 0 };
-    $('pitch').style.visibility = 'hidden'; $('dribview').hidden = false; $('stage').classList.add('dribmode'); $('drib-msg').hidden = true;
-    $('drib-top').innerHTML = `<b>Dribbling ${esc(X.last)} ${r0(M.dribVal(X))}</b><span>${co.defs.length} Gegner · ${dribTxt(co.p)}${X.en <= 60 ? ' · müde: weniger wendig' : ''}</span>`;
-    setTag('Dribbling', 'you'); say('Finger aufs Feld legen und um die Gegner herum steuern.');
-    $('hist').innerHTML = '<em>Roter Kreis: Ball weg. Gestrichelter Kreis: gestört. Die Gegner rücken dir mit Verzögerung nach: täusche an und zieh spät zur anderen Seite.</em>';
+    db = { co, st: M.dribInit(co), run: [], u: [0, 0], down: false, anchor: null, keys: {}, started: false, over: false, acc: 0, last: performance.now(), raf: 0, defs, me, MF, ball, arrow, k, auto: 0, px: co.x0, py: 0 };
+    $('pitch').style.visibility = 'hidden'; $('dribview').hidden = false; $('stage').classList.add('dribmode'); $('drib-msg').hidden = true; $('drib-time').style.width = '100%';
+    $('drib-top').innerHTML = `<b>Dribbling ${esc(X.last)} ${r0(M.dribVal(X))}</b><span>${co.defs.length} Gegner · ${dribTxt(co.p)}${X.en <= 60 ? ' · müde: langsamer' : ''}</span>`;
+    setTag('Dribbling', 'you'); say('Wische in die Richtung, in die er laufen soll.');
+    $('hist').innerHTML = '<em>Je weiter du wischst, desto schneller läuft er. Roter Kreis: Ball weg. Gestrichelter Kreis: gestört. Dein Gegenspieler kommt dir entgegen: täusche an und zieh spät zur anderen Seite.</em>';
     const panel = $('panel'); panel.hidden = false;
-    panel.innerHTML = '<div class="tb"><div class="tb-pad drib" id="drib-pad">Steuern<small>Finger auf dem Feld nach links und rechts ziehen. Es geht los, sobald du das Feld berührst.</small></div><button type="button" class="link" id="drib-back">Andere Aktion</button></div>';
+    panel.innerHTML = '<div class="tb"><div class="tb-pad drib" id="drib-pad">Wischen<small>Auf dem Feld in die Laufrichtung wischen. Länger wischen: schneller. Es geht los, sobald du das Feld berührst.</small></div><button type="button" class="link" id="drib-back">Andere Aktion</button></div>';
     dribDraw(performance.now());
-    db.auto = setTimeout(() => { if (db && !db.started) dribStart(); }, 4000);      // ohne Berührung geht es nach vier Sekunden los
+    db.auto = setTimeout(() => { if (db && !db.started) dribStart(); }, 5000);      // ohne Berührung geht es nach fünf Sekunden los
     db.raf = requestAnimationFrame(dribLoop);
   }
   function dribStart() { if (!db || db.started) return; db.started = true; db.last = performance.now(); db.acc = 0; clearTimeout(db.auto); const b = $('drib-back'); if (b) b.hidden = true; $('drib-pad').firstChild.textContent = 'Läuft'; }
-  function dribAim(ev) { const r = $('stage').getBoundingClientRect(); db.target = Math.max(db.co.min, Math.min(db.co.max, ((ev.clientX - r.left) / r.width * 360 - 180) / db.k)); }
+  // Finger aufgesetzt: Ansatzpunkt merken. Finger bewegt: Weg seit dem Ansatz ist Richtung und Tempo.
+  function dribDown(ev) { db.down = true; db.anchor = [ev.clientX, ev.clientY]; dribStart(); }
+  function dribMove(ev) {
+    const d = db; if (!d.down || !d.anchor) return;
+    let vx = ev.clientX - d.anchor[0], vy = ev.clientY - d.anchor[1]; const m = Math.hypot(vx, vy);
+    if (m > SWIPE) { d.anchor = [ev.clientX - vx / m * SWIPE, ev.clientY - vy / m * SWIPE]; vx *= SWIPE / m; vy *= SWIPE / m; }
+    d.u = [vx / SWIPE, -vy / SWIPE];
+  }
+  function dribUp() { if (db) { db.down = false; db.anchor = null; } }
+  // Pfeiltasten: Richtung aus den gedrückten Tasten
+  function dribKeys() { const k = db.keys, x = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), y = (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0), m = Math.hypot(x, y) || 1; db.u = [x / m, y / m]; db.down = !!(x || y); }
   function dribDraw(now) {
-    const d = db, co = d.co, st = d.st, t = now / 1000;
-    const px = d.px === undefined ? st.x : d.px, dx = st.x - px; d.px = st.x;
+    const d = db, co = d.co, st = d.st, t = now / 1000, dx = st.x - d.px, dy = st.y - d.py, sp = Math.hypot(st.vx, st.vy); d.px = st.x; d.py = st.y;
     d.me.setAttribute('transform', `translate(${st.x.toFixed(1)} ${(-st.y).toFixed(1)})`);
-    d.MF.a = turn(d.MF.a, Math.max(-38, Math.min(38, dx * 14)), 0.35); d.MF.dist += d.started && !st.done ? Math.hypot(dx, co.v / co.hz) * 1.6 : 0; poseFig(d.MF, d.started && !st.done, t);
+    if (sp > 12) d.MF.a = turn(d.MF.a, Math.atan2(st.vx, st.vy) * 180 / Math.PI, 0.3);
+    d.MF.dist += Math.hypot(dx, dy) * 1.6; poseFig(d.MF, sp > 12, t);
     const rad = d.MF.a * Math.PI / 180; d.ball.setAttribute('cx', (st.x + Math.sin(rad) * 26 + d.MF.hand * 9 * Math.cos(rad)).toFixed(1)); d.ball.setAttribute('cy', (-st.y - Math.cos(rad) * 26 + d.MF.hand * 9 * Math.sin(rad)).toFixed(1));
+    // Pfeil: gewischte Richtung und Stärke
+    const um = Math.hypot(d.u[0], d.u[1]);
+    if (um > 0.08 && !st.done) { const L = 30 + 44 * um, ax = d.u[0] / um, ay = -d.u[1] / um, x0 = st.x + ax * 22, y0 = -st.y + ay * 22, x1 = st.x + ax * (22 + L), y1 = -st.y + ay * (22 + L); d.arrow.setAttribute('d', `M${x0.toFixed(1)} ${y0.toFixed(1)} L${x1.toFixed(1)} ${y1.toFixed(1)} M${(x1 - ax * 11 + ay * 8).toFixed(1)} ${(y1 - ay * 11 - ax * 8).toFixed(1)} L${x1.toFixed(1)} ${y1.toFixed(1)} L${(x1 - ax * 11 - ay * 8).toFixed(1)} ${(y1 - ay * 11 + ax * 8).toFixed(1)}`); d.arrow.setAttribute('opacity', (0.35 + 0.6 * um).toFixed(2)); } else d.arrow.setAttribute('d', '');
     d.defs.forEach((o, i) => {
-      const D = co.defs[i], x = st.d[i].x, mv = x - o.x; o.x = x;
-      o.el.setAttribute('transform', `translate(${x.toFixed(1)} ${(-D.y).toFixed(1)})`);
-      o.F.a = turn(o.F.a, angleTo([x, -D.y], [st.x, -st.y]), 0.25); o.F.dist += Math.abs(mv) * 1.6; poseFig(o.F, Math.abs(mv) > 0.2, t);
-      if (!o.passed && st.y > D.y + 4) { o.passed = true; o.brush.setAttribute('opacity', 0.25); o.core.setAttribute('opacity', 0.25); }
+      const D = co.defs[i], q = st.d[i], mv = Math.hypot(q.x - o.x, q.y - o.y); o.x = q.x; o.y = q.y;
+      o.el.setAttribute('transform', `translate(${q.x.toFixed(1)} ${(-q.y).toFixed(1)})`);
+      o.F.a = turn(o.F.a, angleTo([q.x, -q.y], [st.x, -st.y]), 0.25); o.F.dist += mv * 1.6; poseFig(o.F, mv > 0.2, t);
+      if (!o.passed && st.y > q.y + 4) { o.passed = true; o.brush.setAttribute('opacity', 0.25); o.core.setAttribute('opacity', 0.25); }
     });
+    $('drib-time').style.width = Math.max(0, 100 * (1 - st.t / co.limit)).toFixed(1) + '%';
   }
   function dribLoop(now) {
     const d = db; if (!d || d.over) return;
     if (d.started) {
       d.acc += Math.min(120, now - d.last); const step = 1000 / d.co.hz;
-      while (d.acc >= step && !d.st.done) { const tg = Math.round(d.target); d.run.push(tg); M.dribTick(d.co, d.st, tg); d.acc -= step; }
+      while (d.acc >= step && !d.st.done) {
+        if (!d.down) d.u = [d.u[0] * 0.93, d.u[1] * 0.93];                      // losgelassen: er läuft aus
+        const ux = Math.round(d.u[0] * 100), uy = Math.round(d.u[1] * 100); d.run.push(ux, uy); M.dribTick(d.co, d.st, ux / 100, uy / 100); d.acc -= step;
+      }
     }
     d.last = now; dribDraw(now);
     if (d.st.done) { dribEnd(); return; }
@@ -453,7 +473,7 @@
   function closeDribble() { if (db) { cancelAnimationFrame(db.raf); clearTimeout(db.auto); } db = null; $('dribview').hidden = true; $('stage').classList.remove('dribmode'); $('pitch').style.visibility = ''; }
   function dribEnd() {
     const d = db, g = M.dribGrade(d.co, d.st).grade, m = DBMSG[g], el = $('drib-msg');
-    d.over = true; el.textContent = m[0]; el.className = 'drib-msg ' + m[1]; el.hidden = false; buzz(g === 'bad' || g === 'gross' ? 60 : 20);
+    d.over = true; el.textContent = d.st.late ? 'Zeit um' : m[0]; el.className = 'drib-msg ' + (d.st.late && g === 'near' ? 'warn' : m[1]); el.hidden = false; buzz(g === 'bad' || g === 'gross' ? 60 : 20);
     if (d.st.out) d.defs[d.st.out.hit].core.setAttribute('fill', 'rgba(239,68,68,.75)');
     setTimeout(() => { const runIn = d.run; closeDribble(); phase = 'decide'; run({ type: 'dribble', run: runIn }); }, reduce ? 320 : 620);
   }
@@ -1020,14 +1040,13 @@
     run(Object.assign({ type: 'aim' }, input));
   }
   const stage = $('stage');
-  // Dribbling-Parcours: Berühren startet, ziehen steuert. Mit der Maus reicht bewegen, mit den Pfeiltasten geht es auch.
-  stage.addEventListener('pointerdown', ev => { if (phase === 'drib' && db && !db.over) { ev.preventDefault(); dribAim(ev); dribStart(); } });
-  stage.addEventListener('pointermove', ev => { if (phase === 'drib' && db && !db.over && (db.started || ev.pointerType === 'mouse')) dribAim(ev); });
-  document.addEventListener('keydown', e => {
-    if (phase !== 'drib' || !db || db.over) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); db.target = Math.max(db.co.min, Math.min(db.co.max, db.target + (e.key === 'ArrowLeft' ? -45 : 45))); dribStart(); }
-    else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); dribStart(); }
-  });
+  // Dribbling-Parcours: wischen auf dem Feld (auch mit der Maus bei gedrückter Taste) oder Pfeiltasten
+  const inDrib = () => phase === 'drib' && db && !db.over;
+  stage.addEventListener('pointerdown', ev => { if (inDrib()) { ev.preventDefault(); try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* ohne Capture geht es auch */ } dribDown(ev); } });
+  stage.addEventListener('pointermove', ev => { if (inDrib()) dribMove(ev); });
+  ['pointerup', 'pointercancel'].forEach(t => stage.addEventListener(t, () => { if (inDrib()) dribUp(); }));
+  document.addEventListener('keydown', e => { if (inDrib() && /^Arrow/.test(e.key)) { e.preventDefault(); db.keys[e.key] = true; dribKeys(); dribStart(); } else if (inDrib() && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); dribStart(); } });
+  document.addEventListener('keyup', e => { if (inDrib() && /^Arrow/.test(e.key)) { db.keys[e.key] = false; dribKeys(); } });
   stage.addEventListener('pointerdown', ev => {
     if (phase === 'react') { if (ev.target.closest('#goalview')) { ev.preventDefault(); saveAt(zoneAt(toGoalXY(toLayer(scenePt(ev)))), ev.timeStamp); } return; }
     if (phase !== 'aim') return;
