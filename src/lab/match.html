@@ -149,7 +149,49 @@
 .tacrow{display:flex;align-items:center;gap:10px}
 .tacrow .tac{flex:1}
 .tacrow .tac button{min-height:36px;font-size:13px}
-.tac-opp{flex-shrink:0;max-width:34%;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--mute);text-align:right}
+.tacrow{gap:8px}
+.tacrow .tac{flex:1.45}
+.tacrow .tac button{font-size:12px;letter-spacing:.05em;padding:0 2px}
+/* Linien: wer auf dem Feld steht (hell), wer als Nächstes kommt (gold), dazu die Energie der Linie */
+.lines{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#070b1f}
+.lines button{min-height:36px;min-width:0;border:0;border-right:1px solid var(--line);background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:2px;font-family:var(--display);text-transform:uppercase;color:var(--mute)}
+.lines button:last-child{border-right:0}
+.lines button b{font-weight:700;font-size:11px;letter-spacing:.06em;line-height:1;white-space:nowrap}
+.lines button span{display:flex;align-items:center;gap:4px;font-weight:700;font-size:11px;line-height:1;font-variant-numeric:tabular-nums}
+.lines button .en{width:22px;height:5px}
+.lines button.on{background:var(--ice);color:#050818}
+.lines button.on .en{background:#b9c4e6;box-shadow:none}
+.lines button.next{background:#151003;color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold)}
+.lines.ask{box-shadow:0 0 0 3px rgba(247,215,116,.45);border-color:var(--gold)}
+.oppline{margin:-4px 2px 0;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--mute);text-align:right}
+.oppline b{color:#ff8a8a;font-weight:800}
+/* Taktikkarten im Match: antippen zeigt, was die Karte tut, erst «Einsetzen» spielt sie */
+.tcwrap{display:flex;flex-direction:column;gap:6px}
+.tcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tcb{position:relative;min-height:42px;min-width:0;display:flex;align-items:center;gap:6px;padding:4px 8px 4px 5px;border:1px solid var(--gold);border-radius:10px;background:#151003;font-family:var(--display);text-transform:uppercase;text-align:left;color:var(--ice)}
+.tcb .tc-i{width:28px;height:28px;background:#241a04;border-color:rgba(247,215,116,.4)}
+.tcb .tc-i svg{width:18px;height:18px}
+.tcb b{min-width:0;font-weight:800;font-size:13px;letter-spacing:.03em;line-height:1.05;overflow:hidden;text-overflow:ellipsis}
+.tcb i{position:absolute;right:6px;bottom:2px;font-style:normal;font-weight:700;font-size:9.5px;letter-spacing:.06em;color:var(--mute);line-height:1}
+.tcb.sel{box-shadow:0 0 0 3px rgba(247,215,116,.35)}
+.tcb.used{border-color:var(--line);background:#070b1f;opacity:.45}
+.tcb.act{border-color:#34d399;background:#06231b;opacity:1}
+.tcb.act i{color:#34d399}
+.tcb.act b,.tcb.used b{padding-bottom:8px}
+.tcinfo{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;border:1px solid var(--gold);background:#151003}
+.tcinfo p{flex:1;min-width:0;margin:0;font-size:12.5px;line-height:1.3;color:var(--ice)}
+.tcinfo p b{display:block;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+.useb{flex-shrink:0;min-height:42px;padding:0 14px;border:0;border-radius:10px;background:var(--gold);font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:#1a1203}
+.tcinfo .link{flex-shrink:0;font-size:12px}
+/* Vor dem Match: zweite Linie und Wahl der Taktikkarten */
+.line2{display:flex;flex-direction:column;gap:2px;margin:0;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:#070b1f;font-size:12.5px;line-height:1.3;color:var(--mute)}
+.line2 b{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--ice)}
+.line2 span i{font-style:normal;font-weight:700;color:var(--gold)}
+.line2 em{font-style:normal}
+.group-label span{letter-spacing:.08em;text-transform:none}
+.tacpick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.tcp{display:block;min-width:0;border:0;padding:0;background:none}
+.tcp .tc{height:100%}
 .dots{flex-wrap:wrap;justify-content:center;max-width:150px;min-height:10px}
 /*__STORECSS__*/
 </style>
@@ -162,8 +204,9 @@
   <h1 class="hero">Hallen<br><span>Match</span></h1>
   <p class="lead">Ein ganzes Match über drei Drittel. Das Spiel läuft, und aus ihm entstehen Chancen: Positionsangriffe und Konter, für dich und gegen dich. Wie viele, hängt an deinen Karten und deiner Taktik. In jeder Chance entscheidest du und triffst das Timing.</p>
   <div class="panel">
-    <p class="group-label">Deine Linie <span id="intro-ovr"></span></p>
+    <p class="group-label">1. Linie <span id="intro-ovr"></span></p>
     <ul class="lineup cards" id="lineup"></ul>
+    <p class="line2" id="line2"></p>
     <div class="nav2">
       <button type="button" class="navb" data-go="store" data-from="intro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 H19 L18 21 H6 Z M9 8 V6 a3 3 0 0 1 6 0 V8"/></svg>Shop</button>
       <button type="button" class="navb alt" data-go="team" data-from="intro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="8" height="12" rx="1.5"/><rect x="13" y="7" width="8" height="12" rx="1.5"/></svg>Team</button>
@@ -175,12 +218,17 @@
     <p class="note">Offensiv: mehr Chancen für dich, aber hinten offen, der Gegner kontert öfter. Defensiv: weniger Chancen auf beiden Seiten, deine kommen öfter aus Kontern. Du kannst im Match jederzeit umstellen.</p>
   </div>
   <div class="panel">
+    <p class="group-label">Taktikkarten <span>· bis zu 3 fürs Match</span></p>
+    <div class="tacpick" id="tac-pick"></div>
+    <p class="note" id="tac-pick-note"></p>
+  </div>
+  <div class="panel">
     <p class="group-label">Gegner wählen</p>
     <div class="screen" id="opps"></div>
     <p class="note">Gute Stürmer bringen dir mehr Chancen, schwache Verteidiger dem Gegner. Die Zahl der Chancen steht nicht fest.</p>
   </div>
   <button class="cta" id="btn-start" type="button">Anpfiff</button>
-  <p class="note">Nur zum Ausprobieren: Standort, Vereine, Fouls und Taktiken fehlen hier. Karten und Münzen speichert nur dieser Browser. Bei Unentschieden gibt es Penaltys. Das <a class="link" href="../">Testduell</a> gibt es weiterhin.</p>
+  <p class="note">Nur zum Ausprobieren: Standort, Vereine und Fouls fehlen hier. Karten und Münzen speichert nur dieser Browser. Bei Unentschieden gibt es Penaltys. Das <a class="link" href="../">Testduell</a> gibt es weiterhin.</p>
 </section>
 
 <section id="screen-match" class="screen" hidden>
@@ -189,7 +237,8 @@
     <div class="sb-mid"><span class="sb-period" id="sc-period">1. Drittel</span><span class="time" id="sc-time"></span><span class="dots" id="dots" aria-hidden="true"></span></div>
     <div class="sb-side right"><span class="sb-num" id="sc-home">0</span><span class="sb-lbl" id="sc-club"></span></div>
   </div>
-  <div class="tacrow"><div class="tac" id="tac"><button type="button" data-tac="def">Defensiv</button><button type="button" data-tac="bal">Normal</button><button type="button" data-tac="off">Offensiv</button></div><span class="tac-opp" id="tac-opp"></span></div>
+  <div class="tacrow"><div class="tac" id="tac"><button type="button" data-tac="def">Defensiv</button><button type="button" data-tac="bal">Normal</button><button type="button" data-tac="off">Offensiv</button></div><div class="lines coach" id="lines"><button type="button" data-line="0"></button><button type="button" data-line="1"></button></div></div>
+  <p class="oppline" id="tac-opp"></p>
   <div class="stage match" id="stage">
     <svg id="pitch" viewBox="0 0 360 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <rect x="-200" y="-50" width="760" height="900" fill="#1440a6"/>
@@ -264,6 +313,7 @@
     <div class="stamp" id="stamp" hidden><b></b><span></span></div>
     <div class="tbov" id="tbov" hidden></div>
   </div>
+  <div class="coach tcwrap"><div class="tcards" id="tcards"></div><div class="tcinfo" id="tcinfo" hidden></div></div>
   <div class="prompt">
     <div class="row"><span class="tag you" id="tag">Angriff</span><p class="say" id="say"></p></div>
     <p class="sr" id="live" aria-live="polite"></p>
@@ -299,6 +349,9 @@
   <div class="shelf" id="packs"></div>
   <p class="legend"><span><i class="gold"></i><b>Gold</b> ab 92</span><span><i class="silver"></i><b>Silber</b> 85–91</span><span><i class="bronze"></i><b>Bronze</b> bis 84</span></p>
   <p class="note">Die Prozente gelten pro Karte. Jede Gold-Karte hat eine Spezialfähigkeit. Doppelte Karten werden zu Münzen: Bronze 60, Silber 200, Gold 600.</p>
+  <p class="group-label">Taktikkarten</p>
+  <div class="tacshop" id="tacshop"></div>
+  <p class="note">Bis zu drei Taktikkarten nimmst du in jedes Match mit. Jede lässt sich pro Match einmal einsetzen. Du wählst sie vor dem Anpfiff.</p>
   <button type="button" class="navb alt" data-go="team">Zum Team</button>
   <p class="note" id="store-own"></p>
   <button type="button" class="ghost" id="btn-coins">Test: 10’000 Münzen dazu</button>
@@ -307,10 +360,12 @@
 
 <section id="screen-team" class="screen" hidden>
   <div class="topbar"><button type="button" class="backb" data-go="back">&larr; Zurück</button><span class="coins" data-coins></span></div>
-  <div class="team-head"><h2 class="title2">Team<small>3 Stürmer, 2 Verteidiger</small></h2><div class="tovr"><b id="team-ovr"></b><span>Linie</span></div></div>
+  <div class="team-head"><h2 class="title2">Team<small>Zwei Linien: je 3 Stürmer, 2 Verteidiger</small></h2><div class="tovr"><b id="team-ovr"></b><span>1. Linie</span></div></div>
   <div class="team-line" id="team-line"></div>
+  <div class="team-head"><p class="group-label">2. Linie</p><div class="tovr sm"><b id="team-ovr2"></b></div></div>
+  <div class="team-line two" id="team-line2"></div>
   <p class="note" id="team-hint"></p>
-  <button type="button" class="ghost" id="btn-best">Beste Linie setzen</button>
+  <button type="button" class="ghost" id="btn-best">Beste Aufstellung setzen</button>
   <div class="team-head"><p class="group-label">Sammlung</p><span class="note" id="team-count"></span></div>
   <div class="chips" id="team-filter"><button type="button" class="chipb" data-f="all">Alle</button><button type="button" class="chipb" data-f="ATT">Stürmer</button><button type="button" class="chipb" data-f="DEF">Verteidiger</button></div>
   <div class="team-all" id="team-all"></div>

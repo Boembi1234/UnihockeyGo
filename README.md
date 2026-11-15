@@ -26,17 +26,35 @@ Unter <https://unihockeygo.netlify.app/lab/match/> liegt ein ganzes Match mit Sh
 **Spielfluss und Taktik.** Ein Match läuft über drei Drittel zu 20 Minuten, die Uhr läuft mit. Die Zahl der Chancen steht nicht fest (im Schnitt etwa 12, in der Simulation zwischen 2 und 21):
 
 - **Chancen aus den Karten:** Jede Seite bekommt Chancen nach ihrem Angriffswert (die drei Stürmer: Schuss, Pass, Dribbling) gegen den Abwehrwert des Gegners (die zwei Verteidiger: Block, Antizipation, Zweikampf). Gute Stürmer bringen mehr eigene Chancen, schwache Verteidiger mehr Chancen für den Gegner.
-- **Taktik:** Defensiv, Normal oder Offensiv, vor dem Match und jederzeit während des Spiels wählbar, mit Hinweis in jeder Drittelspause. Offensiv bringt mehr eigene Chancen (Faktor 1.35), öffnet aber hinten (1.3 für den Gegner, dazu mehr Konter) und kostet etwas mehr Energie. Defensiv senkt beides (0.72 und 0.68), die eigenen Chancen kommen öfter aus Kontern. Der Gegner stellt selbst um: im Rückstand offensiv, mit Vorsprung defensiv.
+- **Taktik:** Defensiv, Normal oder Offensiv, vor dem Match und jederzeit während des Spiels wählbar, mit Hinweis in jeder Drittelspause. Offensiv bringt mehr eigene Chancen (Faktor 1.35), öffnet aber hinten (1.3 für den Gegner, dazu mehr Konter). Defensiv senkt beides (0.72 und 0.68), die eigenen Chancen kommen öfter aus Kontern. Der Gegner stellt selbst um: im Rückstand offensiv, mit Vorsprung defensiv.
 - **Arten von Chancen:** Positionsangriff, Konter 3 gegen 2, Konter 2 gegen 1 und selten ein Alleingang. Ein Konter nach einem groben Fehler ist ebenfalls meist eine Überzahl, nur selten ein Alleingang.
 - **Feld von oben:** Die Spieler sind Figuren mit Schultern, Kopf, Armen, Beinen und Stock. Sie drehen sich in Laufrichtung oder zum Ball, die Beine laufen mit, der Stock schwingt bei Pass und Schuss, der Ball liegt an der Schaufel. Die Goalies knien im Torraum und rutschen mit dem Ball mit.
 
-Wirkung der Taktik für den mittleren Modell-Spieler (Team um 81 gegen WASA, 700 Matches je Feld, Siegquote):
+Wirkung der Taktik für den mittleren Modell-Spieler (zwei Linien um 81 und 76 gegen WASA, 800 Matches je Feld, Siegquote):
 
 | Karten | Defensiv | Normal | Offensiv |
 |---|---|---|---|
-| 6 schwächer | 22 % | 12 % | 11 % |
-| gleich | 50 % | 48 % | 45 % |
-| 6 stärker | 86 % | 84 % | 82 % |
+| 6 schwächer | 19 % | 16 % | 12 % |
+| gleich | 49 % | 44 % | 45 % |
+| 6 stärker | 82 % | 83 % | 83 % |
+
+**Linien und Taktikkarten.** Wie in einem Manager-Spiel zählt jetzt der ganze Kader, und wie in Clash Royale nimmst du ein kleines Deck mit ins Match:
+
+- **Zwei Linien:** Jedes Team hat zwei Linien zu drei Stürmern und zwei Verteidigern. Eine steht auf dem Feld, die andere erholt sich auf der Bank. Den Wechsel wünschst du jederzeit über den Umschalter neben der Taktik; gewechselt wird vor der nächsten Chance. Die Werte der Linie auf dem Feld bestimmen, wie viele Chancen entstehen.
+- **Warum wechseln:** Simulation mit dem mittleren Modell-Spieler, erste Linie 81, zweite 76, gegen WASA (1500 Matches je Zeile, Siegquote): nie wechseln 39 %, selten wechseln 43 %, vernünftig wechseln 46 bis 49 %, nur die zweite Linie etwa 11 %. Die erste Linie soll also die meisten Chancen spielen, aber nicht alle.
+- **Der Gegner coacht mit:** Er wechselt seine Linien nach der Energie, stellt in den letzten Minuten eines knappen Spiels die erste Linie und setzt seine Taktikkarten ein, wenn ihr Moment da ist.
+- **Taktikkarten:** Bis zu drei kommen mit ins Match, jede einmal einsetzbar. Antippen zeigt, was die Karte tut; erst «Einsetzen» spielt sie. Drei hast du von Anfang an, drei gibt es im Shop.
+
+| Karte | Wirkung | Preis |
+|---|---|---|
+| Time-out | Alle Spieler beider Linien bekommen 30 Energie zurück. | Start |
+| Pressing | In den nächsten zwei Abwehrszenen gewinnt schon «Im Feld» den Ball, nicht erst «Perfekt». | Start |
+| Spielzug | Die nächste Chance ist ein Konter 3 gegen 2, alle Felder sind 25 % breiter. | Start |
+| Kaltblütig | Beim nächsten Schuss läuft der Strich 40 % langsamer. Geht auch im Penaltyschiessen. | 900 |
+| Mauern | Bis zum Drittelsende hat der Gegner halb so viele Chancen, du selbst 40 % weniger. | 1400 |
+| Goalie raus | Bis zum nächsten Tor oder Drittelsende doppelt so viele Chancen und 15 % breitere Felder. Jeder Schuss des Gegners trifft das leere Tor, jeder Ballverlust ist ein Konter. | 2000 |
+
+Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner den Goalie raus, schiesst du aufs leere Tor.
 
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
 
@@ -46,7 +64,7 @@ Wirkung der Taktik für den mittleren Modell-Spieler (Team um 81 gegen WASA, 700
 - **Eigener Schuss:** wie ein Penalty in einem Fussballspiel. Der gegnerische Goalie steht fast in der Mitte. Der dunkle Bereich um ihn ist seine Reichweite: Was dort landet, hält er. Hell ist, was frei bleibt: aus der Distanz nur die hohen Ecken, aus der Nähe viel mehr. Erst ins Tor tippen, wohin der Schuss gehen soll (schieben geht auch, die Zielmarke steht dann über dem Finger). Dann läuft der Schuss-Balken: Genau in der Mitte geht der Ball genau ins Ziel. Steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab, am Rand des grünen Felds um 12 % der Torbreite. Wer nah an den Pfosten zielt, riskiert also Pfosten oder Latte, wer Abstand lässt, den Goalie. Das Feld auf dem Balken ist aus der Nähe breit (bis 17 %) und aus der Distanz schmal (ab 3 %). Steht ein Gegner nah, wird es schmaler, und ein klar verpasster Stopp wird geblockt. Gewürfelt wird beim eigenen Schuss nichts.
 - **Der Goalie ahnt die Ecke:** Sobald das Ziel steht, läuft eine stille Uhr. Nach 1.5 Sekunden rückt der Goalie zur Seite des Ziels (30 % der halben Torbreite pro Sekunde, höchstens 45 %), seine Reichweite wandert mit. Wer den Strich mehrmals durchlaufen lässt, findet die Ecke zu. Ob er noch hinkommt, zeigt erst der Flug: Bei knappen Bällen läuft er langsamer aus, der Goalie streckt sich, dann erst fällt die Entscheidung.
 - **Tempo des Strichs:** Der Abschlusswert bestimmt, wie schnell der Strich auf dem Schuss-Balken läuft: 0.95 Sekunden pro Durchlauf bei Abschluss 90, 0.68 bei 80, 0.45 bei 70. Ein schwacher Schütze muss also viel genauer tippen.
-- **Energie:** Jeder Spieler startet mit 100. Jede Chance kostet alle etwas (offensiv mehr, defensiv weniger), dazu kosten Pass (4), Annahme (2), Dribbling (10), Schuss (7) und Abwehraktion (7). Jede Drittelspause bringt 15 zurück. Je müder ein Spieler, desto schneller läuft sein Strich auf jedem Balken, bei leerer Energie in 60 % der normalen Zeit. Die Energie steht als kleiner Balken unter jedem eigenen Spieler und bei jedem Pass-Ziel. Wer alles über denselben Star spielt, hat ihn im letzten Drittel müde. Müde Schützen des Gegners streuen stärker.
+- **Energie:** Jeder Spieler startet mit 100. Jede Chance kostet die Spieler auf dem Feld 5, dazu kosten Pass (4), Annahme (2), Dribbling (10), Schuss (7) und Abwehraktion (7). Wer auf der Bank sitzt, bekommt pro Chance 9 zurück, jede Drittelspause bringt allen 15. Je müder ein Spieler, desto schneller läuft sein Strich auf jedem Balken (bei leerer Energie in 62 % der normalen Zeit). Eine müde Linie erspielt ausserdem weniger Chancen und lässt mehr zu: Bei leerer Energie zählen ihre Werte 18 Punkte weniger. Die Energie steht als kleiner Balken unter jedem eigenen Spieler, bei jedem Pass-Ziel und am Linien-Umschalter. Müde Schützen des Gegners streuen stärker.
 - **Tor und Jubel:** Das Netz ist ein Gitter aus Punkten. Beim Tor drückt der Ball es in Flugrichtung nach hinten, eine Welle läuft über die Maschen, es zappelt etwa zwei Sekunden nach, und der Ball fällt im Tor zu Boden. Hinter dem Tor steht eine Tribüne mit den Fans der angreifenden Seite (deine in Blau, die des Gegners in Gold). Beim Tor springen sie, reissen die Arme hoch, Schals und Fahnen gehen hoch, es blitzt und es regnet Konfetti. Bei Parade oder Fehlschuss sinken sie zusammen. Mit reduzierter Bewegung bleiben nur die erhobenen Arme.
 - **Goalie-Figur:** In der Torsicht ist der Goalie eine Figur mit Gelenken (`src/lab/keeper.js`): kniend, Gitterhelm, Trikot mit farbigen Ärmeln, schwarze Handschuhe. Becken, Oberkörper, Kopf, Arme und Beine bewegen sich einzeln: seitlich rutschen mit Schritt und Abstoss, Handparade mit geneigtem Oberkörper, Beinparade am Boden, Hechtsprung.
 - **Parade:** Der Schuss des Gegners ist ehrlich zu sehen (goldener Ring am Landepunkt). Gehalten ist, wenn die richtige Ecke angetippt wird, bevor der Ball da ist. Bessere Verteidiger und gestörte Schützen geben mehr Zeit.
@@ -62,19 +80,19 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 
 Ein müder Schütze (Energie 30) trifft aus der Nähe statt 31, 45, 62 und 70 % noch 24, 35, 47 und 57 %.
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), Team um 81 gegen WASA (81), normale Taktik, 700 Matches je Feld, Siegquote:
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 500 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 23 % | 65 % | 94 % | 99 % | 100 % |
-| mittel | 2 % | 14 % | 50 % | 85 % | 98 % |
-| schwach | 0 % | 1 % | 9 % | 33 % | 68 % |
+| stark | 30 % | 62 % | 95 % | 98 % | 100 % |
+| mittel | 3 % | 17 % | 43 % | 81 % | 98 % |
+| schwach | 0 % | 1 % | 6 % | 32 % | 66 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 
 **Shop und Team:**
 
-- **Team aus Packs:** Du startest mit fünf Bronze-Karten (Linie um 77) und 1500 Münzen. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.
+- **Team aus Packs:** Du startest mit zehn Bronze-Karten (erste Linie um 77, zweite um 72), drei Taktikkarten und 1500 Münzen. Ein alter Spielstand mit einer Linie wird umgestellt: Die zweite Linie kommt aus der Sammlung, fehlende Plätze werden mit Bronze-Karten um 72 aufgefüllt. Im Shop gibt es drei Packs: Basis (500, 3 Karten), Premium (1200, 4 Karten, mind. 1 Silber) und Star (3000, 5 Karten, 1 Gold sicher). Bronze unter 85, Silber ab 85, Gold ab 92.
 - **Pool:** alle 271 Feldspieler der Herren L-UPL 2026/27 aus dem Fantasy-Pool (`src/lab/pool.js`), mit Nation, Rückennummer, Jahrgang und Porträt. Die 28 bekannten Karten behalten ihre Werte, die übrigen werden aus dem Fantasy-Preis abgeleitet.
 - **Karte:** ein Wappen mit Metallrand in Bronze, Silber oder Gold. Oben links hängt ein Wimpel mit Gesamtwert, Position, Flagge und dem Zeichen der Spezialfähigkeit. Das Porträt ist auf das Metall «gedruckt» (der weisse Studiohintergrund verschwindet), darunter steht der Name auf einem dunklen Feld. Die volle Karte zeigt die sechs Werte, mit denen das Match rechnet: Schuss, Pass, Dribbling, Zweikampf, Block, Antizipation. Unter 150 px Breite erscheint die Kurzform ohne Werte. Ohne Bild zeigt die Karte geprägte Initialen.
 - **Porträts:** 190 Bilder kommen von swiss unihockey (Cloudinary), 17 von hcrychenberg.ch, 10 sind Google-Vorschaubilder, 1 liegt bei fliiga.com. Die Seite lädt sie direkt von dort. 53 Spieler haben kein Bild.

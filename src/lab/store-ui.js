@@ -107,32 +107,56 @@
       ${live ? '<div class="pk-leak"></div>' + strip(' on') + strip(' off') : strip('')}</div>`;
   }
 
+  // --- Taktikkarten ---
+  const TICON = {
+    timeout: '<svg viewBox="0 0 40 40"><circle cx="20" cy="22" r="12"/><path d="M20 22 V14 M16 5 H24 M20 5 V10 M29.5 12.5 L32 10"/></svg>',
+    press: '<svg viewBox="0 0 40 40"><circle class="f" cx="20" cy="20" r="3.6"/><path d="M5 9 L14 15 M14 9.5 V15 H8.5 M35 9 L26 15 M26 9.5 V15 H31.5 M5 31 L14 25 M14 30.5 V25 H8.5 M35 31 L26 25 M26 30.5 V25 H31.5"/></svg>',
+    play: '<svg viewBox="0 0 40 40"><rect x="6" y="5" width="28" height="30" rx="3"/><path d="M12 28 C 14 18, 22 22, 27 12 M27 12 L21.5 13 M27 12 L26.5 17.5"/><circle class="f" cx="12" cy="13" r="2.4"/><path d="M24 25 l5 5 m0 -5 l-5 5"/></svg>',
+    calm: '<svg viewBox="0 0 40 40"><path d="M20 5 V35 M7 12.5 L33 27.5 M33 12.5 L7 27.5 M16 7.5 L20 11 L24 7.5 M16 32.5 L20 29 L24 32.5"/></svg>',
+    empty: '<svg viewBox="0 0 40 40"><path d="M6 30 V10 H34 V30"/><path d="M14 24 H26 M22 19.5 L26.5 24 L22 28.5" /><path d="M6 30 H34" stroke-dasharray="2.5 4"/></svg>',
+    wall: '<svg viewBox="0 0 40 40"><path d="M5 9 H35 V31 H5 Z M5 16.3 H35 M5 23.6 H35 M15 9 V16.3 M26 9 V16.3 M10 16.3 V23.6 M20.5 16.3 V23.6 M30 16.3 V23.6 M15 23.6 V31 M26 23.6 V31"/></svg>'
+  };
+  // Kachel einer Taktikkarte. o.state: 'on' (fürs Match gewählt), 'own' (im Besitz), 'lock' (noch nicht gekauft), 'used' (im Match verbraucht)
+  function tacHtml(id, o) {
+    const t = M.CARDS[id], opt = o || {}, price = (C.TAC.find(x => x.id === id) || {}).price || 0;
+    const foot = opt.state === 'lock' ? `<i class="tc-p">${COIN}${fmt(price)}</i>` : opt.state === 'on' ? '<i class="tc-p on">dabei</i>' : opt.foot || '';
+    return `<span class="tc ${opt.state || ''}"><span class="tc-i">${TICON[id]}</span><b>${esc(t.name)}</b>${opt.text ? `<small>${esc(t.text)}</small>` : ''}${foot}</span>`;
+  }
+
   // --- Shop ---
   const pct = x => Math.round(x * 100) + ' %';
   function renderStore() {
     $('packs').innerHTML = C.PACKS.map(p => `<button type="button" class="shelf-it" data-pack="${p.id}"${st.coins < p.price ? ' disabled' : ''} aria-label="${esc(p.name)}-Pack für ${p.price} Münzen aufreissen">${packHtml(p)}
       <span class="shelf-o"><b>${p.n} Karten</b>Gold ${pct(p.odds.gold)}<br>Silber ${pct(p.odds.silver)}</span><span class="price">${COIN}${fmt(p.price)}</span></button>`).join('');
+    $('tacshop').innerHTML = C.TAC.map(t => {
+      const own = st.tacOwned.indexOf(t.id) >= 0;
+      return `<div class="tacrow2${own ? ' own' : ''}"><span class="tc-i">${TICON[t.id]}</span><p><b>${esc(M.CARDS[t.id].name)}</b>${esc(M.CARDS[t.id].text)}<em>${esc(M.CARDS[t.id].when)}.</em></p>${own ? '<i class="have">Hast du</i>' : `<button type="button" class="buyb" data-buytac="${t.id}"${st.coins < t.price ? ' disabled' : ''}>${COIN}${fmt(t.price)}</button>`}</div>`;
+    }).join('');
     const short = C.PACKS[0].price - st.coins;
     $('store-own').textContent = `${st.owned.length} von ${C.POOL.length} Spielern gesammelt, ${st.opened || 0} Packs geöffnet.` + (short > 0 ? ` Dir fehlen ${fmt(short)} Münzen fürs nächste Pack: spiel ein Match.` : '');
     badges();
   }
 
   // --- Team ---
-  const lineSorted = () => C.lineCards(st).sort((a, b) => (a.pos === b.pos ? b.ovr - a.ovr : a.pos === 'ATT' ? -1 : 1));
+  const sorted = cards => cards.slice().sort((a, b) => (a.pos === b.pos ? b.ovr - a.ovr : a.pos === 'ATT' ? -1 : 1));
   const sum = ids => ids.map(C.get).filter(Boolean).reduce((a, c) => a + c.ovr, 0);
-  const canImprove = () => sum(C.best(st.owned)) > sum(st.lineup);
+  const lined = () => st.lineup.concat(st.line2);
+  const lineOf = id => (st.lineup.indexOf(id) >= 0 ? 1 : st.line2.indexOf(id) >= 0 ? 2 : 0);
+  const canImprove = () => { const b = C.bestLines(st.owned); return sum(b.lineup) > sum(st.lineup) || sum(b.lineup) + sum(b.line2) > sum(st.lineup) + sum(st.line2); };
   function renderTeam() {
-    $('team-ovr').textContent = C.teamOvr(st.lineup);
-    $('team-line').innerHTML = lineSorted().map(c => `<button type="button" class="tslot${slot === c.id ? ' on' : ''}" data-slot="${c.id}" aria-pressed="${slot === c.id}" aria-label="${esc(c.first + ' ' + c.last)}, ${posName(c)}, ${c.ovr}">${cardHtml(c.id, { eager: 1 })}</button>`).join('');
-    $('team-hint').textContent = slot ? `Wähle unten eine Karte für den Platz von ${C.get(slot).last}.` : 'Tippe auf einen Platz, um ihn neu zu besetzen. Tippe auf eine Karte der Sammlung, um sie gross zu sehen.';
+    const slotHtml = c => `<button type="button" class="tslot${slot === c.id ? ' on' : ''}" data-slot="${c.id}" aria-pressed="${slot === c.id}" aria-label="${esc(c.first + ' ' + c.last)}, ${posName(c)}, ${c.ovr}">${cardHtml(c.id, { eager: 1 })}</button>`;
+    $('team-ovr').textContent = C.teamOvr(st.lineup); $('team-ovr2').textContent = C.teamOvr(st.line2);
+    $('team-line').innerHTML = sorted(C.lineCards(st)).map(slotHtml).join('');
+    $('team-line2').innerHTML = sorted(C.line2Cards(st)).map(slotHtml).join('');
+    $('team-hint').textContent = slot ? `Tippe auf einen anderen Platz, um mit ${C.get(slot).last} zu tauschen, oder wähle unten eine Karte.` : 'Tippe auf einen Platz, um ihn neu zu besetzen oder zwei Spieler zu tauschen. Im Match wechselst du zwischen den Linien: Wer auf der Bank sitzt, erholt sich.';
     $('btn-best').disabled = !canImprove();
     const pos = slot ? C.get(slot).pos : null;
     const list = st.owned.map(C.get).filter(c => c && (filter === 'all' || c.pos === filter) && (!pos || c.pos === pos)).sort((a, b) => b.ovr - a.ovr);
     document.querySelectorAll('#team-filter [data-f]').forEach(b => { b.classList.toggle('on', b.dataset.f === filter); b.setAttribute('aria-pressed', b.dataset.f === filter); });
     $('team-count').textContent = `${st.owned.length} von ${C.POOL.length}`;
     $('team-all').innerHTML = list.map(c => {
-      const inLine = st.lineup.indexOf(c.id) >= 0;
-      return `<button type="button" class="pick-card${inLine ? ' inline' : ''}" data-pick="${c.id}" aria-label="${esc(c.first + ' ' + c.last)}, ${posName(c)}, ${c.ovr}${inLine ? ', in der Linie' : ''}">${cardHtml(c.id)}${inLine ? '<em>In der Linie</em>' : ''}</button>`;
+      const ln = lineOf(c.id);
+      return `<button type="button" class="pick-card${ln ? ' inline' : ''}" data-pick="${c.id}" aria-label="${esc(c.first + ' ' + c.last)}, ${posName(c)}, ${c.ovr}${ln ? ', ' + ln + '. Linie' : ''}">${cardHtml(c.id)}${ln ? `<em>${ln}. Linie</em>` : ''}</button>`;
     }).join('') || '<p class="note">Keine Karten.</p>';
     badges();
   }
@@ -141,7 +165,7 @@
   let sheetId = null, sheetStop = null;
   function openSheet(id) {
     const c = C.get(id); if (!c) return;
-    const t = M.trait(c), inLine = st.lineup.indexOf(id) >= 0, own = st.owned.indexOf(id) >= 0, ts = t && STATS.find(s => s.trait === t);
+    const t = M.trait(c), inLine = lineOf(id) > 0, own = st.owned.indexOf(id) >= 0, ts = t && STATS.find(s => s.trait === t);
     sheetId = id;
     $('sheet-card').innerHTML = `<div class="tilt-in">${cardHtml(id, { eager: 1 })}</div>`;
     $('sheet-name').textContent = c.first + ' ' + c.last;
@@ -151,7 +175,7 @@
     $('sheet-trait').hidden = !ts;
     if (ts) $('sheet-trait').innerHTML = `${ICON[ts.icon]}<span><b>${esc(M.TRAITS[t].name)}</b><br>${esc(c.last)} ${ts.does}.</span>`;
     const btn = $('sheet-do'); btn.hidden = !own; btn.disabled = inLine;
-    btn.textContent = inLine ? 'Spielt in deiner Linie' : 'In die Linie stellen';
+    btn.textContent = inLine ? `Spielt in deiner ${lineOf(id)}. Linie` : 'Aufstellen';
     $('sheet').hidden = false; lock(true);
     if (sheetStop) sheetStop(); sheetStop = tilt($('sheet-card'));
   }
@@ -300,8 +324,8 @@
     const fresh = P.res.cards.filter(c => !c.dupe).length, dup = P.res.cards.filter(c => c.dupe), back_ = dup.reduce((x, c) => x + c.coins, 0);
     $('po-title').textContent = P.res.pack.name + '-Pack';
     $('po-sum').textContent = (fresh === 1 ? '1 neue Karte' : fresh + ' neue Karten') + (dup.length ? ` · ${dup.length} doppelt, +${fmt(back_)} Münzen` : '');
-    const now = C.teamOvr(st.lineup), bestIds = C.best(st.owned), gain = canImprove();
-    $('po-take').hidden = !gain; $('po-take').innerHTML = `Neue Karten in die Linie<small>Team ${now} → ${C.teamOvr(bestIds)}</small>`;
+    const bl = C.bestLines(st.owned), gain = canImprove();
+    $('po-take').hidden = !gain; $('po-take').innerHTML = `Neue Karten aufstellen<small>1. Linie ${C.teamOvr(st.lineup)} → ${C.teamOvr(bl.lineup)} · 2. Linie ${C.teamOvr(st.line2)} → ${C.teamOvr(bl.line2)}</small>`;
     $('po-again').hidden = st.coins < P.res.pack.price; $('po-again').innerHTML = `Noch ein ${esc(P.res.pack.name)}-Pack ${COIN}${fmt(P.res.pack.price)}`;
     $('po-done').hidden = false;
     if (reduce) return;
@@ -323,7 +347,7 @@
   stage.addEventListener('pointerup', e => { if (!down) return; const tap = Math.hypot(e.clientX - down.x, e.clientY - down.y) < 12 && performance.now() - down.t < 700; down = null; if (tap) advance(); });
   stage.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === stage) { e.preventDefault(); advance(); } });
   $('po-skip').addEventListener('click', () => { if (P && P.phase !== 'summary') summary(); });
-  $('po-take').addEventListener('click', () => { set(C.setLine(st, C.best(st.owned))); $('po-take').hidden = true; $('po-sum').textContent = 'Neue Linie gesetzt: Team ' + C.teamOvr(st.lineup) + '.'; });
+  $('po-take').addEventListener('click', () => { set(C.setBest(st)); $('po-take').hidden = true; $('po-sum').textContent = `Aufgestellt: 1. Linie ${C.teamOvr(st.lineup)}, 2. Linie ${C.teamOvr(st.line2)}.`; });
   $('po-again').addEventListener('click', () => { if (P) openPack(P.res.pack.id); });
   $('po-close').addEventListener('click', closePack);
   $('po-team').addEventListener('click', () => { closePack(); go('team'); });
@@ -332,13 +356,20 @@
     if (e.key !== 'Escape') return;
     if (!$('sheet').hidden) closeSheet(); else if (P && P.phase !== 'summary') summary(); else if (P) closePack();
   });
-  $('team-line').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (!b) return; slot = slot === b.dataset.slot ? null : b.dataset.slot; renderTeam(); });
+  // Platz antippen: wählen. Zweiten Platz derselben Position antippen: die beiden tauschen (auch zwischen den Linien).
+  const slotTap = e => {
+    const b = e.target.closest('[data-slot]'); if (!b) return; const id = b.dataset.slot;
+    if (slot && slot !== id && C.get(slot).pos === C.get(id).pos) { set(C.swapIn(st, id, slot)); slot = null; } else slot = slot === id ? null : id;
+    renderTeam();
+  };
+  $('team-line').addEventListener('click', slotTap); $('team-line2').addEventListener('click', slotTap);
   $('team-all').addEventListener('click', e => {
     const b = e.target.closest('[data-pick]'); if (!b) return;
-    if (slot && st.lineup.indexOf(b.dataset.pick) < 0) { set(C.swapIn(st, b.dataset.pick, slot)); slot = null; renderTeam(); } else openSheet(b.dataset.pick);
+    if (slot && b.dataset.pick !== slot) { set(C.swapIn(st, b.dataset.pick, slot)); slot = null; renderTeam(); } else openSheet(b.dataset.pick);
   });
   $('team-filter').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; renderTeam(); } });
-  $('btn-best').addEventListener('click', () => { set(C.setLine(st, C.best(st.owned))); slot = null; renderTeam(); });
+  $('btn-best').addEventListener('click', () => { set(C.setBest(st)); slot = null; renderTeam(); });
+  $('tacshop').addEventListener('click', e => { const b = e.target.closest('[data-buytac]'); if (b && !b.disabled) { set(C.buyTac(st, b.dataset.buytac)); buzz(20); renderStore(); } });
   $('sheet-x').addEventListener('click', closeSheet);
   $('sheet').addEventListener('click', e => { if (e.target === $('sheet')) closeSheet(); });
   $('sheet-do').addEventListener('click', () => { if (!sheetId) return; set(C.swapIn(st, sheetId, slot)); slot = null; closeSheet(); if (!$('screen-team').hidden) renderTeam(); if (P && P.phase === 'summary') { $('po-take').hidden = !canImprove(); } });
@@ -354,8 +385,11 @@
   window.HKStore = {
     state: () => st,
     line: () => C.lineCards(st),
+    lines: () => [C.lineCards(st), C.line2Cards(st)],
+    tac: () => st.tac.slice(),
+    toggleTac: id => set(C.toggleTac(st, id)),
     earn: (coins, won) => set(C.earn(st, coins, won)),
     onChange: f => listeners.push(f),
-    show, cardHtml, backHtml, packHtml, openSheet, COIN, fmt, ICON, stats
+    show, go, cardHtml, backHtml, packHtml, tacHtml, TICON, openSheet, COIN, fmt, ICON, stats
   };
 })();

@@ -4,6 +4,7 @@
    aim  Zielfehler beim Setzen des Ziels im Tor, in halben Torbreiten (Tor von -1 bis 1)
    wait so viele Durchläufe des Schuss-Balkens schaut er zusätzlich zu, bevor er stoppt (der Goalie rückt in der Zeit zur Ecke)
    rt   Reaktionszeit bei der Parade in ms, rtSd ihre Streuung, zerr Anteil falsch angetippter Zonen
+   Linien und Taktikkarten setzt er nach einfachen Regeln ein (siehe coach).
    Die Zahlen sind Annahmen und müssen mit echten Spielern überprüft werden. */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -49,9 +50,28 @@ function chance(pf, s, sc, id) {
   if (slack <= 0) return 0.02;
   return clamp(erf((core + dev / c.devEdge * (pv.w / 2 - core)) * pv.sweep / (Math.SQRT2 * pf.s)) * (pv.pressed ? 0.85 : 1), 0.03, 0.95);
 }
+/* Trainer-Entscheide zwischen zwei Chancen: Linie nach der Energie (in den letzten Minuten eines knappen Spiels die erste)
+   und Taktikkarten, wenn ihr Moment da ist. style: { rest, back } Schwellen der Energie, never: nie wechseln, cards: false = keine Karten. */
+const STYLE = { rest: 72, back: 90 };
+function coach(s, style) {
+  const st = style || STYLE, T = s.teams.you, c = s.cfg, d = s.score.you - s.score.home, last = s.period >= c.periods - 1, left = (s.period + 1) * c.periodMin - s.clock;
+  if (T.bench && !s.pen) {
+    const on = M.avgEn(T.cards), off = M.avgEn(T.bench), clutch = last && left < 5 && Math.abs(d) <= 1;
+    const want = st.never ? 0 : st.always !== undefined ? st.always : T.line === 0 ? (on < st.rest && off > on + 10 && !(clutch && on > 45) ? 1 : 0) : (off >= st.back || on < off - 5 || (clutch && off > 55) ? 0 : 1);
+    if (want !== T.want) return { type: 'line', value: want };
+  }
+  if (st.cards === false || s.pen) return null;
+  const can = id => s.tac.you.some(x => x.id === id && !x.used), en = M.avgEn(M.all(s, 'you'));
+  const pick = can('empty') && last && left <= 3.5 && d < 0 && d >= -2 && !s.fx.you.empty ? 'empty'
+    : can('wall') && last && left <= 6 && d > 0 && !s.fx.you.wall ? 'wall'
+    : can('timeout') && en < 62 && s.period >= 1 ? 'timeout'
+    : can('play') && s.period >= 1 && d <= 0 ? 'play'
+    : can('press') && s.period >= 1 && (d < 0 || (last && d === 0)) ? 'press' : null;
+  return pick ? { type: 'card', id: pick } : null;
+}
 /* Spielt vernünftig: wählt die Aktion mit dem besten Erwartungswert für das eigene Können, tippt mit seiner Streuung,
    zielt ins freie Feld und reagiert bei der Parade mit seiner Reaktionszeit. */
-function policy(pf) {
+function policy(pf, style) {
   return (s, r) => {
     const sc = s.cur, tap = (pos, sweep) => clamp(pos + gauss(r) * pf.s / sweep, 0, 1);
     if (s.phase === 'decide' && sc.type === 'att') {
@@ -67,27 +87,31 @@ function policy(pf) {
     }
     if (s.phase === 'decide') { const c = M.contest(s, {}); return { type: 'defend', hit: tap(c.pos, c.sweep) }; }
     if (s.phase === 'aim' && s.shot.side === 'you') {
+      // Kaltblütig: für einen Schuss aus guter Lage oder im Penaltyschiessen
+      if ((!style || style.cards !== false) && !s.shot.calm && s.tac.you.some(x => x.id === 'calm' && !x.used) && (s.shot.q >= 0.6 || s.shot.ctx === 'so')) return { type: 'card', id: 'calm' };
       const pl = shotPlan(pf, s), b = M.shotBar(s);
       return { type: 'aim', hit: tap(b.pos, b.sweep), t: tapTime(pf, b.sweep, r()), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] };
     }
     if (s.phase === 'aim') { const sh = s.shot; return { type: 'aim', zone: r() < pf.zerr ? pick(M.ZONES.filter(z => z !== sh.zone), r) : sh.zone, rt: Math.max(160, pf.rt + gauss(r) * pf.rtSd) }; }
-    return { type: 'next' };
+    return coach(s, style) || { type: 'next' };
   };
 }
+// squad und opp: fünf Karten (ohne Bank) oder { cards, bench, tac }
+const side = x => (Array.isArray(x) ? { goalie: { val: 88 }, cards: x } : Object.assign({ goalie: { val: 88 } }, x));
 function play(squad, opp, pol, n, seed, cfg, tactic) {
-  const r = E.makeRng(seed), m = { n, win: 0, gf: 0, ga: 0, so: 0, chY: 0, chH: 0, min: 99, max: 0, en: 0, enMin: 0 };
+  const r = E.makeRng(seed), m = { n, win: 0, gf: 0, ga: 0, so: 0, chY: 0, chH: 0, min: 99, max: 0, en: 0, enMin: 0, changes: 0, l2: 0, cards: 0 };
   ['att', 'shots', 'goals', 'faced', 'onGoal', 'saved', 'stops', 'def', 'bars', 'hits', 'perfects', 'counters'].forEach(k => { m[k] = 0; });
   for (let i = 0; i < n; i++) {
-    let s = M.newMatch({ cfg, tactic, you: { goalie: { val: 88 }, cards: squad }, home: { goalie: { val: 88 }, cards: opp } }, r), g = 0;
-    while (s.phase !== 'end') { const a = pol(s, r), x = M.act(s, a, r); if (!x.ok) throw new Error('ungültig ' + JSON.stringify(a) + ' ' + s.phase); s = x.state; if (++g > 700) throw new Error('endlos'); }
+    let s = M.newMatch({ cfg, tactic, you: side(squad), home: side(opp) }, r), g = 0;
+    while (s.phase !== 'end') { const a = pol(s, r), x = M.act(s, a, r); if (!x.ok) throw new Error('ungültig ' + JSON.stringify(a) + ' ' + s.phase); s = x.state; if (++g > 900) throw new Error('endlos'); }
     if (s.outcome === 'win' || s.outcome === 'penwin') m.win++; if (s.pen) m.so++;
     m.chY += s.chances.you; m.chH += s.chances.home; const tot = s.chances.you + s.chances.home; m.min = Math.min(m.min, tot); m.max = Math.max(m.max, tot);
-    const en = s.teams.you.cards.map(c => c.en); m.en += en.reduce((a, b) => a + b, 0) / en.length; m.enMin += Math.min.apply(null, en);
+    const en = M.all(s, 'you').map(c => c.en); m.en += en.reduce((a, b) => a + b, 0) / en.length; m.enMin += Math.min.apply(null, en); m.changes += s.stats.changes; m.cards += s.tac.you.filter(x => x.used).length;
     m.gf += s.score.you; m.ga += s.score.home; Object.keys(s.stats).forEach(k => { if (k in m) m[k] += s.stats[k]; });
   }
   return m;
 }
-module.exports = { box, PROFILES, policy, play, shift, shotPlan, tapTime, chance, gauss };
+module.exports = { box, PROFILES, STYLE, policy, coach, play, shift, shotPlan, tapTime, chance, gauss };
 if (require.main === module) {
   const n = +process.argv[2] || 1500, cfg = JSON.parse(JSON.stringify(M.CFG));
   process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); cfg[k] = +v; });

@@ -1,4 +1,4 @@
-/* Dein Team: Karten aus Packs, Münzen aus Matches, deine Linie. Reine Logik ohne DOM; gespeichert wird im Browser (localStorage).
+/* Dein Team: Karten aus Packs, Münzen aus Matches, deine zwei Linien und deine Taktikkarten. Reine Logik ohne DOM; gespeichert wird im Browser (localStorage).
    Karten: die 28 Karten aus engine.js und world.js behalten ihre Werte, alle anderen Feldspieler der L-UPL werden aus dem
    Fantasy-Preis abgeleitet (Preis 4 etwa 70, Preis 20.5 etwa 97) mit festen, vom Namen abhängigen Einzelwerten. */
 (function (root) {
@@ -74,55 +74,97 @@
     return { ok: true, state: s, cards, pack: p };
   }
 
-  // --- Linie ---
+  // --- Linien: zwei zu je drei Stürmern und zwei Verteidigern. lineup ist die erste Linie, line2 die zweite. ---
   const lineCards = st => st.lineup.map(get).filter(Boolean);
+  const line2Cards = st => (st.line2 || []).map(get).filter(Boolean);
   function best(owned) {
     const l = owned.map(get).filter(Boolean).sort((a, b) => b.ovr - a.ovr);
     const att = l.filter(c => c.pos === 'ATT').slice(0, 3), def = l.filter(c => c.pos === 'DEF').slice(0, 2);
     return att.concat(def).map(c => c.id);
   }
+  // Beste Aufstellung: die stärksten fünf in die erste Linie, die nächsten fünf in die zweite
+  function bestLines(owned) { const l1 = best(owned); return { lineup: l1, line2: best(owned.filter(id => l1.indexOf(id) < 0)) }; }
   function okLine(ids) { const cs = ids.map(get); return !cs.some(c => !c) && cs.filter(c => c.pos === 'ATT').length === 3 && cs.filter(c => c.pos === 'DEF').length === 2 && new Set(ids).size === 5; }
-  function setLine(st, ids) { return okLine(ids) ? Object.assign({}, st, { lineup: ids.slice() }) : st; }
-  // Tauscht eine Karte in die Linie: an den gewählten Platz oder für die schwächste Karte derselben Position
+  const okLines = (l1, l2) => Array.isArray(l1) && Array.isArray(l2) && okLine(l1) && okLine(l2) && new Set(l1.concat(l2)).size === 10;
+  function setLines(st, l1, l2) { return okLines(l1, l2) ? Object.assign({}, st, { lineup: l1.slice(), line2: l2.slice() }) : st; }
+  const setBest = st => { const b = bestLines(st.owned); return setLines(st, b.lineup, b.line2); };
+  /* Stellt eine Karte auf: an den gewählten Platz oder für die schwächste Karte derselben Position. Steht die Karte schon in
+     einer Linie, tauschen die beiden die Plätze. */
   function swapIn(st, id, slotId) {
-    const c = get(id); if (!c || st.owned.indexOf(id) < 0 || st.lineup.indexOf(id) >= 0) return st;
-    let out = slotId && get(slotId) && get(slotId).pos === c.pos ? slotId : null;
-    if (!out) out = lineCards(st).filter(x => x.pos === c.pos).sort((a, b) => a.ovr - b.ovr)[0].id;
-    return setLine(st, st.lineup.map(x => (x === out ? id : x)));
+    const c = get(id); if (!c || st.owned.indexOf(id) < 0) return st;
+    const lined = st.lineup.concat(st.line2), here = lined.indexOf(id) >= 0;
+    let out = slotId && get(slotId) && get(slotId).pos === c.pos && lined.indexOf(slotId) >= 0 ? slotId : null;
+    if (!out) { if (here) return st; out = lined.map(get).filter(x => x.pos === c.pos).sort((a, b) => a.ovr - b.ovr)[0].id; }
+    if (out === id) return st;
+    const put = l => l.map(x => (x === out ? id : x === id ? out : x));
+    return setLines(st, put(st.lineup), put(st.line2));
   }
   const teamOvr = ids => { const l = ids.map(get).filter(Boolean); return l.length ? Math.round(l.reduce((a, c) => a + c.ovr, 0) / l.length) : 0; };
 
-  // --- Startteam: fünf Bronze-Karten um 77 ---
+  // --- Taktikkarten: drei zum Start, die anderen gibt es im Shop. Bis zu drei kommen mit ins Match. ---
+  const TAC = [{ id: 'timeout', price: 0 }, { id: 'press', price: 0 }, { id: 'play', price: 0 }, { id: 'calm', price: 900 }, { id: 'wall', price: 1400 }, { id: 'empty', price: 2000 }];
+  const START_TAC = TAC.filter(t => !t.price).map(t => t.id);
+  function buyTac(st, id) {
+    const t = TAC.find(x => x.id === id); if (!t || st.tacOwned.indexOf(id) >= 0 || st.coins < t.price) return st;
+    const tac = st.tac.length < 3 ? st.tac.concat(id) : st.tac;
+    return Object.assign({}, st, { coins: st.coins - t.price, tacOwned: st.tacOwned.concat(id), tac });
+  }
+  // Wählt eine Karte fürs Match an oder ab. Sind schon drei gewählt, fällt die zuerst gewählte heraus.
+  function toggleTac(st, id) {
+    if (st.tacOwned.indexOf(id) < 0) return st;
+    const cur = st.tac.slice(), i = cur.indexOf(id);
+    if (i >= 0) cur.splice(i, 1); else { if (cur.length >= 3) cur.shift(); cur.push(id); }
+    return Object.assign({}, st, { tac: cur });
+  }
+
+  // --- Startteam: erste Linie um 77, zweite Linie um 72, alles Bronze ---
+  function starters(r, pos, n, lo, hi, skip) {
+    const l = POOL.filter(c => c.pos === pos && c.ovr >= lo && c.ovr <= hi && !c.base && skip.indexOf(c.id) < 0), out = [];
+    while (out.length < n && out.length < l.length) { const c = l[Math.floor(r() * l.length)]; if (out.indexOf(c.id) < 0) out.push(c.id); }
+    return out;
+  }
   function fresh(seed) {
-    const r = E.makeRng(seed >>> 0), pick = (pos, n) => {
-      const l = POOL.filter(c => c.pos === pos && c.ovr >= 75 && c.ovr <= 79 && !c.base), out = [];
-      while (out.length < n) { const c = l[Math.floor(r() * l.length)]; if (out.indexOf(c.id) < 0) out.push(c.id); }
-      return out;
-    };
-    const owned = pick('ATT', 4).concat(pick('DEF', 3));
-    return { v: 1, coins: 1500, owned, lineup: best(owned), opened: 0, played: 0, won: 0 };
+    const r = E.makeRng(seed >>> 0);
+    const l1 = starters(r, 'ATT', 3, 75, 79, []).concat(starters(r, 'DEF', 2, 75, 79, [])), l2 = starters(r, 'ATT', 3, 70, 74, []).concat(starters(r, 'DEF', 2, 70, 74, []));
+    return { v: 2, coins: 1500, owned: l1.concat(l2), lineup: l1, line2: l2, tacOwned: START_TAC.slice(), tac: START_TAC.slice(), opened: 0, played: 0, won: 0 };
+  }
+  // Alter Spielstand mit einer Linie: Die zweite Linie kommt aus der Sammlung; was fehlt, wird mit Bronze-Karten um 72 aufgefüllt.
+  function upgrade(st, seed) {
+    const r = E.makeRng((seed ^ 0x51ed) >>> 0), s = Object.assign({}, st, { owned: st.owned.filter(get) });
+    const rest = () => s.owned.filter(id => s.lineup.indexOf(id) < 0).map(get);
+    ['ATT', 'DEF'].forEach(pos => { const need = (pos === 'ATT' ? 3 : 2) - rest().filter(c => c.pos === pos).length; if (need > 0) s.owned = s.owned.concat(starters(r, pos, need, 70, 74, s.owned)); });
+    s.line2 = best(s.owned.filter(id => s.lineup.indexOf(id) < 0));
+    s.v = 2; s.tacOwned = START_TAC.slice(); s.tac = START_TAC.slice();
+    return s;
   }
 
   // --- Gegner: von schwach bis stark. Köniz, Wiler und GC mit ihrer Hallenwache, WASA und Chur aus dem Pool ---
   const OPPS = [
-    { id: 'wasa', code: 'S', win: 400 },
-    { id: 'chur', code: 'C', win: 500 },
-    { id: 'koeniz', code: 'K', win: 700, guard: true },
-    { id: 'wiler', code: 'W', win: 800, guard: true },
-    { id: 'gc', code: 'G', win: 900, guard: true }
+    { id: 'wasa', code: 'S', win: 400, tac: ['timeout'] },
+    { id: 'chur', code: 'C', win: 500, tac: ['timeout', 'press'] },
+    { id: 'koeniz', code: 'K', win: 700, guard: true, tac: ['timeout', 'play', 'empty'] },
+    { id: 'wiler', code: 'W', win: 800, guard: true, tac: ['timeout', 'press', 'wall'] },
+    { id: 'gc', code: 'G', win: 900, guard: true, tac: ['play', 'press', 'empty'] }
   ];
   const fill = c => Object.assign({}, c, { stam: 100, box: 0, cap: false, home: false });
-  /* Karten des Gegners ohne deine Spieler (wer bei dir spielt, fehlt beim Gegner). Fehlt eine Position, rückt der nächstbeste
-     Spieler des Vereins aus dem Pool nach. */
-  function oppCards(oppId, mineIds) {
+  /* Die zwei Linien des Gegners ohne deine Spieler (wer bei dir spielt, fehlt beim Gegner). Erste Linie: die Hallenwache
+     oder die Besten des Vereins. Zweite Linie: die nächsten des Vereins. Fehlt eine Position, rückt der nächstbeste nach. */
+  function oppLines(oppId, mineIds) {
     const o = OPPS.find(x => x.id === oppId), mine = {}; (mineIds || []).map(get).filter(Boolean).forEach(c => { mine[plain(c.first + ' ' + c.last)] = 1; });
-    const free = c => !mine[plain(c.first + ' ' + c.last)];
-    const team = POOL.filter(c => c.team === o.code && free(c)).sort((a, b) => b.ovr - a.ovr);
-    let out = o.guard ? W.guard(W.create(), oppId).filter(free) : [];
-    const need = (pos, n) => { while (out.filter(c => c.pos === pos).length < n) { const c = team.find(x => x.pos === pos && !out.some(y => plain(y.last) === plain(x.last) && plain(y.first) === plain(x.first))); if (!c) break; out.push(c); } };
-    need('ATT', 3); need('DEF', 2);
-    return out.map(fill);
+    const key = c => plain(c.first + ' ' + c.last), free = c => !mine[key(c)];
+    const team = POOL.filter(c => c.team === o.code && free(c)).sort((a, b) => b.ovr - a.ovr), spare = POOL.filter(c => c.team !== o.code && free(c) && c.ovr <= 74).sort((a, b) => b.ovr - a.ovr);
+    const taken = {}, take = c => { taken[key(c)] = 1; return c; };
+    const line = start => {
+      const out = start.map(take);
+      const need = (pos, n) => { while (out.filter(c => c.pos === pos).length < n) { const c = team.find(x => x.pos === pos && !taken[key(x)]) || spare.find(x => x.pos === pos && !taken[key(x)]); if (!c) break; out.push(take(c)); } };
+      need('ATT', 3); need('DEF', 2);
+      return out.map(fill);
+    };
+    const l1 = line(o.guard ? W.guard(W.create(), oppId).filter(free) : []);
+    return [l1, line([])];
   }
+  const oppCards = (oppId, mineIds) => oppLines(oppId, mineIds)[0];
+  const oppTac = oppId => OPPS.find(x => x.id === oppId).tac.slice();
   // Münzen nach dem Match: Sieg je nach Gegner, Niederlage 120, dazu 30 pro eigenes Tor
   const LOSS = 120, GOAL = 30;
   function reward(oppId, won, goals) { const o = OPPS.find(x => x.id === oppId); return (won ? o.win : LOSS) + GOAL * goals; }
@@ -130,12 +172,20 @@
 
   // --- Speichern ---
   const KEY = 'hk-club-v1';
-  function valid(st) { return st && st.v === 1 && Array.isArray(st.owned) && Array.isArray(st.lineup) && typeof st.coins === 'number' && okLine(st.lineup) && st.lineup.every(id => st.owned.indexOf(id) >= 0); }
+  const okV1 = st => st && st.v === 1 && Array.isArray(st.owned) && Array.isArray(st.lineup) && typeof st.coins === 'number' && okLine(st.lineup) && st.lineup.every(id => st.owned.indexOf(id) >= 0);
+  function valid(st) {
+    return st && st.v === 2 && Array.isArray(st.owned) && typeof st.coins === 'number' && okLines(st.lineup, st.line2) && st.lineup.concat(st.line2).every(id => st.owned.indexOf(id) >= 0)
+      && Array.isArray(st.tacOwned) && Array.isArray(st.tac) && st.tac.length <= 3 && st.tac.every(id => st.tacOwned.indexOf(id) >= 0) && st.tacOwned.every(id => TAC.some(t => t.id === id));
+  }
   function load(store, seed) {
-    try { const st = JSON.parse(store.getItem(KEY)); if (valid(st)) { st.owned = st.owned.filter(get); return st; } } catch (e) { /* kein Speicher */ }
+    try {
+      let st = JSON.parse(store.getItem(KEY));
+      if (okV1(st)) st = upgrade(st, seed);
+      if (valid(st)) { st.owned = st.owned.filter(get); return st; }
+    } catch (e) { /* kein Speicher */ }
     return fresh(seed);
   }
   function save(store, st) { try { store.setItem(KEY, JSON.stringify(st)); } catch (e) { /* kein Speicher: gilt nur bis zum Neuladen */ } }
 
-  root.HKClub = { POOL, get, rarity, RNAME, CLUB, DUPE, PACKS, BUCKET, open, best, setLine, swapIn, teamOvr, lineCards, fresh, OPPS, oppCards, reward, earn, load, save, KEY };
+  root.HKClub = { POOL, get, rarity, RNAME, CLUB, DUPE, PACKS, BUCKET, open, best, bestLines, setLines, setBest, swapIn, teamOvr, lineCards, line2Cards, TAC, buyTac, toggleTac, fresh, upgrade, valid, OPPS, oppCards, oppLines, oppTac, reward, earn, load, save, KEY };
 })(typeof window !== 'undefined' ? window : globalThis);

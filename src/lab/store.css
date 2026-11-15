@@ -292,3 +292,28 @@ body.lock{overflow:hidden}
 .sheet-trait svg .f{fill:var(--gold);stroke:none}
 .sheet-trait b{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
 @media (prefers-reduced-motion:reduce){.pk-shine,.po-hand i,.po-rays::before,.pc.glow .pc-back .hc{animation:none}}
+
+/* Zweite Linie und Taktikkarten */
+.tovr.sm b{font-size:30px}
+.team-line.two{padding:10px 26px 12px;gap:10px 10px}
+.tc{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;padding:10px 6px 8px;border-radius:12px;border:1px solid var(--line);background:#070b1f;font-family:var(--display);text-transform:uppercase;text-align:center;color:var(--ice)}
+.tc b{font-weight:800;font-size:14px;letter-spacing:.06em;line-height:1.05}
+.tc small{font-family:var(--body);font-weight:500;font-size:11.5px;letter-spacing:0;text-transform:none;line-height:1.25;color:var(--mute)}
+.tc-i{flex-shrink:0;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#101a45;border:1px solid var(--line);color:var(--gold)}
+.tc-i svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.tc-i svg .f{fill:currentColor;stroke:none}
+.tc-p{display:inline-flex;align-items:center;gap:4px;font-style:normal;font-weight:800;font-size:12px;letter-spacing:.1em;color:var(--mute)}
+.tc-p .coin{width:13px;height:13px}
+.tc-p.on{color:#050818;background:var(--gold);border-radius:999px;padding:2px 8px 1px}
+.tc.on{border-color:var(--gold);background:#151003;box-shadow:0 0 0 2px rgba(247,215,116,.25)}
+.tc.lock{opacity:.6}
+.tc.used{opacity:.35}
+.tacshop{display:flex;flex-direction:column;gap:8px}
+.tacrow2{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#070b1f}
+.tacrow2 p{flex:1;min-width:0;margin:0;font-size:12.5px;line-height:1.3;color:var(--mute)}
+.tacrow2 p b{display:block;font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:.06em;text-transform:uppercase;color:var(--ice);line-height:1.1;margin-bottom:2px}
+.tacrow2 p em{display:block;font-style:normal;color:var(--gold);margin-top:2px}
+.tacrow2 .have{flex-shrink:0;font-family:var(--display);font-style:normal;font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#34d399}
+.buyb{flex-shrink:0;min-height:40px;padding:0 12px;border:1px solid var(--gold);border-radius:10px;background:#151003;display:inline-flex;align-items:center;gap:5px;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.06em;color:var(--gold)}
+.buyb .coin{width:15px;height:15px}
+.buyb:disabled{border-color:var(--line);color:var(--mute);opacity:.6}

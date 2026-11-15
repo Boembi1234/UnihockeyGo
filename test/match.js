@@ -78,11 +78,17 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           await p.waitForTimeout(300); continue;
         }
         if (Math.random() < 0.02) await p.evaluate(() => { const o = [...document.querySelectorAll('#tac [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
+        // Trainer: ab und zu die Linie wechseln oder eine Taktikkarte ansehen und einsetzen
+        if (Math.random() < 0.012) { await p.evaluate(() => { const o = [...document.querySelectorAll('#lines [data-line]')]; o[Math.floor(Math.random() * o.length)].click(); }); seen.line = 1; }
+        if (Math.random() < 0.012) {
+          const had = await p.evaluate(() => { const o = [...document.querySelectorAll('#tcards [data-card]:not(:disabled)')]; if (!o.length) return false; o[Math.floor(Math.random() * o.length)].click(); return true; });
+          if (had) { await p.waitForTimeout(60); await snap('10-taktikkarte'); await over('taktikkarte'); await p.evaluate(() => { const b = document.querySelector('#tcinfo [data-use]:not([data-use=""])'); if (b) b.click(); }); seen.card = 1; }
+        }
         await p.evaluate(() => document.getElementById('stage').click());
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'bar-att', 'bar-def', 'aim', 'react', 'end'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    const missing = ['att', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();
