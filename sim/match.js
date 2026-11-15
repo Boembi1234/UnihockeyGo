@@ -2,6 +2,7 @@
    Weil das Match vom Können abhängt, spielt hier ein Modell-Spieler mit einem Profil:
    s    Streuung beim Tippen auf einem Balken in ms (Timing-Balken und Schuss-Balken)
    aim  Zielfehler beim Setzen des Ziels im Tor, in halben Torbreiten (Tor von -1 bis 1)
+   wait so viele Durchläufe des Schuss-Balkens schaut er zusätzlich zu, bevor er stoppt (der Goalie rückt in der Zeit zur Ecke)
    rt   Reaktionszeit bei der Parade in ms, rtSd ihre Streuung, zerr Anteil falsch angetippter Zonen
    Die Zahlen sind Annahmen und müssen mit echten Spielern überprüft werden. */
 'use strict';
@@ -10,25 +11,43 @@ const box = {}; box.window = box; vm.createContext(box);
 ['src/engine.js', 'src/world.js', 'src/lab/match.js', 'src/lab/pool.js', 'src/lab/club.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), box));
 const E = box.HK, W = box.HKWorld, M = box.HKMatch;
 const PROFILES = {
-  stark: { s: 45, aim: 0.03, rt: 480, rtSd: 70, zerr: 0.03 },       // etwa die besten 10 %
-  mittel: { s: 70, aim: 0.05, rt: 560, rtSd: 85, zerr: 0.06 },
-  schwach: { s: 105, aim: 0.08, rt: 650, rtSd: 100, zerr: 0.1 }     // etwa die schwächsten 10 %
+  stark: { s: 45, aim: 0.03, wait: 0, rt: 480, rtSd: 70, zerr: 0.03 },       // etwa die besten 10 %
+  mittel: { s: 70, aim: 0.05, wait: 0.5, rt: 560, rtSd: 85, zerr: 0.06 },
+  schwach: { s: 105, aim: 0.08, wait: 1, rt: 650, rtSd: 100, zerr: 0.1 }     // etwa die schwächsten 10 %
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), pick = (l, r) => l[Math.floor(r() * l.length)];
 function gauss(r) { let u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
 function erf(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 const pHit = (pf, w, sweep) => erf(w * sweep / (2 * Math.SQRT2 * pf.s));
 const shift = (sq, d) => sq.map(c => { const x = Object.assign({}, c); ['sco', 'ply', 'clu', 'fai', 'frm', 'exp', 'ovr'].forEach(k => { x[k] = Math.max(40, Math.min(99, x[k] + d)); }); return x; });
-/* Eigener Schuss wie ein vernünftiger Spieler: Ziel in die Mitte des freien Felds neben dem Goalie, hoch, weil dort etwas
-   mehr frei ist. Dann den Schuss-Balken mit der eigenen Streuung stoppen. */
-function shotPlan(s) {
-  const sh = s.shot, F = M.freeW(s, sh, true), side = sh.keeper.x > 0 ? -1 : 1;
-  return { target: [side * (1 - F / 2), 0.8], free: F };
+/* Eigener Schuss wie ein vernünftiger Spieler: Er kennt sein Können und wählt das Ziel, bei dem er am ehesten trifft
+   (hohe oder flache Ecke, näher am Pfosten oder mit mehr Abstand). Dann stoppt er den Schuss-Balken mit seiner Streuung. */
+const CAND = [];
+[-1, 1].forEach(sd => { [0.06, 0.1, 0.15, 0.22, 0.32, 0.45].forEach(m => { CAND.push([sd * (1 - m), 1 - m * 0.75]); CAND.push([sd * (1 - m), 0.1]); }); });
+const GQ = [-1.9, -1.25, -0.75, -0.35, 0, 0.35, 0.75, 1.25, 1.9], GW = GQ.map(x => Math.exp(-x * x / 2)), GS = GW.reduce((a, b) => a + b, 0);
+// Zeit vom Setzen des Ziels bis zum Stopp: kurz hinschauen, dann beim nächsten Durchgang durch die Mitte tippen
+const tapTime = (pf, sweep, u) => 350 + sweep * (u + pf.wait);
+// Torchance für ein Ziel: gemittelt über die eigene Streuung auf dem Balken und den eigenen Zielfehler
+function odds(pf, s, target, pre) {
+  const b = pre.b, sd = pf.s / b.sweep, t = tapTime(pf, b.sweep, 0.5), sg = target[0] < 0 ? -1 : 1, up = target[1] > 0.5 ? 1 : 0; let p = 0, n = 0;
+  for (let k = -1; k <= 1; k++) {
+    const tg = [target[0] + sg * k * pf.aim, target[1] + up * k * pf.aim * 0.7];
+    for (let i = 0; i < GQ.length; i++) { const v = M.evalShot(s, tg, clamp(b.pos + GQ[i] * sd, 0, 1), t, pre); n += GW[i]; if (!v.blocked && v.result === 'goal') p += GW[i]; }
+  }
+  return p / n;
 }
-// Grobe Torchance für einen Schuss von Spieler id aus seiner Lage: Wie oft stoppt dieser Spieler den Strich nah genug an der Mitte?
+function shotPlan(pf, s) {
+  const pre = { b: M.shotBar(s), R: M.reach(s, s.shot) }, far = s.shot.keeper.x > 0 ? -1 : 1; let best = { p: -1, target: null };
+  CAND.forEach(tg => { if (tg[0] * far < 0) return; const p = odds(pf, s, tg, pre); if (p > best.p) best = { p, target: tg }; });   // nur die Seite, auf der der Goalie nicht steht
+  return best;
+}
+/* Grobe Torchance für einen Schuss von Spieler id aus seiner Lage, ohne alles durchzurechnen: Wie weit darf der Ball vom
+   Ziel abweichen, wenn er in die hohe Ecke soll, und wie oft stoppt dieser Spieler den Strich nah genug an der Mitte? */
 function chance(pf, s, sc, id) {
-  const c = s.cfg, pv = M.shotPreview(s, id), core = pv.w * c.barCore / 2, tol = core + Math.max(0.05, 1 - 2 * pf.aim / pv.free) * (pv.w / 2 - core);
-  return clamp(erf(tol * pv.sweep / (Math.SQRT2 * pf.s)), 0.03, 0.95);
+  const c = s.cfg, pv = M.shotPreview(s, id), t = tapTime(pf, pv.sweep, 0.5), creep = Math.min(c.creepMax, Math.max(0, t - c.creepDelay) / 1000 * c.creepSpeed);
+  const slack = Math.hypot(1 - creep, (1 - c.kY) * c.kYs) - pv.reach, dev = Math.max(0.005, Math.min(slack, 0.5) / 2 - pf.aim * 0.7), core = pv.w * c.barCore / 2;
+  if (slack <= 0) return 0.02;
+  return clamp(erf((core + dev / c.devEdge * (pv.w / 2 - core)) * pv.sweep / (Math.SQRT2 * pf.s)) * (pv.pressed ? 0.85 : 1), 0.03, 0.95);
 }
 /* Spielt vernünftig: wählt die Aktion mit dem besten Erwartungswert für das eigene Können, tippt mit seiner Streuung,
    zielt ins freie Feld und reagiert bei der Parade mit seiner Reaktionszeit. */
@@ -48,8 +67,8 @@ function policy(pf) {
     }
     if (s.phase === 'decide') { const c = M.contest(s, {}); return { type: 'defend', hit: tap(c.pos, c.sweep) }; }
     if (s.phase === 'aim' && s.shot.side === 'you') {
-      const pl = shotPlan(s), b = M.shotBar(s);
-      return { type: 'aim', hit: tap(b.pos, b.sweep), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] };
+      const pl = shotPlan(pf, s), b = M.shotBar(s);
+      return { type: 'aim', hit: tap(b.pos, b.sweep), t: tapTime(pf, b.sweep, r()), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] };
     }
     if (s.phase === 'aim') { const sh = s.shot; return { type: 'aim', zone: r() < pf.zerr ? pick(M.ZONES.filter(z => z !== sh.zone), r) : sh.zone, rt: Math.max(160, pf.rt + gauss(r) * pf.rtSd) }; }
     return { type: 'next' };
@@ -68,7 +87,7 @@ function play(squad, opp, pol, n, seed, cfg, tactic) {
   }
   return m;
 }
-module.exports = { box, PROFILES, policy, play, shift, shotPlan, chance, gauss };
+module.exports = { box, PROFILES, policy, play, shift, shotPlan, tapTime, chance, gauss };
 if (require.main === module) {
   const n = +process.argv[2] || 1500, cfg = JSON.parse(JSON.stringify(M.CFG));
   process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); cfg[k] = +v; });

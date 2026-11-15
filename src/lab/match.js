@@ -8,8 +8,10 @@
    Angriff: Der Ballführende kann schiessen, passen oder dribbeln.
    Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst, der User trifft das Timing.
    Eigener Schuss: ins Tor tippen (Ziel), dann den Schuss-Balken stoppen. Genau in der Mitte geht der Ball genau ins Ziel;
-   steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab. Bei einem schwachen oder müden Schützen läuft der Strich
-   schneller. Der Goalie hält, was in seiner Reichweite landet; aus der Nähe reicht er weniger weit.
+   steht der Strich links oder rechts davon, weicht der Ball nach links oder rechts ab. Bei einem schwachen oder müden
+   Schützen läuft der Strich schneller. Der Goalie steht in der Mitte und hält, was in seiner Reichweite landet: aus der
+   Distanz fast alles ausser den Ecken, aus der Nähe viel weniger. Sobald das Ziel steht, ahnt er die Ecke und rückt
+   langsam dorthin: Wer lange wartet, findet die Ecke zu.
    Energie: Jeder Spieler wird im Lauf des Matchs müde (Aktionen kosten Energie, die Pause bringt etwas zurück). Je müder,
    desto schneller läuft sein Strich auf jedem Balken.
    Schuss des Gegners: Die Flugbahn ist ehrlich zu sehen, der User muss die richtige Ecke antippen, bevor der Ball da ist.
@@ -40,13 +42,15 @@
     sdBase: 0.1, sdSkill: 0.22, sdDist: 0.06, post: 0.07,
     /* Dein Schuss: Balken wie beim Penalty. Breite des grünen Felds nach der Lage: shotW von ganz weit, shotWq dazu direkt
        vor dem Tor; unter Druck bis shotPress schmaler. Tempo des Strichs nach dem Abschlusswert: 88 ist normal, jeder Punkt
-       darunter macht ihn 3 % schneller. Am Rand des grünen Felds weicht der Ball um die halbe Breite des freien Felds ab. */
-    shotW: -0.01, shotWq: 0.175, shotWMin: 0.03, shotPress: 0.5, shotTempo: 0.03, tempoMin: 0.5, tempoMax: 1.3, sweepMin: 380,
-    /* Goalie des Gegners steht leicht auf einer Seite (kOff). Auf der anderen Seite bleibt ein freies Feld. Seine Breite
-       (Tor von -1 bis 1) hängt vor allem von der Lage ab: free bei einem Schuss von ganz weit, freeDist dazu direkt vor dem
-       Tor, freeVal pro Punkt Abschluss über dem Goalie, freeTop dazu bei hohen Bällen. */
-    kOffMin: 0.3, kOffMax: 0.55,
-    free: 0.05, freeDist: 0.45, freeVal: 0.003, freeTrait: 0.07, freeTop: 0.05, freeMin: 0.06, freeMax: 0.75,
+       darunter macht ihn 3 % schneller. Am Rand des grünen Felds weicht der Ball um devEdge vom Ziel ab (Tor von -1 bis 1). */
+    shotW: -0.01, shotWq: 0.175, shotWMin: 0.03, shotPress: 0.5, shotTempo: 0.03, tempoMin: 0.5, tempoMax: 1.3, sweepMin: 380, devEdge: 0.24,
+    /* Goalie des Gegners: steht fast in der Mitte (höchstens kOff daneben), sein Körper ist auf Höhe kY. Er hält, was näher
+       als seine Reichweite landet; die Höhe zählt dabei kYs-fach, hohe Ecken sind also am weitesten weg. Reichweite: reach
+       direkt vor dem Tor, reachDist dazu von ganz weit, reachVal weniger pro Punkt Abschluss über dem Goalie.
+       Er ahnt die Ecke: creepDelay ms nach dem Setzen des Ziels rückt er mit creepSpeed pro Sekunde dorthin, höchstens creepMax. */
+    kOff: 0.12, kY: 0.3, kYs: 1.3,
+    reach: 0.72, reachDist: 0.46, reachVal: 0.003, reachTrait: 0.07, reachMin: 0.45, reachMax: 1.25,
+    creepDelay: 1500, creepSpeed: 0.3, creepMax: 0.45,
     enSpread: 0.5,                                                    // müder Schütze des Gegners streut bis so viel mehr
     // Energie: Kosten pro Chance (für alle; mal enTacOff bei offensiver, mal enTacDef bei defensiver Taktik), Pass, Annahme, Dribbling, Schuss, Abwehraktion; Erholung in der Pause;
     // bei leerer Energie läuft der Strich mit diesem Anteil der normalen Dauer
@@ -275,13 +279,31 @@
     return post ? 'post' : land[1] >= 1 ? 'high' : 'wide';
   }
   function favZone(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['tl', 'br', 'tr', 'bl', 'bm'][h % 5]; }
-  // Breite des freien Felds neben dem Goalie für deinen Schuss. top: hoher Ball (über 0.62), dort ist etwas mehr frei.
-  function freeW(s, sh, top) {
+  // Reichweite des Goalies um seinen Körper für deinen Schuss: aus der Distanz gross, aus der Nähe klein.
+  function reach(s, sh) {
     const c = s.cfg, X = card(s, 'you', sh.x);
-    return clamp(c.free + c.freeDist * sh.q + (shotVal(X) - s.teams.home.goalie.val) * c.freeVal + (has(X, 'kanone') ? c.freeTrait : 0) + (sh.ctx === 'counter' ? 0.05 : 0) + (top ? c.freeTop : 0), c.freeMin, c.freeMax);
+    return clamp(c.reach + c.reachDist * (1 - sh.q) - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0), c.reachMin, c.reachMax);
   }
-  // Reichweite des Goalies links und rechts von seiner Stelle: Was näher bei ihm landet, hält er.
-  function reach(s, sh, top) { return 1 + Math.abs(sh.keeper.x) - freeW(s, sh, top); }
+  // Wo der Goalie t ms nach dem Setzen des Ziels steht: Er rückt zur Seite des Ziels, aber nie darüber hinaus.
+  function keeperAt(s, sh, target, t) {
+    const c = s.cfg, k0 = sh.keeper.x, gap = target[0] - k0, move = Math.min(c.creepMax, Math.max(0, (t || 0) - c.creepDelay) / 1000 * c.creepSpeed, Math.abs(gap));
+    return k0 + Math.sign(gap) * move;
+  }
+  // Abstand eines Punkts im Tor vom Körper des Goalies, wie er für die Parade zählt
+  const kDist = (c, kx, p) => Math.hypot(p[0] - kx, (p[1] - c.kY) * c.kYs);
+  /* Rechnet deinen Schuss durch, ohne etwas zu ändern: Ziel im Tor, Stelle des Strichs auf dem Schuss-Balken (hit) und
+     Zeit seit dem Setzen des Ziels (t in ms). Abweichung vom Ziel: keine im Kern, am Rand des grünen Felds devEdge,
+     ausserhalb im selben Mass weiter. Der Ball weicht auf die Seite ab, auf der der Strich neben der Mitte stand: Strich
+     links, Ball weiter links. Dabei folgt er der Linie von der Tormitte zum Ziel: nach aussen steigt ein hoher Ball.
+     pre: { b: shotBar(s), R: reach(s, s.shot) }, falls schon gerechnet (für viele Aufrufe hintereinander). */
+  function evalShot(s, tg, hit, t, pre) {
+    const c = s.cfg, sh = s.shot, b = pre ? pre.b : shotBar(s), target = [clamp(+tg[0], -1.2, 1.2), clamp(+tg[1], 0.03, 1.2)], e = hit - b.pos, d = Math.abs(e), g = grade(c, hit, b.pos, b.w);
+    const core = b.w * c.barCore / 2, dev = d <= core ? 0 : (d - core) / (b.w / 2 - core) * c.devEdge;
+    const tx = target[0], ty = (target[1] - 0.45) / 0.69, tl = Math.hypot(tx, ty) || 1, hx = Math.max(Math.abs(tx) / tl, 0.6), hy = (tx < 0 ? -1 : 1) * ty / tl, hl = Math.hypot(hx, hy);
+    const sg = e < 0 ? -1 : 1, land = [tx + sg * dev * hx / hl, Math.max(0.03, target[1] + sg * dev * hy / hl * 0.69)], miss = missOf(c, land);
+    const kx = keeperAt(s, sh, target, t), R = pre ? pre.R : reach(s, sh), kd = kDist(c, kx, land);
+    return { land, target, kx, reach: R, kd, grade: g, dir: sg, dev, miss, blocked: b.pressed && (g === 'bad' || g === 'gross'), result: miss ? 'miss' : kd <= R ? (kd <= R * 0.4 ? 'catch' : 'save') : 'goal' };
+  }
   /* Schuss-Balken für deinen laufenden Schuss. Das Feld liegt in der Mitte: breit aus der Nähe, schmal aus der Distanz und
      unter Druck (Gegner nah).
      sweep ist die Dauer eines Durchlaufs in ms: kürzer, also schneller, bei schwachem Abschluss und bei wenig Energie. */
@@ -290,14 +312,14 @@
     const tempo = clamp(1 + (shotVal(X) - 88) * c.shotTempo, c.tempoMin, c.tempoMax) * (has(X, 'kanone') ? 1.15 : 1) * tired(c, X);
     return { w: clamp((c.shotW + c.shotWq * sh.q) * (1 - c.shotPress * clamp(sh.block / 0.75, 0, 1)), c.shotWMin, c.barMax), pos: 0.5, start: sh.start, sweep: Math.round(Math.max(c.sweepMin, c.barSweep * tempo)), pressed: sh.block >= c.blockFree, by: sh.by };
   }
-  // Vorschau für einen Schuss von Spieler id aus der laufenden Szene: Lage, Druck, freies Feld (hoch) und Schuss-Balken
+  // Vorschau für einen Schuss von Spieler id aus der laufenden Szene: Lage, Druck, Reichweite des Goalies und Schuss-Balken
   function shotPreview(s, id) {
     const sc = s.cur, si = shotInfo(s, sc, id), sh = { side: 'you', x: id, q: si.q, ctx: sc.counter ? 'counter' : 'attack', block: si.block, by: si.by, start: 0 };
     const b = shotBar(Object.assign({}, s, { shot: sh }));
-    return { q: si.q, block: si.block, by: si.by, free: freeW(s, sh, true), sweep: b.sweep, w: b.w, pressed: b.pressed };
+    return { q: si.q, block: si.block, by: si.by, reach: reach(s, sh), sweep: b.sweep, w: b.w, pressed: b.pressed };
   }
   /* Bereitet einen Schuss vor.
-     Dein Schuss: Der Goalie steht leicht auf einer Seite (keeper.x). block und by: Druck des nächsten Gegners.
+     Dein Schuss: Der Goalie steht fast in der Mitte (keeper.x). block und by: Druck des nächsten Gegners.
      Schuss des Gegners: Ziel, Härte und Streuung stehen sofort fest, damit die Flugbahn ehrlich gezeigt werden kann.
      window ist die Zeit in ms, bis der Ball im Tor ist. Deine Verteidiger (Block) geben dir mehr Zeit. */
   function setShot(s, rng, side, x, q, ctx, opt) {
@@ -315,7 +337,7 @@
       sh.press = o.press || 0;
     } else {
       sh.block = o.block || 0; sh.by = o.by || null; sh.start = rng();
-      sh.keeper = { x: (rng() < 0.5 ? -1 : 1) * (c.kOffMin + rng() * (c.kOffMax - c.kOffMin)) };
+      sh.keeper = { x: (rng() * 2 - 1) * c.kOff };
     }
     s.shot = sh; s.phase = 'aim';
   }
@@ -491,31 +513,23 @@
     aiIntent(s, rng);
   }
   /* Schuss auflösen.
-     Dein Schuss { target, hit }: hit ist die Stelle des Strichs auf dem Schuss-Balken (siehe shotBar). Daraus ergibt sich,
-     wie weit der Ball vom Ziel abweicht. Der Goalie hält, was innerhalb seiner Reichweite um seine Stelle landet.
+     Dein Schuss { target, hit, t }: siehe evalShot. hit ist die Stelle des Strichs auf dem Schuss-Balken, t die Zeit in ms
+     seit dem Setzen des Ziels (so weit ist der Goalie schon zur Ecke gerückt).
      Schuss des Gegners { zone, rt }: gehalten, wenn du rechtzeitig (rt ms nach dem Abschluss) die richtige Zone antippst. */
   function shoot(s, rng, ev, a) {
     const sh = s.shot, c = s.cfg, X = card(s, sh.side, sh.x); let r;
     if (sh.side === 'you') {
       if (!a.target || !isFinite(a.target[0]) || !isFinite(a.target[1]) || !hitOk(a)) return false;
-      const target = [clamp(+a.target[0], -1.2, 1.2), clamp(+a.target[1], 0.03, 1.2)], b = shotBar(s), e = a.hit - b.pos, d = Math.abs(e), g = grade(c, a.hit, b.pos, b.w);
-      tally(s, g); drain(X, c.enShot);
+      const v = evalShot(s, a.target, a.hit, typeof a.t === 'number' && isFinite(a.t) ? Math.max(0, a.t) : 0);
+      tally(s, v.grade); drain(X, c.enShot);
       // Unter Druck und klar daneben: der Gegner blockt den Schuss
-      if (b.pressed && (g === 'bad' || g === 'gross')) {
-        ev.push({ t: 'shot', side: 'you', x: sh.x, ctx: sh.ctx, q: sh.q, result: 'blocked', grade: g, dir: e < 0 ? -1 : 1, by: sh.by, target, kx: sh.keeper.x });
+      if (v.blocked) {
+        ev.push({ t: 'shot', side: 'you', x: sh.x, ctx: sh.ctx, q: sh.q, result: 'blocked', grade: v.grade, dir: v.dir, by: sh.by, target: v.target, kx: v.kx });
         s.stats.shots++; s.shot = null; s.phase = 'decide';
         if (sh.ctx === 'so') { const P_ = s.pen; P_.shots.you++; P_.results.push({ side: 'you', goal: false }); s.phase = 'done'; return; }
-        return lost(s, rng, ev, sh.by, g === 'gross');
+        return lost(s, rng, ev, sh.by, v.grade === 'gross');
       }
-      /* Abweichung vom Ziel: keine im Kern, am Rand des grünen Felds die halbe Breite des freien Felds, ausserhalb im selben
-         Mass weiter. Wer in die Mitte des freien Felds zielt und den Strich im Feld stoppt, trifft also. Der Ball weicht auf
-         die Seite ab, auf der der Strich neben der Mitte stand: Strich links, Ball weiter links. Dabei folgt er der Linie von
-         der Tormitte zum Ziel: nach aussen steigt ein hoher Ball, nach innen kommt er dem Goalie näher. */
-      const core = b.w * c.barCore / 2, dev = d <= core ? 0 : (d - core) / (b.w / 2 - core) * freeW(s, sh, target[1] > 0.62) / 2;
-      const tx = target[0], ty = (target[1] - 0.45) / 0.69, tl = Math.hypot(tx, ty) || 1, hx = Math.max(Math.abs(tx) / tl, 0.6), hy = (tx < 0 ? -1 : 1) * ty / tl, hl = Math.hypot(hx, hy);
-      const sg = e < 0 ? -1 : 1, land = [tx + sg * dev * hx / hl, Math.max(0.03, target[1] + sg * dev * hy / hl * 0.69)], miss = missOf(c, land);
-      const kx = sh.keeper.x, R = reach(s, sh, land[1] > 0.62), dx = Math.abs(land[0] - kx);
-      r = { land, zone: zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])), target, power: 0.6, kx, reach: R, grade: g, dir: sg, dev, miss, result: miss ? 'miss' : dx <= R ? (dx <= R * 0.35 ? 'catch' : 'save') : 'goal' };
+      r = { land: v.land, zone: zoneOf(clamp(v.land[0], -0.99, 0.99), Math.min(0.99, v.land[1])), target: v.target, power: 0.6, kx: v.kx, reach: v.reach, kd: v.kd, grade: v.grade, dir: v.dir, dev: v.dev, miss: v.miss, result: v.result };
     } else {
       const zn = ZONES.indexOf(a.zone) !== -1 ? a.zone : null, rt = typeof a.rt === 'number' && isFinite(a.rt) ? Math.max(0, a.rt) : Infinity;
       const right = !!zn && inZone(sh.land, zn, c.rxEdge), inTime = rt <= sh.window;
@@ -550,7 +564,8 @@
      hit ist die Stelle des Strichs auf dem Timing-Balken beim Tippen (0 bis 1), siehe contest().
      Angriff:  { type: 'shoot', hit } | { type: 'pass', to, hit } | { type: 'dribble', hit }   freier Schuss: ohne hit
      Abwehr:   { type: 'defend', hit }
-     Schuss:   { type: 'aim', target: [x, y], hit } eigener Schuss: Ziel im Tor und Stelle des Strichs auf dem Schuss-Balken
+     Schuss:   { type: 'aim', target: [x, y], hit, t } eigener Schuss: Ziel im Tor, Stelle des Strichs auf dem Schuss-Balken,
+               Zeit in ms seit dem Setzen des Ziels
                { type: 'aim', zone, rt } Parade, rt in ms seit dem Abschluss des Gegners
      Taktik:   { type: 'tactic', value: 'def' | 'bal' | 'off' } jederzeit, gilt ab der nächsten Chance
      Weiter:   { type: 'next' } nach einer Chance oder in der Drittelspause: die Uhr läuft bis zur nächsten Chance */
@@ -566,5 +581,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TACTICS, KINDS, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, tired, reach, freeW, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TACTICS, KINDS, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

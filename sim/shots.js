@@ -2,21 +2,24 @@
    Zeigt, ob Distanz und Schütze spürbar sind: ein guter Schütze aus der Nähe muss klar öfter treffen als ein schwacher
    aus der Distanz. Lage 1 ist direkt vor dem Tor, 0.25 weit weg. */
 'use strict';
-const { box, PROFILES, shotPlan, gauss } = require('./match.js');
+const { box, PROFILES, shotPlan, tapTime, gauss } = require('./match.js');
 const E = box.HK, W = box.HKWorld, M = box.HKMatch, n = +process.argv[2] || 3000;
 const col = E.DATA.collection, top = (pos, k) => col.filter(c => c.pos === pos).sort((a, b) => b.ovr - a.ovr).slice(0, k);
 const base = M.newMatch({ you: { goalie: { val: 88 }, cards: top('ATT', 3).concat(top('DEF', 2)) }, home: { goalie: { val: 88 }, cards: W.guard(W.create(), 'koeniz') } }, E.makeRng(1));
 process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); base.cfg[k] = +v; });
 const QS = [0.25, 0.5, 0.75, 1], VALS = [70, 80, 90, 97];
-console.log('Dauer eines Durchlaufs des Schuss-Balkens in ms und freies Feld neben dem Goalie (hoch), in halben Torbreiten:');
+console.log('Dauer eines Durchlaufs des Schuss-Balkens in ms und Reichweite des Goalies (Tor von -1 bis 1, hohe Ecke ist ' + Math.hypot(1, (1 - base.cfg.kY) * base.cfg.kYs).toFixed(2) + ' weit weg):');
 const shooter = (s, v, en) => { const X = s.teams.you.cards[0]; X.sco = v; X.clu = 80; X.frm = 80; X.en = en === undefined ? 100 : en; return X; };
-VALS.forEach(v => { const s = JSON.parse(JSON.stringify(base)), X = shooter(s, v); M.setShot(s, E.makeRng(1), 'you', X.id, 1, 'attack'); console.log('Abschluss ' + v + ': Durchlauf ' + M.shotBar(s).sweep + ' ms, müde (Energie 30) ' + (X.en = 30, M.shotBar(s).sweep) + ' ms | frei ' + QS.map(q => 'Lage ' + q + ' ' + M.freeW(s, { x: X.id, q, ctx: 'attack' }, true).toFixed(2)).join(', ')); });
+VALS.forEach(v => { const s = JSON.parse(JSON.stringify(base)), X = shooter(s, v); M.setShot(s, E.makeRng(1), 'you', X.id, 1, 'attack'); console.log('Abschluss ' + v + ': Durchlauf ' + M.shotBar(s).sweep + ' ms, müde (Energie 30) ' + (X.en = 30, M.shotBar(s).sweep) + ' ms | Reichweite ' + QS.map(q => 'Lage ' + q + ' ' + M.reach(s, { x: X.id, q, ctx: 'attack' }).toFixed(2)).join(', ')); });
+const base0 = JSON.stringify(base);
 const rate = (pf, r, v, q, en) => {
-  let g = 0;
+  let g = 0, plan = null;
   for (let i = 0; i < n; i++) {
-    const s = JSON.parse(JSON.stringify(base)), X = shooter(s, v, en);
+    const s = JSON.parse(base0), X = shooter(s, v, en);
     M.setShot(s, r, 'you', X.id, q, 'attack');
-    const pl = shotPlan(s), b = M.shotBar(s), x = M.act(s, { type: 'aim', hit: Math.max(0, Math.min(1, b.pos + gauss(r) * pf.s / b.sweep)), target: [pl.target[0] + gauss(r) * pf.aim, pl.target[1] + gauss(r) * pf.aim * 0.7] }, r);
+    // Das beste Ziel einmal pro Feld suchen; es liegt immer auf der Seite, auf der der Goalie nicht steht
+    if (!plan) plan = shotPlan(pf, s).target;
+    const sg = s.shot.keeper.x > 0 ? -1 : 1, b = M.shotBar(s), x = M.act(s, { type: 'aim', hit: Math.max(0, Math.min(1, b.pos + gauss(r) * pf.s / b.sweep)), t: tapTime(pf, b.sweep, r()), target: [sg * Math.abs(plan[0]) + gauss(r) * pf.aim, plan[1] + gauss(r) * pf.aim * 0.7] }, r);
     if (x.events[0].result === 'goal') g++;
   }
   return (100 * g / n).toFixed(0).padStart(8) + '%';

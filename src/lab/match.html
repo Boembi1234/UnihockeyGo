@@ -104,8 +104,11 @@
 /* Torsicht: freie Felder neben dem Goalie (dein Schuss) und Landepunkt (Schuss des Gegners) */
 .gscale{position:absolute;inset:0;transform-origin:0 0}
 .stage.match .keeper{left:0;top:0;width:100%;height:100%;transform:none;pointer-events:none}
-.free{position:absolute;top:55.46%;height:35.31%;z-index:1;background:rgba(16,185,129,.4);box-shadow:inset 0 0 0 2px #34d399;pointer-events:none}
-.free.top{top:33.846%;height:21.62%}
+.kreach{fill:url(#kshade);stroke:rgba(255,255,255,.7);stroke-width:1.6;stroke-dasharray:3 6;stroke-linecap:round}
+.kreach.hot{stroke:#ff8a8a;stroke-width:2.2}
+.tbov.hot{border-color:#ff8a8a;animation:tbhot .45s ease-in-out infinite alternate}
+@keyframes tbhot{to{box-shadow:0 0 0 4px rgba(255,138,138,.35)}}
+@media (prefers-reduced-motion:reduce){.tbov.hot{animation:none}}
 
 .mark{position:absolute;left:0;top:0;width:11%;aspect-ratio:1;z-index:4;border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 0 2px rgba(5,8,24,.7),0 0 16px rgba(247,215,116,.8);pointer-events:none}
 /* Taktik */
@@ -184,6 +187,8 @@
           <linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#21499f"/><stop offset="1" stop-color="#16409e"/></linearGradient>
           <pattern id="mesh" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 0 L10 10 M10 0 L0 10" stroke="#ffffff" stroke-opacity=".32" stroke-width="1"/></pattern>
           <pattern id="meshb" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0 L8 8 M8 0 L0 8" stroke="#ffffff" stroke-opacity=".2" stroke-width=".8"/></pattern>
+          <radialGradient id="kshade"><stop offset="0" stop-color="#070d2a" stop-opacity=".96"/><stop offset=".9" stop-color="#070d2a" stop-opacity=".92"/><stop offset="1" stop-color="#070d2a" stop-opacity=".8"/></radialGradient>
+          <clipPath id="mouth"><rect x="81.5" y="91.5" width="197" height="144.5"/></clipPath>
         </defs>
         <rect width="360" height="135" fill="url(#spot)"/>
         <rect x="0" y="135" width="360" height="125" fill="url(#fl)"/>
@@ -197,14 +202,14 @@
         <polygon points="78,88 96,104 90,224 78,236" fill="url(#meshb)"/>
         <polygon points="282,88 264,104 270,224 282,236" fill="url(#meshb)"/>
         <polygon points="78,88 282,88 264,104 96,104" fill="url(#meshb)"/>
+        <g id="kzone" clip-path="url(#mouth)" visibility="hidden"><rect x="78" y="88" width="204" height="148" fill="#dfe8ff" fill-opacity=".2"/><ellipse id="kreach" class="kreach" cx="180" cy="191.6" rx="80" ry="90"/></g>
         <rect x="78" y="88" width="204" height="148" fill="url(#mesh)"/>
-        <path d="M78 236 V88 H282 V236" fill="none" stroke="#e2231a" stroke-width="7" stroke-linejoin="round"/>
+        <path id="posts" d="M78 236 V88 H282 V236" fill="none" stroke="#e2231a" stroke-width="7" stroke-linejoin="round"/>
         </g>
       </svg>
       <div class="gscale" id="gscale">
       <div class="ripple" id="ripple" hidden></div>
       <div class="spark" id="spark" hidden></div>
-      <div class="free" id="free-l" hidden></div><div class="free" id="free-r" hidden></div><div class="free top" id="free-lt" hidden></div><div class="free top" id="free-rt" hidden></div>
       <div class="keeper" id="keeper"></div>
       <div class="mark" id="mark" hidden></div>
       <div class="zones off" id="zones">
