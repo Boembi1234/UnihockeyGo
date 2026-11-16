@@ -92,6 +92,17 @@ Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je 
 | sofort schiessen | 28 % | 29 % |
 | immer dribbeln | 25 % | 29 % |
 
+**3D-Szenen.** Entschieden wird wie bisher mit Knöpfen, Balken, Wischen und dem Ziel im Tor. Das Ergebnis läuft danach als kurze 3D-Szene zum Zuschauen, ohne Eingabe:
+
+- **Was gezeigt wird:** jeder Pass (kommt an, kommt knapp an, wird abgefangen), jedes Dribbling (vorbei, hängen geblieben, Ball verloren), die Abwehraktionen (Ball gewonnen oder der Gegner spielt weiter) und jeder Schuss (Tor, Parade, gefangen, daneben, drüber, Pfosten, geblockt). Auch Penaltys.
+- **Figuren:** im Code gebaut, ohne Modell-Dateien. Kopf mit Frisur und Gesicht, Trikot mit Rückennummer, Hose, Stulpen, Stock mit Schaufel. Die Hände greifen den Stock, die Füsse stehen am Boden: Arme und Beine werden über zwei Glieder mit Gelenk auf ihr Ziel gestellt. Bewegungen: bereit, laufen, Pass, Schuss (ausholen, durchziehen, ausschwingen), Ausfallschritt, Jubel, Enttäuschung. Der Goalie kniet und greift mit der Hand nach dem Ball.
+- **Halle:** Boden mit Linien, Banden, Tor mit Netz, das beim Tor ausbeult und nachschwingt, Tribünen hinter dem Tor und an den Seiten mit Fans in den Farben der Teams, Leuchtband («TOR!» beim Treffer), Hallenlampen.
+- **Kamera:** beim Schuss über die Schulter des Schützen und dem Ball nach zum Tor; nach einem Tor Schnitt auf den jubelnden Schützen, die Mitspieler laufen dazu, Tor und Fans im Rücken. Ein geblockter Schuss wird von der Seite gezeigt. Beim Dribbling läuft die Kamera mit.
+- **Schüsse des Gegners:** Du tippst die Ecke wie bisher in der Torsicht. Sobald du getippt hast (oder die Zeit um ist), zeigt die 3D-Szene den Schuss, und dein Goalie springt in die getippte Ecke.
+- **Vorspulen:** Ein Tipp aufs Feld springt ans Ende der Szene.
+- **Ohne 3D:** Fehlt WebGL, fällt die Darstellung aus oder ist am Gerät «Bewegung reduzieren» eingestellt, läuft alles wie vorher in der Sicht von oben und in der Torsicht. Am Spiel selbst ändert die Darstellung nichts.
+- **Technik:** `src/lab/scene3d.js` (`HKScene3D`), dazu three.js r149 (`vendor/three.min.js`, MIT-Lizenz, 608 KB, gzip rund 150 KB). Die Datei liegt als `three.min.js` neben der Match-Seite und wird nachgeladen; das Match bleibt ohne sie spielbar. Geprüft ist das im Browser-Test in einem Lauf mit WebGL in Software. Wie flüssig es auf einem echten Telefon läuft, ist nicht gemessen.
+
 **Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
 
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
@@ -154,6 +165,8 @@ Logik in `src/lab/club.js`, Oberfläche in `src/lab/store-ui.js`, Aussehen in `s
 | `src/ui.js` | Oberfläche. Rechnet nichts selbst aus, sondern zeigt, was die Engine zurückgibt. |
 | `src/page.html` | Markup und Styles |
 | `build.js` | Setzt daraus `dist/index.html` zusammen |
+| `src/lab/scene3d.js` | 3D-Szenen des Matchs: Halle, Figuren, Kamera. Braucht `vendor/three.min.js`. |
+| `vendor/three.min.js` | three.js r149, unverändert (MIT-Lizenz) |
 | `sim/` | Simulation zum Kalibrieren. Lädt die Engine aus `dist/index.html`, also denselben Code wie das Spiel. |
 | `test/` | Regelprüfungen von Engine und Welt, automatisches Durchspielen im Browser, Standbilder und Dauer der Szenen |
 

@@ -145,6 +145,13 @@
 .tb-pad.drib{min-height:76px;font-size:22px;cursor:default}
 .act .pct.word{font-size:15px;letter-spacing:.06em;top:12px}
 /* Anzeigetafel beim Tor: Leuchtpunkte, Lichtstrahlen, goldener Rahmen */
+/* 3D-Szene: liegt über dem Feld und der Torsicht, unter Stempel und Anzeigetafel */
+.view3d{position:absolute;inset:0;z-index:7;overflow:hidden;background:#050818}
+.view3d[hidden]{display:none}
+.view3d canvas{display:block;width:100%;height:100%}
+.stage.mode3d .stamp:not(.low){top:21%}
+.stage.mode3d .stamp.low{top:5%;bottom:auto}
+.stage.mode3d .stamp b{font-size:38px}
 .led{position:absolute;left:0;right:0;top:5%;z-index:8;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none}
 .led-panel{position:relative;width:100%;padding:12px 0;overflow:hidden;text-align:center;background:#170a04;border-top:4px solid #f7d774;border-bottom:4px solid #f7d774;box-shadow:0 0 0 1px #6b4a12,0 10px 30px rgba(0,0,0,.55),0 0 46px rgba(255,170,60,.35)}
 .led-panel::before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,170,80,.17) 0 32%,transparent 37%);background-size:6px 6px}
@@ -381,6 +388,7 @@
         <circle id="aim-dot" cx="180" cy="160" r="2.5" fill="#f7d774" stroke="#1a1203" stroke-width="1"/>
       </svg>
     </div>
+    <div class="view3d" id="view3d" hidden></div>
     <div class="shooter" id="shooter" hidden></div>
     <div class="tell" id="tell" hidden></div>
     <div class="power" id="power" hidden><span>Härte</span><b><i id="power-bar"></i></b></div>
@@ -487,6 +495,7 @@
     <button type="button" class="cta" id="sheet-do"></button>
   </div>
 </div>
+<script src="three.min.js" defer></script>
 <script id="hk-engine">
 /*__ENGINE__*/
 </script>
@@ -507,6 +516,9 @@
 </script>
 <script id="hk-store">
 /*__STORE__*/
+</script>
+<script id="hk-s3d">
+/*__S3D__*/
 </script>
 <script id="hk-mui">
 /*__MUI__*/

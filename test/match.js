@@ -6,14 +6,18 @@ const path = require('path'), fs = require('fs');
 const { chromium } = require('playwright');
 const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursive: true });
 (async () => {
-  const b = await chromium.launch(), N = +process.argv[2] || 1; let fail = 0;
-  for (const run of [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true }]) {
-    const ctx = await b.newContext({ viewport: { width: run.width, height: 900 }, deviceScaleFactor: 1, reducedMotion: run.reduce ? 'reduce' : 'no-preference' });
+  // Pässe, Dribblings und Schüsse laufen als 3D-Szene, wo es WebGL gibt. Der letzte Lauf erzwingt WebGL (in Software gerechnet)
+  // und verlangt, dass 3D-Szenen vorkommen; der Lauf mit reduzierter Bewegung bleibt in der Sicht von oben.
+  const b = await chromium.launch(), bgl = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] }), N = +process.argv[2] || 1; let fail = 0;
+  const RUNS = [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true }, { width: 375, shots: true, gl: true }].filter(r => !process.env.ONLY || (process.env.ONLY === 'gl') === !!r.gl);
+  for (const run of RUNS) {
+    const ctx = await (run.gl ? bgl : b).newContext({ viewport: { width: run.width, height: 900 }, deviceScaleFactor: 1, reducedMotion: run.reduce ? 'reduce' : 'no-preference' });
     const p = await ctx.newPage(), errors = [], taken = {}, res = [], seen = {}; let n = 0;
     p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     await p.goto('file://' + path.resolve(__dirname, '..', 'dist', 'lab', 'match', 'index.html'), { waitUntil: 'load' });
     await p.evaluate(() => Promise.all(['600', '700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
-    const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + '-' + name + '.png'), fullPage: !!full }); };
+    const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + (run.gl ? '-3d' : '') + '-' + name + '.png'), fullPage: !!full }); };
+    if (run.gl) { await p.waitForFunction(() => !!window.THREE, null, { timeout: 15000 }).catch(() => {}); if (!(await p.evaluate(() => !!window.HKScene3D && window.HKScene3D.ok()))) errors.push('3D-Darstellung nicht verfügbar'); }
     const over = async w => { const x = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth); if (x > 0) errors.push('Überlauf ' + w + ' +' + x); };
     await snap('00-team', true); await over('team');
     await p.click('#tabs [data-tab="store"]'); await p.waitForTimeout(150); await snap('00-shop', true); await over('shop');
@@ -28,6 +32,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
+          if (v(document.getElementById('view3d'))) return '3d';
           if (document.getElementById('stage').classList.contains('livemode')) return 'live';
           if (v(document.getElementById('dribview'))) return document.getElementById('drib-msg').hidden ? 'drib' : 'wait';
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
@@ -108,6 +113,13 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (!run.reduce) { await p.waitForTimeout(650); await snap('08-parade-ende'); }
           await p.waitForTimeout(300); continue;
         }
+        if (st === '3d') {
+          // 3D-Szene: mal laufen lassen und ein Bild machen, mal vorspulen
+          const what = await p.evaluate(() => { const l = document.getElementById('led'), s = document.getElementById('stamp'), c = document.querySelector('#view3d canvas'); return [!l.hidden ? 'tor' : !s.hidden ? s.querySelector('b').textContent.toLowerCase().replace(/[^a-zäöü]+/g, '-') : 'szene', c ? c.width : 0]; });
+          if (!what[1]) errors.push('3D-Sicht ohne Bild');
+          if (!taken['12-' + what[0]] || Math.random() < 0.3) { await p.waitForTimeout(what[0] === 'tor' ? 1500 : 450); await snap('12-' + what[0]); }
+          if (await p.evaluate(() => { const c = document.querySelector('#view3d canvas'), s = document.getElementById('stage'); return !!c && !document.getElementById('view3d').hidden && (Math.abs(c.clientWidth - s.clientWidth) > 2 || Math.abs(c.clientHeight - s.clientHeight) > 2); })) errors.push('3D-Sicht füllt die Bühne nicht');
+        }
         if (Math.random() < 0.02) await p.evaluate(() => { const o = [...document.querySelectorAll('#tac [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
         // Trainer: ab und zu die Linie wechseln oder eine Taktikkarte ansehen und einsetzen
         if (Math.random() < 0.012) { await p.evaluate(() => { const o = [...document.querySelectorAll('#lines [data-line]')]; o[Math.floor(Math.random() * o.length)].click(); }); seen.line = 1; }
@@ -119,10 +131,10 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
-    console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
+    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();
   }
-  await b.close(); process.exit(fail);
+  await b.close(); await bgl.close(); process.exit(fail);
 })();

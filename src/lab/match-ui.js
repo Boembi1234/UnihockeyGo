@@ -32,9 +32,36 @@
   const wait = t => sleep(T(t)), hold = t => sleep(fast ? 0 : t);
   function anim(el, frames, o) { const a = el.animate(frames, Object.assign({ fill: 'forwards', easing: 'cubic-bezier(.2,.7,.2,1)' }, o, { duration: Math.max(1, T((o && o.duration) || 300)) })); return a.finished.catch(() => {}); }
   const fresh = el => el.getAnimations().forEach(a => a.cancel());
-  function skip() { fast = true; document.getAnimations().forEach(a => { try { if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch (e) { /* läuft nicht */ } }); if (wake) wake(); }
+  function skip() { fast = true; document.getAnimations().forEach(a => { try { if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch (e) { /* läuft nicht */ } }); if (S3) S3.stop(); if (wake) wake(); }
   const card = (side, id) => M.card(G, side, id);
   const sideOf = id => (card('you', id) ? 'you' : 'home');
+
+  /* --- 3D-Szenen (scene3d.js) ---
+     Das Ergebnis einer Aktion läuft als kurze 3D-Szene: Pass, Dribbling, Zweikampf, Schuss. Entschieden wird vorher wie
+     bisher; in der Szene gibt es nichts zu tippen ausser Vorspulen. Ohne WebGL oder bei reduzierter Bewegung bleibt alles
+     in der Sicht von oben. */
+  const S3 = window.HKScene3D;
+  const use3d = () => !!S3 && !reduce && S3.ok();
+  // Alle Feldspieler einer Szene mit ihren Plätzen, so wie die Engine rechnet (der Angriff spielt aufs Tor bei y 40)
+  const specPlayers = sc => Object.keys(sc.pos).map(id => { const side = sideOf(id), c = card(side, id); return { id, side, x: sc.pos[id][0], y: sc.pos[id][1], name: c.last, no: c.no }; });
+  // Startet eine Szene. Gibt null zurück, wenn es keine 3D-Darstellung gibt, sonst { impact, done }.
+  function scene3(spec, opt) {
+    if (!use3d() || !spec || !spec.players.length) return null;
+    const v = $('view3d'), r = S3.play(v, spec, opt);
+    if (!r) { close3(); return null; }
+    $('stage').classList.add('mode3d'); fresh(v); v.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 170 });
+    return r;
+  }
+  function close3() { if (S3) S3.hide(); $('view3d').hidden = true; $('stage').classList.remove('mode3d'); }
+  /* Zeigt eine Bewegung: als 3D-Szene bis zum entscheidenden Augenblick, sonst als Bewegung von oben. Die Figuren von
+     oben stehen danach in jedem Fall am neuen Ort. Gibt die Szene zurück (oder null); end3 wartet ihr Ende ab. */
+  async function act3(spec, moves, ms, slow) {
+    const s3 = scene3(spec);
+    if (!s3) { await tween(moves, ms, slow); return null; }
+    await s3.impact; tween(moves, 0);
+    return s3;
+  }
+  async function end3(s3, ms) { if (s3) { await s3.done; close3(); } else if (ms) await hold(ms); }
 
   // --- Spielfeld ---
   const TEAM = { you: { fill: '#1a57ff', ring: '#ffffff', text: '#ffffff', blade: '#ffffff', grad: 'url(#jy)', pants: '#0b1c5e', sock: '#ffffff' }, home: { fill: '#1b2033', ring: '#f7d774', text: '#f7d774', blade: '#f7d774', grad: 'url(#jh)', pants: '#f7d774', sock: '#f7d774' } };
@@ -625,65 +652,72 @@
         if (e.ok) {
           const m = before.cur.mark[e.to], moves = [{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.to, to }];
           if (m && G.cur && G.cur.pos[m]) moves.push({ id: m, to: ep(G.cur, m) });
-          await tween(moves, 520, e.grade === 'near');
+          const s3 = await act3({ kind: 'pass', atk: side, players: specPlayers(before.cur), from: e.from, to: e.to, ok: true, by: e.by, near: e.grade === 'near' }, moves, 520, e.grade === 'near');
           setCarrier(e.to);
-          if (e.grade === 'perfect') { stamp('Perfekt', `${T.last} steht frei.`, 'good', 'low'); await hold(750); hideStamp(); }
-          else if (e.grade === 'near') { stamp('Knapp', `Der Pass kommt an, aber ${card(sideOf(e.by), e.by).last} ist dran.`, 'warn', 'low'); await hold(850); hideStamp(); }
+          if (e.grade === 'perfect') stamp('Perfekt', `${T.last} steht frei.`, 'good', 'low');
+          else if (e.grade === 'near') stamp('Knapp', `Der Pass kommt an, aber ${card(sideOf(e.by), e.by).last} ist dran.`, 'warn', 'low');
+          await end3(s3, e.grade === 'perfect' ? 750 : e.grade === 'near' ? 850 : 0); hideStamp();
         } else {
           const cut = lerp(pos[e.from], pos[e.to], 0.5);
-          await tween([{ id: 'ball', to: cut }, { id: e.by, to: cut }], 560, true);
+          const s3 = await act3({ kind: 'pass', atk: side, players: specPlayers(before.cur), from: e.from, to: e.to, ok: false, by: e.by }, [{ id: 'ball', to: cut }, { id: e.by, to: cut }], 560, true);
           stamp('Abgefangen', `${card(sideOf(e.by), e.by).last} liest den Pass.`, 'bad');
           addTick(`Pass von ${card(side, e.from).last} abgefangen.`);
-          setCarrier(e.by); await hold(1100); hideStamp();
+          setCarrier(e.by); await end3(s3, 1100); hideStamp();
         }
       } else if (e.t === 'dribble') {
         const side = sideOf(e.x), X = card(side, e.x), mk = card(sideOf(e.by), e.by);
         say(`${X.last} geht ins Dribbling gegen ${mk.last}.`);
+        const d3 = { kind: 'dribble', atk: side, players: specPlayers(before.cur), x: e.x, by: e.by };
         if (e.ok && e.grade !== 'near') {
           const to = ep(G.cur, e.x), via = [pos[e.by][0] + (pos[e.x][0] < 180 ? 34 : -34), pos[e.by][1]];
-          await tween([{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
+          const s3 = await act3(Object.assign(d3, { result: 'past', to: G.cur.pos[e.x] }), [{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
           setCarrier(e.x);
           const hp = e.help ? card(sideOf(e.help), e.help) : null, fr = (e.freed || []).map(id => card(side, id)).filter(Boolean)[0];
           stamp(e.grade === 'perfect' ? 'Perfekt' : 'Vorbei', `${X.last} lässt ${mk.last} stehen.` + (hp && fr && side === 'you' ? ` ${hp.last} hilft aus: ${fr.last} wird frei.` : ''), 'good', 'low');
-          await hold(800); hideStamp();
+          await end3(s3, 800); hideStamp();
         } else if (e.ok) {
           const meet = lerp(pos[e.x], pos[e.by], 0.35);
-          await tween([{ id: e.x, to: meet }, { id: 'ball', to: [meet[0] + 10, meet[1] - 12] }], 360);
+          const s3 = await act3(Object.assign(d3, { result: 'held' }), [{ id: e.x, to: meet }, { id: 'ball', to: [meet[0] + 10, meet[1] - 12] }], 360);
           stamp('Knapp', `${X.last} behält den Ball, kommt aber nicht vorbei.`, 'warn', 'low');
-          await hold(850); hideStamp();
+          await end3(s3, 850); hideStamp();
         } else {
           const meet = lerp(pos[e.x], pos[e.by], 0.6);
-          await tween([{ id: e.x, to: meet }, { id: 'ball', to: lerp(meet, pos[e.by], 0.5) }, { id: e.by, to: lerp(pos[e.by], meet, 0.4) }], 680, true);
+          const s3 = await act3(Object.assign(d3, { result: 'lost' }), [{ id: e.x, to: meet }, { id: 'ball', to: lerp(meet, pos[e.by], 0.5) }, { id: e.by, to: lerp(pos[e.by], meet, 0.4) }], 680, true);
           setCarrier(e.by);
           stamp('Ball verloren', `${mk.last} nimmt ${X.last} den Ball ab.`, 'bad');
           addTick(`${X.last} verliert den Ball an ${mk.last}.`);
-          await hold(1100); hideStamp();
+          await end3(s3, 1100); hideStamp();
         }
       } else if (e.t === 'defend') {
         const X = card('home', e.x), Dc = card('you', e.by), c = pos[e.x], it = e.intent;
         const spot = e.action === 'press' ? lerp(pos[e.by], c, 0.7) : e.action === 'block' ? lerp(c, goalOf('home'), 0.3) : lerp(c, pos[e.target], 0.5);
         const moves = [{ id: e.by, to: spot }];
+        const pl = specPlayers(before.cur), lane = e.action === 'lane' && before.cur.pos[e.target];
         if (e.stopped) {
+          // Ball gewonnen: in der Passbahn abgefangen, sonst im Zweikampf abgenommen
           moves.push({ id: 'ball', to: [spot[0] + 8, spot[1] - 10] });
-          await tween(moves, 640, true);
+          const s3 = await act3(lane ? { kind: 'pass', atk: 'home', players: pl, from: e.x, to: e.target, ok: false, by: e.by } : { kind: 'dribble', atk: 'home', players: pl, x: e.x, by: e.by, result: 'lost' }, moves, 640, true);
           setCarrier(e.by);
           stamp('Ball gewonnen', `${Dc.last} nimmt ${X.last} den Ball ab.`, 'good');
           addTick(`${Dc.last} gewinnt den Ball gegen ${X.last}.`);
-          await hold(1100); hideStamp();
+          await end3(s3, 1100); hideStamp();
         } else {
-          await tween(moves, 480);
           const w = e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', `${X.last} kommt glatt durch.`, 'bad'];
-          stamp(w[0], w[1], w[2], 'low');
+          let s3 = null;
           if (it.kind === 'pass') {
             const to = G.cur.pos[it.to] ? ep(G.cur, it.to) : pos[it.to];
-            await tween([{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: it.to, to }], 480);
+            s3 = scene3({ kind: 'pass', atk: 'home', players: pl, from: e.x, to: it.to, ok: true, by: e.by, near: e.grade === 'good' && e.action === 'lane' });
+            if (s3) { stamp(w[0], w[1], w[2], 'low'); await s3.impact; tween(moves.concat([{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: it.to, to }]), 0); }
+            else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); await tween([{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: it.to, to }], 480); }
             setCarrier(it.to);
           } else if (it.kind === 'dribble') {
             const to = ep(G.cur, e.x);
-            await tween([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: ep(G.cur, e.by) }], 560);
+            s3 = scene3({ kind: 'dribble', atk: 'home', players: pl, x: e.x, by: e.by, result: 'past', to: G.cur.pos[e.x] });
+            if (s3) { await s3.impact; stamp(w[0], w[1], w[2], 'low'); tween(moves.concat([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: ep(G.cur, e.by) }]), 0); }
+            else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); await tween([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: ep(G.cur, e.by) }], 560); }
             setCarrier(e.x);
-          }
-          await hold(900); hideStamp();
+          } else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); }
+          await end3(s3, 900); hideStamp();
         }
       } else if (e.t === 'counter') {
         const mine = e.side === 'you', X = card(e.side, e.x), kt = KINDTXT[e.kind] || ['Konter', ''];
@@ -692,7 +726,7 @@
         await hold(1000); hideStamp(); renderScore();
         if (G.cur && G.phase !== 'aim') { camMode = 'scene'; await syncPositions(700); }
       } else if (e.t === 'fx' && !e.on) { addTick(e.side === 'you' ? 'Dein Goalie steht wieder im Tor.' : `Der Goalie von ${HOME} steht wieder im Tor.`); renderCoach(); }
-      else if (e.t === 'shot') await shotSeq(e);
+      else if (e.t === 'shot') await shotSeq(e, before);
     }
   }
   async function after() {
@@ -827,6 +861,7 @@
   function leaveGoal() {
     if (db) closeDribble();
     if (lv) closeLive();
+    close3();
     const gv = $('goalview'); if (gv.hidden) return;
     [gv, $('keeper'), $('ball')].forEach(fresh);
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
@@ -962,7 +997,7 @@
   }
   async function toGoal() {
     const sh = G.shot, mine = sh.side === 'you', X = card(sh.side, sh.x), gv = $('goalview');
-    hideStamp(); $('panel').hidden = true; closeBar();
+    hideStamp(); $('panel').hidden = true; closeBar(); close3();
     if (gv.hidden) {
       $('pitch').style.visibility = 'hidden'; $('stage').classList.add('goalmode'); gv.hidden = false; fresh(gv);
       anim(gv, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.1)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }], { duration: 280 });
@@ -1019,18 +1054,30 @@
     clearTimeout(rx.timer);
     aimAt({ zone: z, rt: Math.max(0, t - rx.t0) });
   }
-  async function shotSeq(e) {
+  // Die Schuss-Szene in 3D: wer wo steht, wohin der Ball fliegt und was der Goalie macht. Penaltys: der Schütze allein.
+  function shotSpec(e, before, tight) {
+    const mine = e.side === 'you', sc = before && before.cur, alone = e.ctx === 'so' || !sc || !sc.pos[e.x], X = card(e.side, e.x);
+    return { kind: 'shot', atk: e.side, by: e.x, players: alone ? [{ id: e.x, side: e.side, x: 180, y: 190, name: X.last, no: X.no }] : specPlayers(sc),
+      land: e.land || e.target || [0, 0.4], result: e.result, miss: e.miss, kx: mine ? e.kx || 0 : 0, blocker: e.result === 'blocked' ? e.by : null, tight: !!tight, empty: !!e.empty,
+      dive: mine ? undefined : e.guess ? M.ZC[e.guess] : null, quick: !mine };
+  }
+  async function shotSeq(e, before) {
     const mine = e.side === 'you', ball = $('ball'), X = card(e.side, e.x), bs = 0.95 * gz.s, dirT = e.dir < 0 ? 'links' : 'rechts';
     if (e.result === 'blocked') {
       // Unter Druck klar neben dem Feld gestoppt: der Gegner wirft sich in den Schuss
       const B = card('home', e.by), stop = [START[0] + e.target[0] * 34, START[1] - 78];
       $('shooter').hidden = true; hideReach(); $('aim').toggleAttribute('hidden', true);
       say(`${X.last} schiesst.`);
-      await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(stop, 1.8) }], { duration: 170, easing: 'ease-out' });
-      anim(ball, [{ transform: ballTf(stop, 1.8), opacity: 1 }, { transform: ballTf([stop[0] + (e.target[0] < 0 ? 70 : -70), START[1] + 4], 2.2), opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      const s3 = scene3(shotSpec(e, before), { linger: true });
+      if (s3) await s3.impact;
+      else {
+        await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(stop, 1.8) }], { duration: 170, easing: 'ease-out' });
+        anim(ball, [{ transform: ballTf(stop, 1.8), opacity: 1 }, { transform: ballTf([stop[0] + (e.target[0] < 0 ? 70 : -70), START[1] + 4], 2.2), opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      }
       stamp('Geblockt', `Strich zu weit ${dirT}: ${B.last} wirft sich in den Schuss.`, 'bad', 'top');
       addTick(`${X.last} schiesst, ${B.last} blockt.`);
-      await hold(1400); return;
+      if (s3) await s3.done; else await hold(1400);
+      return;
     }
     const L = toScene(e.land);
     let endL = L, outL = null, fadeOut = false;
@@ -1041,6 +1088,15 @@
     $('shooter').hidden = true; hideReach();
     // Knapp am Goalie vorbei oder gerade noch gehalten: Der Flug läuft langsamer aus, damit man es sieht
     const tight = mine && !e.miss && Math.abs(e.kd - e.reach) < 0.14, flyMs = Math.round((330 + 240 * (1 - e.q)) * (tight ? 1.55 : 1));
+    const goal = e.result === 'goal', saved = e.result === 'save' || e.result === 'catch';
+    // In 3D: Der Schuss läuft als Szene; Tor, Netz und Jubel zeigt sie selbst. Sonst wie bisher in der Torsicht.
+    const s3 = scene3(shotSpec(e, before, tight), { linger: true });
+    if (s3) {
+      say(mine ? `${X.last} schiesst.` : e.empty ? 'Das Tor ist leer.' : e.guess ? `Du springst ${ZNAME[e.guess]}.` : 'Keine Reaktion.');
+      rx.flight = null; [ball, $('mark')].forEach(fresh); $('mark').hidden = true; $('zones').className = 'zones off';
+      await s3.impact;
+      if (goal) { scored(e.side, e.ctx); if (mine) buzz([30, 50, 90]); } else if (e.miss === 'post' && mine) buzz(60);
+    } else {
     if (mine) {
       say(`${X.last} schiesst.`);
       const pre = [START[0], START[1] + 6], mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24];
@@ -1069,7 +1125,7 @@
       crowdGroan();
       anim(ball, [{ transform: ballTf(end, bs), opacity: 1 }, { transform: ballTf(out, fadeOut ? 0.6 * gz.s : 1.1 * gz.s), opacity: fadeOut ? 0 : 1 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
     }
-    const goal = e.result === 'goal', saved = e.result === 'save' || e.result === 'catch';
+    }
     let main, sub;
     if (mine) {
       const off = e.grade !== 'perfect' && e.grade !== 'good', aimedOut = Math.abs(e.target[0]) >= 1 || e.target[1] >= 1, c = G.cfg;
@@ -1083,6 +1139,7 @@
     stamp(main, sub, mine === goal ? 'good' : 'bad', 'top');
     if (e.ctx !== 'so') addTick(goal ? (mine ? `Tor! ${X.last} trifft zum ${disp.you}:${disp.home}.` : `Tor ${HOME}: ${X.last}, ${disp.you}:${disp.home}.`) : `${X.last} schiesst: ${main}.`, goal);
     else addTick(`Penalty ${X.last}: ${goal ? 'Tor' : main}.`, goal);
+    if (s3) { await s3.done; return; }
     if (e.result === 'catch') crowdGroan();
     await hold(goal ? 2700 : 1400);
   }
@@ -1203,6 +1260,7 @@
     buildPlayers(); show('match');
     G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400]); camSet(190);
     addTick(`Anpfiff. Du spielst ${M.TACTICS[G.tactic.you].name.toLowerCase()}.`);
+    close3(); if (use3d()) setTimeout(() => S3.warm($('view3d')), 400);
     flow([]);
   }
   function finish() {

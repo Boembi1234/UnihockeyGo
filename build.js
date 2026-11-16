@@ -18,7 +18,9 @@ const labCss = lab('page.html').match(/<style>([\s\S]*?)<\/style>/)[1];
 const matchOut = lab('match.html').replace('/*__LABCSS__*/', () => labCss).replace('/*__ENGINE__*/', () => r('engine.js').trim()).replace('/*__WORLD__*/', () => r('world.js').trim())
   .replace('/*__MATCH__*/', () => lab('match.js').trim())
   .replace('/*__STORECSS__*/', () => lab('store.css').trim()).replace('/*__KEEPER__*/', () => lab('keeper.js').trim())
-  .replace('/*__POOL__*/', () => lab('pool.js').trim()).replace('/*__CLUB__*/', () => lab('club.js').trim()).replace('/*__STORE__*/', () => lab('store-ui.js').trim()).replace('/*__MUI__*/', () => lab('match-ui.js').trim());
+  .replace('/*__POOL__*/', () => lab('pool.js').trim()).replace('/*__CLUB__*/', () => lab('club.js').trim()).replace('/*__STORE__*/', () => lab('store-ui.js').trim()).replace('/*__S3D__*/', () => lab('scene3d.js').trim()).replace('/*__MUI__*/', () => lab('match-ui.js').trim());
 fs.mkdirSync(path.join(__dirname, 'dist', 'lab', 'match'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'lab', 'match', 'index.html'), matchOut);
+// three.js für die 3D-Szenen: liegt als eigene Datei neben der Seite, damit sie zwischengespeichert wird
+fs.copyFileSync(path.join(__dirname, 'vendor', 'three.min.js'), path.join(__dirname, 'dist', 'lab', 'match', 'three.min.js'));
 console.log('dist/lab/match/index.html', matchOut.length, 'Zeichen');
