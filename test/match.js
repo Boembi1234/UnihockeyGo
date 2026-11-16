@@ -119,7 +119,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['live', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();

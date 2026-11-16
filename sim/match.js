@@ -157,7 +157,7 @@ function coach(s, style) {
 function policy(pf, style) {
   return (s, r) => {
     const sc = s.cur, tap = (pos, sweep) => clamp(pos + gauss(r) * pf.s / sweep, 0, 1);
-    if (s.phase === 'decide' && sc.type === 'att' && !(style && style.steps)) return { type: 'live', cmds: livePlay(s, pf, r).cmds };      // der Angriff läuft live
+    if (s.phase === 'decide' && sc.type === 'att' && style && style.live) return { type: 'live', cmds: livePlay(s, pf, r).cmds };      // Versuch: der Angriff als Live-Szene (im Spiel nicht mehr gezeigt)
     if (s.phase === 'decide' && sc.type === 'att') {
       const X = sc.carrier, last = sc.step >= sc.max - 1;
       const val = a => { const c = M.contest(s, a); return c.free ? 1 : pHit(pf, c.w, c.sweep); };

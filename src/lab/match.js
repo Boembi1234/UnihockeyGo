@@ -64,7 +64,7 @@
        direkt vor dem Tor, reachDist dazu von ganz weit, reachVal weniger pro Punkt Abschluss über dem Goalie.
        Er ahnt die Ecke: creepDelay ms nach dem Setzen des Ziels rückt er mit creepSpeed pro Sekunde dorthin, höchstens creepMax. */
     kOff: 0.12, kY: 0.3, kYs: 1.3,
-    reach: 0.58, reachDist: 0.46, reachVal: 0.003, reachTrait: 0.07, reachMin: 0.45, reachMax: 1.25,
+    reach: 0.72, reachDist: 0.46, reachVal: 0.003, reachTrait: 0.07, reachMin: 0.45, reachMax: 1.25,
     creepDelay: 1500, creepSpeed: 0.3, creepMax: 0.45,
     enSpread: 0.5,                                                    // müder Schütze des Gegners streut bis so viel mehr
     // Energie: Kosten pro Chance (für alle; mal enTacOff bei offensiver, mal enTacDef bei defensiver Taktik), Pass, Annahme, Dribbling, Schuss, Abwehraktion; Erholung in der Pause;
@@ -79,7 +79,7 @@
        fxEmptyAtt. Mauern: Chancen des Gegners mal fxWallOpp, eigene mal fxWallOwn. */
     fxTimeout: 30, fxPress: 2, fxPressAi: 0.8, fxPlay: 1.25, fxPlayAi: 0.85, fxCalm: 1.4, fxEmptyOwn: 2, fxEmptyAtt: 1.15, fxWallOpp: 0.5, fxWallOwn: 0.6,
     // Reaktionsparade: Zeit in ms, bis der Ball im Tor ist
-    aiPowMin: 0.1, rxBase: 440, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
+    aiPowMin: 0.1, rxBase: 400, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
     blockBase: 0.65,                                                  // Schuss geblockt, wenn ein Gegner ganz nah steht
     // Pass und Dribbling
     /* Dribbling: Raumgewinn in Feldeinheiten (perfekt mehr), aber nie näher ans Tor als dribStop. Jedes weitere Dribbling

@@ -340,7 +340,6 @@
     $('hint').hidden = true; panel.hidden = false;
     Object.keys(els).forEach(k => els[k].classList.remove('pick'));
     if (!att) { renderDefence(); return; }
-    if (!G.pen) { startLive(); return; }      // der eigene Angriff läuft live auf dem Feld
     phase = 'decide';
     const last = sc.step >= sc.max - 1, xt = TR(X.id);
     setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');

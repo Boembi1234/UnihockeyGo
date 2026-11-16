@@ -56,7 +56,7 @@ Wirkung der Taktik für den mittleren Modell-Spieler (zwei Linien um 81 und 76 g
 
 Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner den Goalie raus, schiesst du aufs leere Tor.
 
-**Der eigene Angriff läuft live auf dem Feld.** Es gibt keine Aktionsliste und keinen Timing-Balken mehr für Pass und Dribbling. Die Chance läuft als durchgehende Szene von oben, und du zeichnest vom Ball aus eine Linie:
+**Versuch: Angriff als Live-Szene (im Spiel wieder abgeschaltet).** Die Steuerung mit gezeichneten Linien war zu verwirrend. Im Spiel gelten wieder die Aktionsknöpfe (Schuss, Dribbling, Pass); die Live-Szene steckt noch in der Engine (`liveTick`), wird aber nicht mehr gezeigt. So war sie gedacht: Die Chance läuft als durchgehende Szene von oben, und du zeichnest vom Ball aus eine Linie:
 
 - **Zum Mitspieler:** Pass. Die Linie ist grün, wenn der Weg frei ist, gelb, wenn es eng wird, rot, wenn ein Gegner dazwischenkommt.
 - **Ins Tor:** Schuss. Es folgt der Abschluss vor dem Tor wie bisher (Ziel setzen, Schuss-Balken, Goalie). Direkt nach einem Querpass steht der Goalie noch falsch.
@@ -67,7 +67,7 @@ Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner 
 - **Karten:** Dribbling bestimmt das Tempo mit Ball, Pass das Tempo des Balls, Zweikampf und Antizipation der Gegner ihr Tempo, ihre Reaktion, ihre Reichweite und wie selten sie unaufmerksam sind. Müde Spieler sind langsamer.
 - **Technik:** Die Szene wird in festen Schritten gerechnet (`liveTick` in `src/lab/match.js`). Der Bildschirm rechnet mit derselben Funktion; die Befehle gehen mit ihrem Schritt an die Engine, die die Szene nachspielt.
 
-Die Abwehr läuft noch wie vorher (Timing-Balken, dann Parade). Die folgenden Abschnitte zu Passwegen, Dribbling-Parcours und Spielweisen beschreiben die ältere Form in Schritten; sie steckt noch in der Engine (für Tests), wird im Spiel aber nicht mehr gezeigt.
+Die folgenden Abschnitte zu Passwegen, Dribbling-Parcours und Spielweisen beschreiben die Form in Schritten, die im Spiel gilt.
 
 Simulation der Live-Szene mit dem mittleren Modell-Spieler bei gleichen Karten: 81 % der Chancen enden mit einem Schuss, 16 % mit einem abgefangenen Pass, 3 % im Zweikampf; 78 % der Pässe kommen an, 41 % der Schüsse sind Direktschüsse, eine Szene dauert im Schnitt gut zwei Sekunden.
 
@@ -118,13 +118,13 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 
 Ein müder Schütze (Energie 30) trifft aus der Nähe statt 31, 45, 62 und 70 % noch 24, 35, 47 und 57 %.
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 250 Matches je Feld, mit dem Angriff als Live-Szene, Siegquote:
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 300 Matches je Feld, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 21 % | 56 % | 86 % | 98 % | 100 % |
-| mittel | 2 % | 14 % | 46 % | 77 % | 93 % |
-| schwach | 1 % | 1 % | 7 % | 22 % | 49 % |
+| stark | 36 % | 63 % | 93 % | 99 % | 100 % |
+| mittel | 4 % | 12 % | 46 % | 77 % | 95 % |
+| schwach | 0 % | 2 % | 6 % | 29 % | 59 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 
