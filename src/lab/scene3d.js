@@ -620,7 +620,7 @@
                 miss 'wide' | 'high' | 'post', kx (wo der Goalie steht, -1 bis 1), blocker (id), tight (knapp: langsamer), empty (kein Goalie),
                 dive (wohin der Goalie springt, wenn er den Ball nicht hält: [x, y] oder null für «bleibt stehen»), quick (kurzer Anlauf),
                 live (der Ball fliegt schon, etwa nach der Parade-Eingabe: ohne Anlauf weiter), fly (Sekunden, die der Ball noch fliegt)
-       pass:    from, to (ids), ok, by (wer abfängt oder stört), near (kommt an, aber der Gegner ist dran)
+       pass:    from, to (ids), ok, by (wer abfängt oder stört), near (kommt an, aber der Gegner ist dran), long (hoher langer Ball)
        dribble: x (Dribbler), by (Gegenspieler), result 'past' | 'held' | 'lost', to [x, y] (wo der Dribbler danach steht) }
      opt: linger (läuft nach dem Ende weiter, bis resume()). */
   // Stellt die Figuren einer Szene auf: wer in spec steht, an seinen Platz; alle andern verschwinden so lange
@@ -739,7 +739,9 @@
     } else if (spec.kind === 'pass') {
       const A = by[spec.from], B = by[spec.to], C = spec.ok ? null : by[spec.by], M = spec.ok && spec.near ? by[spec.by] : null, a0 = A.pos.clone(), b0 = B.pos.clone(), d = Math.max(0.5, a0.distanceTo(b0));
       const u0 = V().subVectors(b0, a0).normalize(), n = V(u0.z, 0, -u0.x); if (n.z < 0 || (Math.abs(n.z) < 0.2 && n.x * a0.x > 0)) n.negate();
-      const t0 = 0.12, sd = 0.62, tRel = t0 + sd * REL, fly = clamp(d / 13, 0.3, 0.85), cut = C ? V().lerpVectors(a0, b0, 0.58) : null, tEnd = tRel + fly * (C ? 0.58 : 1), from = V(); dur = tEnd + (C ? 1.15 : 0.95);
+      // Langer Pass (spec.long): Der Ball fliegt im Bogen und länger, abgefangen wird er erst kurz vor dem Empfänger
+      const long = !!spec.long, cf = long ? 0.82 : 0.58, lob = long ? clamp(d * 0.085, 0.5, 1.9) : 0.04;
+      const t0 = 0.12, sd = 0.62, tRel = t0 + sd * REL, fly = long ? clamp(d / 14, 0.6, 1.5) : clamp(d / 13, 0.3, 0.85), cut = C ? V().lerpVectors(a0, b0, cf) : null, tEnd = tRel + fly * (C ? cf : 1), from = V(); dur = tEnd + (C ? 1.15 : 0.95);
       list.forEach(P => { if (P.side === spec.atk) look(P, 0, 0, true); else look(P, a0.x, a0.z, true); });
       look(A, b0.x, b0.z, true); look(B, a0.x, a0.z, true); A.ball = true; actors([spec.from, spec.to]); if (C) actors([spec.by]);
       const c0 = a0.clone().addScaledVector(u0, -2.8 - d * 0.2).addScaledVector(n, 1.5 + d * 0.1).setY(2.0 + d * 0.12), l0 = V().lerpVectors(a0, b0, 0.38).setY(0.6), S_ = {};
@@ -747,7 +749,7 @@
         if (t >= t0 && !S_.pass) { S_.pass = true; anim(A, 'pass', t0, sd); }
         carrier = null;
         if (t < tRel) ballAt(A);
-        else if (t < tEnd) { if (!S_.from) { S_.from = from.copy(ballV).clone(); A.ball = false; } const u = (t - tRel) / fly; ballV.lerpVectors(S_.from, tmp.set(b0.x, 0.08, b0.z), u); ballV.y = 0.08 + Math.sin(Math.min(1, u) * Math.PI) * 0.04; }
+        else if (t < tEnd) { if (!S_.from) { S_.from = from.copy(ballV).clone(); A.ball = false; } const u = (t - tRel) / fly; ballV.lerpVectors(S_.from, tmp.set(b0.x, 0.08, b0.z), u); ballV.y = 0.08 + Math.sin(Math.min(1, u) * Math.PI) * lob; }
         else {
           if (!S_.hit) { S_.hit = true; fire(); if (C) { C.ball = true; anim(A, 'sad', t + 0.25, 9); mood = 'groan'; } else { B.ball = true; look(B, 0, 0); if (M) { look(M, B.pos.x, B.pos.z, true); anim(M, 'lunge', t, 0.8, { dir: 0 }); } } }
           ballAt(C || B);
@@ -839,8 +841,8 @@
   function lanes(list) {
     if (!R) return; const M = R.marks; D.lanes = list || [];
     M.lanes.forEach((m, i) => { const L = D.lanes[i]; m.visible = !!L; if (!L) return; const ax = wx(L.a[0]), az = wz(L.a[1]), bx = wx(L.b[0]), bz = wz(L.b[1]), len = Math.hypot(bx - ax, bz - az); m.position.set((ax + bx) / 2, 0.022 + i * 0.001, (az + bz) / 2); m.scale.set(0.05 * (L.w || 3), Math.max(0.1, len - 0.9), 1); m.rotation.z = Math.atan2(bx - ax, bz - az) + Math.PI; m.material.color.set(L.col || '#ffffff'); m.material.opacity = L.dim ? 0.35 : 0.72; });
-    R.figs.forEach(P => { if (P.tag) P.tag.classList.remove('s3free', 's3pick'); });
-    D.lanes.forEach(L => { const P = L.id && figOf(L.id); if (P && P.tag && !L.dim) { P.tag.classList.add('s3pick'); if (L.free) P.tag.classList.add('s3free'); } });
+    R.figs.forEach(P => { if (P.tag) P.tag.classList.remove('s3free', 's3pick', 's3deep'); });
+    D.lanes.forEach(L => { const P = L.id && figOf(L.id); if (P && P.tag && !L.dim) { P.tag.classList.add('s3pick'); if (L.free) P.tag.classList.add('s3free'); if (L.deep) P.tag.classList.add('s3deep'); } });
   }
   // Welcher Spieler liegt unter dem Finger? ids: wer in Frage kommt
   function pick(cx, cy, ids) {
@@ -855,7 +857,7 @@
     R.figs.forEach(P => {
       if (!P.used) return;
       const dx = P.live.x - P.pos.x, dz = P.live.z - P.pos.z, d = Math.hypot(dx, dz); let mv = 0;
-      if (d > 0.003) { mv = Math.min(d * (1 - Math.exp(-dt * 16)), 11 * dt); P.pos.x += dx / d * mv; P.pos.z += dz / d * mv; }
+      if (d > 0.003) { mv = Math.min(d * (1 - Math.exp(-dt * 16)), Math.max(11, d * 3) * dt); P.pos.x += dx / d * mv; P.pos.z += dz / d * mv; }      // wer weit weg ist (neue Szene am anderen Ende), holt schneller auf
       P.vel += (mv / Math.max(0.001, dt) - P.vel) * Math.min(1, dt * 12);
       if (P.vel > 0.45) { P.anim = 'run'; P.speed = clamp(P.vel, 1.4, 6); P.cycle += mv * 7; if (d > 0.06) P.faceTo = Math.atan2(dx, dz); }
       else { P.anim = 'idle'; P.speed = 0; if (P.id === D.carrier) P.faceTo = Math.atan2(-P.pos.x, (P.side === 'you' ? 0 : RL) - P.pos.z); else P.faceTo = Math.atan2(R.ballL.x - P.pos.x, R.ballL.z - P.pos.z); }
@@ -868,11 +870,18 @@
     else if (C) { bladePos(C, tmp); tmp.lerpVectors(R.ballL, tmp, 1 - Math.exp(-dt * 22)); } else tmp.copy(R.ballL);
     setBall(tmp);
     M.carrier.visible = !!C; if (C) { M.carrier.position.set(C.pos.x, 0.02, C.pos.z); M.carrier.scale.setScalar(1 + Math.sin(t * 5) * 0.06); }
-    M.rings.forEach((m, i) => { const L = D.lanes[i], P = L && L.free && figOf(L.id); m.visible = !!P; if (P) { m.position.set(P.pos.x, 0.021, P.pos.z); m.scale.setScalar(1 + Math.sin(t * 6 + i) * 0.1); } });
+    M.rings.forEach((m, i) => { const L = D.lanes[i], P = L && (L.free || L.deep) && figOf(L.id); m.visible = !!P; if (P) { m.position.set(P.pos.x, 0.021, P.pos.z); m.scale.setScalar(1 + Math.sin(t * 6 + i) * 0.1); } });
     // Kamera: schräg von hinten über deine Hälfte, fährt dem Ausschnitt nach, den das Match vorgibt
     const fz = (D.camY + 170) * S; D.fz += (fz - D.fz) * (1 - Math.exp(-dt * 3.2)); D.bx += (R.ballL.x - D.bx) * (1 - Math.exp(-dt * 2));
     camAt(R.v3.set(D.bx * 0.22, 7.2, D.fz + 13), R.v4.set(D.bx * 0.3, 0.5, D.fz - 2), 54);
     R.focus = 15; R.dof = [10, 14, 6];
+  }
+  /* Wie weit die Kamera im laufenden Spiel zurück muss (als camY), damit alle Punkte des Felds im Bild sind. Nah an der
+     Kamera ist das Bild schmal: Wer weit aussen steht, braucht mehr Abstand. pts: [[x, y]], ballX: wo der Ball ist. */
+  function fit(pts, ballX) {
+    const cx = wx(ballX === undefined ? 180 : ballX) * 0.22, half = Math.tan(27 * RAD) * REFA * 0.9; let z = -99;
+    (pts || []).forEach(p => { z = Math.max(z, wz(p[1]) + Math.max(6.6, Math.abs(wx(p[0]) - cx) / half)); });
+    return (z - 13) / S - 170;
   }
   // Schilder über den Köpfen nachführen
   function tagsPose() {
@@ -1087,5 +1096,5 @@
   // Zurück ins laufende Spiel (nach einer Szene, die nachläuft, oder nach dem Zielen)
   function resume() { if (!R) return; if (D.cut) D.cut.kill(); else if (D.mode !== 'live') { unflip(); blendCam(0.5); } }
 
-  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, inset, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
+  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, fit, play, stop, resume, inset, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
 })();

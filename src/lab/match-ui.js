@@ -16,6 +16,7 @@
   const ICON = {
     shoot: '<svg viewBox="0 0 40 40"><circle class="f" cx="20" cy="33" r="4.2"/><path d="M20 27 V7 M12.5 14 L20 6.5 L27.5 14"/></svg>',
     pass: '<svg viewBox="0 0 40 40"><circle class="f" cx="8" cy="31" r="3.6"/><circle class="f" cx="32" cy="22" r="3.6"/><path d="M11.5 29.5 L27 23.5"/></svg>',
+    long: '<svg viewBox="0 0 40 40"><circle class="f" cx="7" cy="33" r="3.6"/><path d="M9.5 29 C 13 12, 24 7, 33 11.5 M26.5 8 L33.5 11.5 L29.5 18"/></svg>',
     drib: '<svg viewBox="0 0 40 40"><circle class="f" cx="13" cy="33" r="4.2"/><path d="M15 28 C 33 23, 7 16, 25 7.5 M25 7.5 L18.8 8 M25 7.5 L22.4 13"/></svg>',
     press: '<svg viewBox="0 0 40 40"><path d="M4 20 H16 M11 14.5 L16.5 20 L11 25.5 M36 20 H24 M29 14.5 L23.5 20 L29 25.5"/></svg>',
     block: '<svg viewBox="0 0 40 40"><path d="M7 12 H33 V30 H7 Z M7 21 H33 M15 12 V21 M25 12 V21 M20 21 V30"/></svg>',
@@ -214,9 +215,28 @@
   const goalOf = side => (side === 'you' ? [180, 40] : [180, 760]);
   const ep = (sc, id) => toRink(sc.pos[id], M.atkSide(sc));
   // Im offenen Spiel folgt die Kamera dem Ball, in einer Szene zeigt sie fest auf das Tor, auf das gespielt wird.
-  let cam = 0, camMode = 'follow';
-  const camTarget = () => (camMode === 'follow' ? Math.max(0, Math.min(380, ballP[1] - 230)) : (G && G.cur && G.cur.type === 'def' ? 380 : 0));
-  function camSet(y) { cam = y; $('pitch').setAttribute('viewBox', `0 ${cam.toFixed(1)} 360 420`); if (L3) S3.camY(y); }
+  /* In einer Szene vor dem Tor steht sie fest. Im Aufbau (die Spieler stehen über das ganze Feld verteilt) fährt sie mit:
+     bei deinem Angriff hinter dem Ball her, beim Aufbau des Gegners so nah an den Ball, wie es geht, und so weit zurück,
+     dass bei einem Pass auch der Empfänger und sein Gegenspieler zu sehen sind. Die Sicht von oben zeigt im Aufbau fast
+     das ganze Feld (camH: Höhe des Ausschnitts). */
+  let cam = 0, camH = 420, camMode = 'follow';
+  const deepNow = () => camMode === 'scene' && !!G && !!G.cur && !!G.cur.deep && !G.cur.done;
+  function camTarget() {
+    if (camMode === 'follow') return Math.max(0, Math.min(380, ballP[1] - 230));
+    const def = !!G && !!G.cur && G.cur.type === 'def';
+    if (!deepNow()) return def ? 380 : 0;
+    if (!L3) return def ? 0 : 100;
+    // Dein Aufbau: deine Spieler vor und neben dem Ball im Bild (die Anspielstationen). Aufbau des Gegners: der Ballführende, das
+    // Ziel seines Passes und dessen Gegenspieler. Die 3D-Halle rechnet, wie weit die Kamera dafür zurück muss.
+    const sc = G.cur, it = sc.intent || {}, ids = def ? [sc.carrier, it.to, it.to && sc.mark[it.to]] : G.teams.you.cards.map(c => c.id).filter(id => pos[id] && pos[id][1] <= ballP[1] + 60);      // wer weit hinter dem Ball steht, muss nicht ins Bild
+    const y = S3.fit(ids.filter(id => id && pos[id]).map(id => pos[id]).concat([ballP]), ballP[0]);
+    return Math.max(0, Math.min(415, def ? y : Math.max(y, ballP[1] - 300)));
+  }
+  const camHTarget = () => (!L3 && deepNow() ? 700 : 420);
+  function camSet(y, h) {
+    cam = y; camH = h || camH; const w = camH * 360 / 420;
+    $('pitch').setAttribute('viewBox', `${((360 - w) / 2).toFixed(1)} ${cam.toFixed(1)} ${w.toFixed(1)} ${camH.toFixed(1)}`); if (L3) S3.camY(y);
+  }
   let ballP = [180, 380];
   /* Der Ball zieht bei Pässen und Schüssen eine Leuchtspur: die Stellen der letzten Augenblicke, je älter, desto blasser.
      Blau, wenn du den Ball hast, gold beim Gegner. */
@@ -235,7 +255,7 @@
     const col = carrier && sideOf(carrier) === 'home' ? '#ffd76a' : '#9fd4ff';
     [['trail-a', 0], ['trail-b', 0.35], ['trail-c', 0.65]].forEach(v => { const el = $(v[0]); el.setAttribute('d', d(v[1])); el.setAttribute('stroke', v[1] > 0.6 ? '#ffffff' : col); });
   }
-  const camFollow = k => camSet(cam + (camTarget() - cam) * k);
+  const camFollow = k => camSet(cam + (camTarget() - cam) * k, camH + (camHTarget() - camH) * k);
   function setCarrier(id) {
     Object.keys(els).forEach(k => els[k].querySelector('.carrier-ring').setAttribute('visibility', k === id ? 'visible' : 'hidden'));
     carrier = id || null; if (L3) S3.carrier(carrier);
@@ -249,7 +269,7 @@
     if (hasBall) { ballBusy = true; if (carrier && fig[carrier] && !moves.some(m => m.id === carrier)) fig[carrier].swing = 1; }
     const free = () => { if (hasBall) ballBusy = false; };
     const apply = t => moves.forEach((m, i) => { const p = m.via ? bez(from[i], m.via, m.to, t) : lerp(from[i], m.to, t); if (m.id === 'ball') ballAt(p, true); else place(m.id, p); });
-    if (!T(ms)) { apply(1); camSet(camTarget()); free(); return Promise.resolve(); }
+    if (!T(ms)) { apply(1); camSet(camTarget(), camHTarget()); free(); return Promise.resolve(); }
     return new Promise(res => {
       const vig = $('vignette'); let t = 0, last = performance.now();
       (function tick(now) {
@@ -277,10 +297,16 @@
     if (last) return;
     G.teams[as].cards.forEach(c => {
       if (c.id === sc.carrier) return;
-      const a = pos[sc.carrier], b = pos[c.id], pi = M.passInfo(G, sc, sc.carrier, c.id), free = as === 'you' && M.isFree(G, sc, c.id);
+      const a = pos[sc.carrier], b = pos[c.id], pi = M.passInfo(G, sc, sc.carrier, c.id), free = as === 'you' && M.isFree(G, sc, c.id), deep = as === 'you' && !!sc.deep && sc.deep.run === c.id;
       const col = as === 'you' ? (pi.risk < 0.3 ? '#34d399' : pi.risk < 0.55 ? '#f7d774' : '#ef4444') : '#ffffff';
       svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: col, 'stroke-width': as === 'you' ? (free ? 4 : 3) : 2, 'stroke-dasharray': free ? '10 5' : '6 6', opacity: as === 'you' ? 0.85 : 0.4, 'stroke-linecap': 'round' }, g);
-      l3.push({ a, b, col, w: free ? 4 : 3, free, id: c.id, dim: as !== 'you' });
+      l3.push({ a, b, col, w: free || deep ? 4 : 3, free, deep, id: c.id, dim: as !== 'you' });
+      if (deep) {
+        // der Mitspieler in der Tiefe: goldener Ring und Schild
+        svg('circle', { cx: b[0], cy: b[1], r: 23, fill: 'none', stroke: '#f7d774', 'stroke-width': 3 }, g);
+        svg('rect', { x: b[0] - 16, y: b[1] - 41, width: 32, height: 13, rx: 3, fill: '#f7d774', stroke: '#1a1300', 'stroke-width': 1 }, g);
+        const t = svg('text', { x: b[0], y: b[1] - 31, 'text-anchor': 'middle', class: 'freelab' }, g); t.textContent = 'TIEF';
+      }
       if (free) {
         // frei: grüner Ring und Schild, damit man den Mitspieler sofort sieht
         const r = svg('circle', { cx: b[0], cy: b[1], r: 23, fill: 'none', stroke: '#34d399', 'stroke-width': 3, class: 'freering' }, g), lw = 32;
@@ -414,16 +440,17 @@
     Object.keys(els).forEach(k => els[k].classList.remove('pick'));
     if (!att) { renderDefence(); return; }
     phase = 'decide';
-    const last = sc.step >= sc.max - 1, xt = TR(X.id);
+    if (sc.deep) { renderDeep(); return; }
+    const last = sc.step >= sc.max - 1, xt = TR(X.id), canD = M.canDrib(G, sc), alone = sc.kind === 'solo';
     setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
-    const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), di = M.dribInfo(G, sc, X.id), co = last ? null : M.dribCourse(G), mk = card('home', cd.by), bl = card('home', pv.by), direct = Math.abs(pv.oneT) >= 0.25;
+    const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), di = M.dribInfo(G, sc, X.id), co = last || !canD ? null : M.dribCourse(G), mk = card('home', cd.by), bl = card('home', pv.by), direct = Math.abs(pv.oneT) >= 0.25;
     const anyFree = !last && G.teams.you.cards.some(c => c.id !== X.id && M.isFree(G, sc, c.id));
     // Verkehr vor dem Tor: Gegner, deren Schatten im Tor liegt; zu ist die Schussbahn, wenn keine Schussart eine Chance hat
     const lane = (pv.shade || []).filter(o => o.x + o.w > -1 && o.x - o.w < 1), shut = pv.why === 'shut';
-    say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : shut && lane.length ? ' Die Schussbahn ist zu: passen oder dribbeln.' : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.'));
-    let h = `<div class="actions2">
+    say((alone ? `${X.last} ist allein durch!` : `${X.last} hat den Ball.`) + (last ? ' Letzte Aktion: Abschluss.' : alone ? ' Abschliessen oder quer legen.' : shut && lane.length ? (canD ? ' Die Schussbahn ist zu: passen oder dribbeln.' : ' Die Schussbahn ist zu: quer legen.') : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : canD ? ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.' : ' Direkt vor dem Tor: schiessen oder quer legen.'));
+    let h = `<div class="actions2${canD ? '' : ' one'}">
 <button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>${shut ? `<em class="bad">${lane.length ? 'Schussbahn zu' : 'kaum eine Chance'}</em> · ` : lane.length ? `<em class="bad">${lane.length} im Weg</em> · ` : ''}<em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.scr && pv.scr.length ? ' · <em>Sichtschutz</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''} · Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
-<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>${co ? `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · ` : ''}${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
+${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>${co ? `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · ` : ''}${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button>` : ''}</div>`;
     if (!last) {
       // Pässe: freie Mitspieler zuerst, dann nach Lage. Dazu, was der Pass bringt: Direktschuss nach Querpass oder sicherer Rückpass.
       const opts = G.teams.you.cards.filter(c => c.id !== X.id).map(c => { const cp = M.contest(G, { type: 'pass', to: c.id }), v = M.shotPreview(G, c.id, X.id); return { c, cp, v, free: M.isFree(G, sc, c.id) }; })
@@ -440,6 +467,31 @@
     $('hist').innerHTML = `<em>${fxNote}Energie ${esc(X.last)} ${enPill(X)} ${Math.round(X.en)} %${X.en <= 60 ? ': müde, sein Strich läuft schneller' : ''}. ${xt && xt.off ? `<b class="tr">${xt.name}</b>: breiteres Feld beim ${xt.what}.` : 'Die Zahl ist die Breite des grünen Felds in Prozent.'}</em>`;
     drawLanes();
   }
+  /* Aufbau: Die Chance beginnt hinten (Auslösung) oder dort, wo der Ball gewonnen wurde (Umschalten). Geschossen wird
+     hier nicht. Zwei grosse Knöpfe: der lange Pass auf den Mitspieler in der Tiefe und der Vorstoss mit dem Ball.
+     Darunter die kurzen Pässe. Jeder Knopf sagt, wie es danach vor dem Tor weitergeht. */
+  function renderDeep() {
+    const sc = G.cur, dp = sc.deep, turn = dp.kind === 'turn', X = card('you', sc.carrier), R = card('you', dp.run), panel = $('panel'), kt = KINDTXT[sc.kind];
+    const cd = M.contest(G, { type: 'dribble' }), co = cd.free ? null : M.dribCourse(G), mk = card('home', cd.by), left = dp.max - dp.n, own = pos[X.id][1] > 400;
+    setTag(turn ? M.KINDS[sc.kind] : 'Auslösung', 'you');
+    say(turn ? `${X.last} hat den Ball gewonnen. ${R.last} läuft in die Tiefe!` : dp.n ? `${X.last} hat den Ball. ${left === 1 ? 'Jetzt in die Tiefe oder selbst, sonst steht die Abwehr.' : 'Lang, kurz oder selbst?'}` : `${X.last} baut hinten auf, ${HOME} stört früh. Lang, kurz oder selbst?`);
+    const lp = M.contest(G, { type: 'pass', to: R.id }), lby = card('home', lp.by);
+    let h = `<div class="actions2">
+<button type="button" class="act deepb${M.trait(X) === 'passer' ? ' fit' : ''}" data-to="${R.id}"><b>${ic('long')}${turn ? 'Steilpass' : 'Langer Pass'}</b><span class="pct">${fieldPct(lp)}</span>${mini(lp)}<small><em>auf ${esc(R.last)}</em> · ${turn ? 'im Feld: allein durch' : 'im Feld: 2 gegen 1, perfekt: allein durch'} · ${r0(M.passVal(X))} gegen ${esc(lby.last)} ${r0(M.stanceVal(lby, 'pass'))}${trChip(X.id, 'passer')}${trChip(lby.id, 'anti', true)}</small></button>
+<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"><b>${ic('drib')}Vorstoss</b>${cd.free ? '<span class="pct word">frei</span>' : ''}<small>${cd.free ? `<em>freie Bahn</em> · ${esc(X.last)} trägt den Ball selbst nach vorn${kt ? ', ' + kt[1] : ''}` : `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · vorbei: 3 gegen 2 · ${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}`}</small></button></div>`;
+    const opts = G.teams.you.cards.filter(c => c.id !== X.id && c.id !== R.id).map(c => { const cp = M.contest(G, { type: 'pass', to: c.id }), ahead = pos[c.id][1] < pos[X.id][1] - 20; return { c, cp, ahead, pi: M.passInfo(G, sc, X.id, c.id) }; }).sort((a, b) => (b.ahead - a.ahead) || (b.cp.p - a.cp.p));
+    h += `<p class="passes-head">${turn ? 'Kurzer Pass' : left <= 1 ? 'Kurzer Pass: danach steht die Abwehr' : 'Kurzer Pass: sicher'}</p><div class="passes">` + opts.map(o => {
+      const c = o.c, by = card('home', o.cp.by), isD = c.role === 'LD' || c.role === 'RD';
+      els[c.id].classList.add('pick');
+      const gain = turn ? (o.ahead ? 'läuft mit: Konter geht weiter' : 'Rückpass: Konter abgebrochen') : o.pi.long ? 'Seitenwechsel' : !o.ahead ? (isD ? 'quer nach hinten' : 'Rückpass') : c.role === 'C' ? 'durch die Mitte' : 'an die Bande';
+      return `<button type="button" class="pass" data-to="${c.id}"><span><b class="nm">${esc(c.last)}${enPill(c)}</b><small>${gain} · ${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))}</small>${mini(o.cp)}</span><em class="pct">${fieldPct(o.cp)}</em></button>`;
+    }).join('') + '</div>';
+    els[R.id].classList.add('pick');
+    panel.innerHTML = h;
+    const fxNote = sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '';
+    $('hist').innerHTML = `<em>${fxNote}${own ? '<b class="t-bad">Grober Fehler hinten:</b> Konter direkt vor deinem Tor. ' : ''}Von hier wird nicht geschossen: Bring den Ball nach vorn.${turn ? '' : ' Nach zwei Aktionen ohne Durchbruch steht die Abwehr.'} Die Zahl ist die Breite des grünen Felds in Prozent.</em>`;
+    drawLanes();
+  }
   // Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Der User trifft das Timing.
   const DEFTXT = {
     shoot: (X, D) => [`${X.last} zieht ab`, `${D.last} wirft sich in den Schuss`, 'Block', 'Schuss'],
@@ -447,13 +499,15 @@
     dribble: (X, D) => [`${X.last} geht ins Dribbling`, `${D.last} stellt ihn`, 'Zweikampf', 'Dribbling']
   };
   function renderDefence() {
-    const sc = G.cur, X = card('home', sc.carrier), d = M.defInfo(G, sc), T = d.to ? card('home', d.to) : null, tx = DEFTXT[d.kind](X, d.D, T);
+    const sc = G.cur, X = card('home', sc.carrier), d = M.defInfo(G, sc), T = d.to ? card('home', d.to) : null, it = sc.intent, long = !!sc.deep && !!it.long;
+    const tx = long ? [`${X.last} spielt den langen Ball auf ${T.last}`, `${d.D.last} geht dazwischen`, 'Antizipation', 'Vorlage'] : sc.deep && d.kind === 'dribble' ? [`${X.last} stösst mit dem Ball vor`, `${d.D.last} ${it.free ? 'setzt nach' : 'stellt ihn'}`, 'Zweikampf', 'Dribbling'] : DEFTXT[d.kind](X, d.D, T);
     setTag('Abwehr', 'home');
     say(`${tx[0]}. ${tx[1]}: triff das Timing.`);
-    $('hist').innerHTML = sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit. Genau in der Mitte: Ball gewonnen und Konter.</em>`;
+    $('hist').innerHTML = long && !G.fx.you.empty ? '<em><b class="tr">Langer Pass</b>: Schon «Im Feld» fängt ihn ab. Kommt er an, ist der Gegner durch.</em>' : sc.deep && !sc.pressing && !G.fx.you.empty ? `<em>${sc.deep.kind === 'turn' ? `${esc(HOME)} schaltet um. ` : `${esc(HOME)} baut hinten auf. `}Im Feld: Gegner gestört. Genau in der Mitte: Ball gewonnen, weit vorne.</em>` : sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit. Genau in der Mitte: Ball gewonnen und Konter.</em>`;
     const g = $('lanes'), a = pos[sc.carrier], b = d.kind === 'pass' ? pos[d.to] : d.kind === 'shoot' ? goalOf('home') : null; clearLanes();
     if (b) { svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: '#ff8a8a', 'stroke-width': 3, 'stroke-dasharray': '6 6', opacity: 0.85, 'stroke-linecap': 'round' }, g); if (L3) S3.lanes([{ a, b, col: '#ff8a8a', w: 3 }]); }
-    openBar({ type: 'defend' }, { title: `${tx[2]} ${esc(d.D.last)} ${r0(d.dv)}${d.trait ? `<i class="tr">${M.TRAITS[d.trait].name}</i>` : ''}`, sub: `gegen ${tx[3]} ${esc(X.last)} ${r0(d.atkV)}`, back: false });
+    // Im Aufbau des Gegners spielt sich alles hinten im Bild ab: Der Balken liegt dann unten, sonst oben
+    openBar({ type: 'defend' }, { title: `${tx[2]} ${esc(d.D.last)} ${r0(d.dv)}${d.trait ? `<i class="tr">${M.TRAITS[d.trait].name}</i>` : ''}`, sub: `gegen ${tx[3]} ${esc(X.last)} ${r0(d.atkV)}`, back: false, at: sc.deep ? 'bot' : null });
   }
   const dribTxt = p => (p >= 0.7 ? 'leicht' : p >= 0.5 ? 'mittel' : p >= 0.33 ? 'schwer' : 'sehr schwer');
   function choose(a) {
@@ -698,21 +752,23 @@
       } else if (e.t === 'shootStart') {
         say(`${card(sideOf(e.x), e.x).last} zieht ab.`);
       } else if (e.t === 'pass') {
-        const side = sideOf(e.from), to = e.ok && G.cur && G.cur.pos[e.to] ? ep(G.cur, e.to) : pos[e.to], T = card(side, e.to);
-        say(`${card(side, e.from).last} passt zu ${T.last}.`);
+        // Im Aufbau bleibt der Empfänger zuerst, wo er ist: Wie es weitergeht, zeigt das Ereignis danach (arrive) oder die neue Aufstellung
+        const side = sideOf(e.from), to = e.ok && !e.deep && G.cur && G.cur.pos[e.to] ? ep(G.cur, e.to) : pos[e.to], T = card(side, e.to), far = Math.hypot(pos[e.to][0] - pos[e.from][0], pos[e.to][1] - pos[e.from][1]);
+        say(e.long ? `${card(side, e.from).last} spielt den langen Ball auf ${T.last}.` : `${card(side, e.from).last} passt zu ${T.last}.`);
         if (e.ok) {
           const m = before.cur.mark[e.to], moves = [{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.to, to }];
-          if (m && G.cur && G.cur.pos[m]) moves.push({ id: m, to: ep(G.cur, m) });
-          const s3 = await act3({ kind: 'pass', atk: side, players: specPlayers(before.cur), from: e.from, to: e.to, ok: true, by: e.by, near: e.grade === 'near' }, moves, 520, e.grade === 'near');
+          if (m && !e.deep && G.cur && G.cur.pos[m]) moves.push({ id: m, to: ep(G.cur, m) });
+          const s3 = await act3({ kind: 'pass', atk: side, players: specPlayers(before.cur), from: e.from, to: e.to, ok: true, by: e.by, near: e.grade === 'near', long: !!e.long }, moves, 520 + Math.max(0, far - 160) * 1.3, e.grade === 'near');
           setCarrier(e.to);
-          if (e.grade === 'perfect') stamp('Perfekt', `${T.last} steht frei.`, 'good', 'low');
+          if (e.grade === 'perfect' && !e.deep) stamp('Perfekt', `${T.last} steht frei.`, 'good', 'low');
           else if (e.grade === 'near') stamp('Knapp', `Der Pass kommt an, aber ${card(sideOf(e.by), e.by).last} ist dran.`, 'warn', 'low');
-          await end3(s3, e.grade === 'perfect' ? 750 : e.grade === 'near' ? 850 : 0); hideStamp();
+          else if (e.long) stamp(e.grade === 'perfect' ? 'Perfekt' : 'Kommt an', `Der lange Ball findet ${T.last}.`, 'good', 'low');
+          await end3(s3, e.grade === 'perfect' ? 750 : e.grade === 'near' ? 850 : e.long ? 600 : 0); hideStamp();
         } else {
-          const cut = lerp(pos[e.from], pos[e.to], 0.5);
-          const s3 = await act3({ kind: 'pass', atk: side, players: specPlayers(before.cur), from: e.from, to: e.to, ok: false, by: e.by }, [{ id: 'ball', to: cut }, { id: e.by, to: cut }], 560, true);
-          stamp('Abgefangen', `${card(sideOf(e.by), e.by).last} liest den Pass.`, 'bad');
-          addTick(`Pass von ${card(side, e.from).last} abgefangen.`);
+          const cut = lerp(pos[e.from], pos[e.to], e.long ? 0.82 : 0.5);
+          const s3 = await act3({ kind: 'pass', atk: side, players: specPlayers(before.cur), from: e.from, to: e.to, ok: false, by: e.by, long: !!e.long }, [{ id: 'ball', to: cut }, { id: e.by, to: cut }], 560 + Math.max(0, far - 160) * 1.1, true);
+          stamp('Abgefangen', e.long ? `${card(sideOf(e.by), e.by).last} holt den langen Ball herunter.` : `${card(sideOf(e.by), e.by).last} liest den Pass.`, 'bad');
+          addTick(`${e.long ? 'Langer Pass' : 'Pass'} von ${card(side, e.from).last} abgefangen.`);
           setCarrier(e.by); await end3(s3, 1100); hideStamp();
         }
       } else if (e.t === 'dribble') {
@@ -724,7 +780,7 @@
           const s3 = await act3(Object.assign(d3, { result: 'past', to: G.cur.pos[e.x] }), [{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
           setCarrier(e.x);
           const hp = e.help ? card(sideOf(e.help), e.help) : null, fr = (e.freed || []).map(id => card(side, id)).filter(Boolean)[0];
-          stamp(e.grade === 'perfect' ? 'Perfekt' : 'Vorbei', `${X.last} lässt ${mk.last} stehen.` + (hp && fr && side === 'you' ? ` ${hp.last} hilft aus: ${fr.last} wird frei.` : ''), 'good', 'low');
+          stamp(e.grade === 'perfect' ? 'Perfekt' : 'Vorbei', `${X.last} lässt ${mk.last} stehen.` + (e.deep ? ' Der Weg nach vorn ist frei.' : hp && fr && side === 'you' ? ` ${hp.last} hilft aus: ${fr.last} wird frei.` : ''), 'good', 'low');
           await end3(s3, 800); hideStamp();
         } else if (e.ok) {
           const meet = lerp(pos[e.x], pos[e.by], 0.35);
@@ -741,26 +797,31 @@
         }
       } else if (e.t === 'defend') {
         const X = card('home', e.x), Dc = card('you', e.by), c = pos[e.x], it = e.intent;
-        const spot = e.action === 'press' ? lerp(pos[e.by], c, 0.7) : e.action === 'block' ? lerp(c, goalOf('home'), 0.3) : lerp(c, pos[e.target], 0.5);
+        const spot = e.action === 'press' ? lerp(pos[e.by], c, 0.7) : e.action === 'block' ? lerp(c, goalOf('home'), 0.3) : lerp(c, pos[e.target], e.long ? 0.82 : 0.5);
         const moves = [{ id: e.by, to: spot }];
         const pl = specPlayers(before.cur), lane = e.action === 'lane' && before.cur.pos[e.target];
         if (e.stopped) {
           // Ball gewonnen: in der Passbahn abgefangen, sonst im Zweikampf abgenommen
           moves.push({ id: 'ball', to: [spot[0] + 8, spot[1] - 10] });
-          const s3 = await act3(lane ? { kind: 'pass', atk: 'home', players: pl, from: e.x, to: e.target, ok: false, by: e.by } : { kind: 'dribble', atk: 'home', players: pl, x: e.x, by: e.by, result: 'lost' }, moves, 640, true);
+          const s3 = await act3(lane ? { kind: 'pass', atk: 'home', players: pl, from: e.x, to: e.target, ok: false, by: e.by, long: !!e.long } : { kind: 'dribble', atk: 'home', players: pl, x: e.x, by: e.by, result: 'lost' }, moves, e.long ? 900 : 640, true);
           setCarrier(e.by);
-          stamp('Ball gewonnen', `${Dc.last} nimmt ${X.last} den Ball ab.`, 'good');
-          addTick(`${Dc.last} gewinnt den Ball gegen ${X.last}.`);
+          stamp(e.long ? 'Abgefangen' : 'Ball gewonnen', e.long ? `${Dc.last} fängt den langen Ball ab.` : `${Dc.last} nimmt ${X.last} den Ball ab.`, 'good');
+          addTick(e.long ? `${Dc.last} fängt den langen Pass von ${X.last} ab.` : `${Dc.last} gewinnt den Ball gegen ${X.last}.`);
           await end3(s3, 1100); hideStamp();
         } else {
-          const w = e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', `${X.last} kommt glatt durch.`, 'bad'];
+          const Tg = it.to ? card('home', it.to) : null;
+          const w = e.long ? (e.grade === 'near' ? ['Knapp dran', `${Dc.last} ist dran, aber der lange Ball kommt an.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `Der lange Ball kommt an, ${Tg.last} hat freie Bahn.`, 'bad'] : ['Zu spät', `Der lange Ball findet ${Tg.last}.`, 'bad'])
+            : e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', it.kind === 'pass' ? `Der Pass zu ${Tg.last} kommt an.` : `${X.last} kommt glatt durch.`, 'bad'];
           let s3 = null;
           if (it.kind === 'pass') {
-            const to = G.cur.pos[it.to] ? ep(G.cur, it.to) : pos[it.to];
-            s3 = scene3({ kind: 'pass', atk: 'home', players: pl, from: e.x, to: it.to, ok: true, by: e.by, near: e.grade === 'good' && e.action === 'lane' });
+            const to = !e.deep && G.cur.pos[it.to] ? ep(G.cur, it.to) : pos[it.to];
+            s3 = scene3({ kind: 'pass', atk: 'home', players: pl, from: e.x, to: it.to, ok: true, by: e.by, near: (e.grade === 'good' || (e.long && e.grade === 'near')) && e.action === 'lane', long: !!e.long });
             if (s3) { stamp(w[0], w[1], w[2], 'low'); await s3.impact; tween(moves.concat([{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: it.to, to }]), 0); }
             else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); await tween([{ id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: it.to, to }], 480); }
             setCarrier(it.to);
+          } else if (it.kind === 'dribble' && e.deep && (it.free || e.grade === 'good')) {
+            // Vorstoss mit freier Bahn (oder gestört und hängen geblieben): ohne Szene, das Ereignis danach zeigt, wie es weitergeht
+            await tween(moves, 420); stamp(w[0], it.free ? (e.grade === 'good' ? `${Dc.last} bleibt dran und stört ${X.last}.` : e.grade === 'near' ? `${Dc.last} kommt fast heran.` : `${X.last} läuft allen davon.`) : w[1], w[2], 'low');
           } else if (it.kind === 'dribble') {
             const to = ep(G.cur, e.x);
             s3 = scene3({ kind: 'dribble', atk: 'home', players: pl, x: e.x, by: e.by, result: 'past', to: G.cur.pos[e.x] });
@@ -770,9 +831,21 @@
           } else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); }
           await end3(s3, 900); hideStamp();
         }
+      } else if (e.t === 'carry') {
+        say(`${card(e.side, e.x).last} trägt den Ball selbst nach vorn.`);
+      } else if (e.t === 'arrive') {
+        /* Der Aufbau ist vorbei: Alle laufen dorthin, wo es vor dem Tor weitergeht. */
+        const mine = e.side === 'you', X = card(e.side, e.x), who = mine ? X.last : `${HOME}: ${X.last}`;
+        const A = { through: ['Durchbruch', `${who} ist allein durch${e.tight ? ', ein Verfolger im Rücken' : ''}!`], rush21: ['2 gegen 1', `${who} kommt in Überzahl vors Tor${e.tight ? ', der Verteidiger ist dran' : ''}.`], rush32: ['3 gegen 2', `${who} kommt in Überzahl vors Tor${e.tight ? ', der Verteidiger ist dran' : ''}.`], set: ['Abwehr steht', mine ? `${HOME} hat sich formiert: Positionsangriff.` : 'Deine Abwehr hat sich formiert.'] }[e.how];
+        const good = e.how === 'set' ? !mine : mine;
+        stamp(A[0], A[1], e.how === 'set' ? 'warn' : good ? 'good' : 'bad', 'low');
+        if (e.how !== 'set' || !mine) addTick(e.how === 'set' ? `${HOME} baut auf, deine Abwehr steht.` : `${A[0]}: ${mine ? X.last : HOME + ' über ' + X.last}.`);
+        setCarrier(e.x); if (G.cur) await syncPositions(1100);
+        await hold(500); hideStamp(); renderScore();
       } else if (e.t === 'counter') {
         const mine = e.side === 'you', X = card(e.side, e.x), kt = KINDTXT[e.kind] || ['Konter', ''];
-        stamp(kt[0], mine ? `${X.last} startet durch, ${kt[1]}.` : `Grober Fehler: ${HOME} kontert über ${X.last}, ${kt[1]}.`, mine ? 'good' : 'bad');
+        if (e.near) stamp(kt[0], mine ? `Ball weit vorne gewonnen: ${X.last}, ${kt[1]}.` : `Grober Fehler hinten: ${X.last} steht vor deinem Tor, ${kt[1]}.`, mine ? 'good' : 'bad');
+        else stamp(kt[0], mine ? `${X.last} startet durch, ${kt[1]}.` : `Grober Fehler: ${HOME} kontert über ${X.last}, ${kt[1]}.`, mine ? 'good' : 'bad');
         addTick(mine ? `${kt[0]} für dich über ${X.last}.` : `${kt[0]} ${HOME} über ${X.last}.`);
         await hold(1000); hideStamp(); renderScore();
         if (G.cur && G.phase !== 'aim') { camMode = 'scene'; await syncPositions(700); }
@@ -823,8 +896,10 @@
     camMode = 'scene';
     await tween([], 450);
     renderScore();
+    const build = !!sc.deep && sc.deep.kind === 'build';
     if (kt) { stamp(kt[0], att ? `${X.last} zieht los, ${kt[1]}.` : `${HOME} kontert über ${X.last}, ${kt[1]}.`, att ? 'good' : 'bad'); await hold(1000); hideStamp(); }
-    addTick(att ? `${kt ? kt[0] : 'Chance'}: ${X.last} am Ball.` : `${kt ? kt[0] + ' ' + HOME : HOME + ' greift an'}: ${X.last} am Ball.`);
+    else if (build) { stamp('Auslösung', att ? `${X.last} baut hinten auf, ${HOME} stört früh.` : `${HOME} baut hinten auf: Störe früh.`, 'warn'); await hold(900); hideStamp(); }
+    addTick(build ? (att ? `Auslösung: ${X.last} am Ball.` : `${HOME} baut auf: ${X.last} am Ball.`) : att ? `${kt ? kt[0] : 'Chance'}: ${X.last} am Ball.` : `${kt ? kt[0] + ' ' + HOME : HOME + ' greift an'}: ${X.last} am Ball.`);
     if (G.phase === 'aim') await toGoal(); else renderDecision();
   }
   // Drittelsende: Zwischenstand, in der Pause lässt sich die Taktik ändern. Nach dem dritten Drittel Schluss oder Penaltys.
@@ -879,7 +954,8 @@
         setCarrier(e.by); addTick(`${nm(e.by)} ${KIND[e.kind]} gegen ${nm(e.from)}.`);
         await wait(250);
         turnView(e.side === 'you' ? 'home' : 'you');
-        const wp = formation(view, 0.85); wp[e.by] = wp[e.by] || pos[e.by];
+        const wp = e.final && sc ? Object.fromEntries(Object.keys(sc.pos).map(id => [id, ep(sc, id)])) : formation(view, 0.85); wp[e.by] = wp[e.by] || pos[e.by];
+        if (e.final) camMode = 'scene';
         await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[e.by][0] + 10, wp[e.by][1] - 12] }]), 800);
         setCarrier(e.by); holder = e.by;
       } else {
@@ -913,6 +989,7 @@
     if (db) closeDribble();
     if (lv) closeLive();
     close3();
+    $('shooter').hidden = true; $('tell').hidden = true;
     const gv = $('goalview'); if (gv.hidden) return;
     [gv, $('keeper'), $('ball')].forEach(fresh);
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
@@ -1398,7 +1475,7 @@
     G = M.newMatch(setup(opp), rng);
     disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0; infoCard = null;
     show('match'); fullscreen(true); drawer(false); stage3(use3d() && S3.mount($('view3d'))); buildPlayers();
-    G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400], true); camSet(190);
+    G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400], true); camSet(190, 420);
     addTick(`Anpfiff. Du spielst ${M.TACTICS[G.tactic.you].name.toLowerCase()}.`);
     flow([]);
   }

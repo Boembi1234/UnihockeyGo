@@ -52,6 +52,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att') {
           await snap('01-angriff'); await over('angriff'); n++;
+          if (await p.evaluate(() => !!document.querySelector('#panel .deepb'))) { seen.deep = 1; await p.waitForTimeout(taken['01-aufbau'] ? 0 : 900); await snap('01-aufbau'); await over('aufbau'); }
           const fit = await p.evaluate(() => { const b = document.querySelector('#panel [data-a]').getBoundingClientRect(), d = document.documentElement; return [d.scrollHeight - innerHeight, Math.round(b.bottom), innerHeight]; });
           if ((fit[0] > 0 || fit[1] > fit[2]) && !taken.fit) { taken.fit = 1; errors.push('Vollbild: Die Seite scrollt oder der Schuss-Knopf liegt nicht im Bild: ' + JSON.stringify(fit)); }
           const live3 = await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'));
@@ -62,7 +63,13 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
             if (at) { await p.mouse.click(at[0], at[1]); await p.waitForTimeout(60); if (await p.evaluate(() => !!document.querySelector('#panel [data-a]:not(:disabled)'))) seen.missTap = (seen.missTap || 0) + 1; else seen.tap3 = 1; }
             else await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
           }
-          else await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')]; l[Math.floor(Math.random() * l.length)].click(); });
+          else {
+            // Im Aufbau (langer Pass, Vorstoss, kurze Pässe) meist der Vorstoss oder ein kurzer Pass, damit der Testspieler auch vors Tor kommt; dort öfter der Schuss
+            // solange noch kein Dribbling-Parcours zu sehen war, wählt er das Dribbling, wo es geht
+            const did = await p.evaluate(want => { const q = s => document.querySelector(s), deep = q('#panel .deepb'), l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')], u = Math.random(), pick = l[Math.floor(Math.random() * l.length)];
+              const dr = q('#panel [data-a="dribble"]:not(:disabled)'), b = want && dr ? dr : deep ? (u < 0.4 ? dr : u < 0.6 ? deep : [...document.querySelectorAll('#panel .passes [data-to]')][0] || pick) : u < 0.3 ? q('#panel [data-a="shoot"]') || pick : pick; b.click(); return deep ? (b === deep ? 'long' : b.dataset.a ? 'carry' : 'short') : q('#panel .actions2.one') ? 'nodrib' : 'zone'; }, !seen.drib && Math.random() < 0.7);
+            seen[did] = (seen[did] || 0) + 1; if (did !== 'zone') await snap('01-' + ({ long: 'aufbau-langer-pass', carry: 'aufbau-vorstoss', short: 'aufbau-kurzer-pass', nodrib: 'vor-dem-tor-ohne-dribbling' })[did]);
+          }
           await p.waitForTimeout(40); continue;
         }
         if (st === 'live') {
@@ -178,8 +185,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         }
         if (Math.random() < 0.02) await p.evaluate(() => { const o = [...document.querySelectorAll('#tac [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
         // Trainer: ab und zu die Linie wechseln oder eine Taktikkarte ansehen und einsetzen
-        if (Math.random() < 0.012) { await p.evaluate(() => { const o = [...document.querySelectorAll('#lines [data-line]')]; o[Math.floor(Math.random() * o.length)].click(); }); seen.line = 1; }
-        if (Math.random() < 0.012) {
+        if (Math.random() < (seen.line ? 0.012 : 0.05)) { await p.evaluate(() => { const o = [...document.querySelectorAll('#lines [data-line]')]; o[Math.floor(Math.random() * o.length)].click(); }); seen.line = 1; }
+        if (Math.random() < (seen.card ? 0.012 : 0.05)) {
           const had = await p.evaluate(() => { const o = [...document.querySelectorAll('#tcards [data-card]:not(:disabled)')]; if (!o.length) return false; o[Math.floor(Math.random() * o.length)].click(); return true; });
           if (had) { await p.waitForTimeout(60); await snap('10-taktikkarte'); await over('taktikkarte'); await p.evaluate(() => { const b = document.querySelector('#tcinfo [data-use]:not([data-use=""])'); if (b) b.click(); }); seen.card = 1; }
         }
@@ -187,7 +194,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
+    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
     if (run.reduce && seen.live3) errors.push('bei reduzierter Bewegung lief das Match in 3D'); if ((seen.missTap || 0) > 2 && !seen.tap3) errors.push('Tippen auf eine Figur wählt den Pass nicht: ' + seen.missTap + ' Versuche'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;

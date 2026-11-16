@@ -147,6 +147,22 @@ Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je 
 - **Tests:** `test/styles.test.js` prüft Schatten, Fenster beim Zugschuss, Sichtschutz und Abpraller in der Engine. `test/traffic.js` stellt drei Lagen im Browser in 3D (Schuss von hinten in den Block, eigener Abpraller, Abpraller des Gegners) und spielt sie durch; dafür gibt es `window.HKMatchTest` (Zustand lesen und laden).
 - **Noch nicht drin:** Schüsse des Gegners werden nicht von deinen Spielern in der Schussbahn geblockt (dafür gibt es weiter den Block am Timing-Balken); abgefälschte Schüsse; Mitspieler blocken nie.
 
+**Raum und Tiefe.** Nicht mehr jede Chance beginnt mit allen zehn Spielern vor einem Tor. Chancen können hinten beginnen, die Spieler stehen dann über das ganze Feld verteilt, und was der Ballführende dort wählt, entscheidet, wie es vor dem Tor weitergeht.
+
+- **Auslösung:** Knapp die Hälfte der Positionsangriffe beginnt in der eigenen Hälfte. Ein Verteidiger hat den Ball, sein Partner steht daneben, der Center kommt kurz, ein Flügel wartet an der Bande auf Höhe der Mittellinie, der andere steht tief in der Hälfte des Gegners. Der Gegner stört früh, Mann gegen Mann.
+- **Umschalten:** Konter beginnen dort, wo der Ball gewonnen wurde: nach einem Ballgewinn in einer Abwehrszene immer, aus dem laufenden Spiel in etwa sieben von zehn Fällen. Die meisten Gegner sind noch hinter dem Ball, ein Mitspieler läuft schon in die Tiefe.
+- **Langer Pass («Steilpass» im Konter):** Er wird hoch gespielt. Abfangen kann ihn nur, wer beim Empfänger steht; dafür ist er an sich schwer (im Mittel rund 55 bis 60 % Erfolgschance, das grüne Feld ist etwa halb so breit wie bei einem sicheren Pass). Er bringt am meisten: beim Umschalten «allein durch» (im Feld mit einem Verfolger im Rücken und darum von weiter weg, perfekt ganz frei), in der Auslösung 2 gegen 1 (perfekt: allein durch). Knapp: Er kommt an, aber der Verteidiger ist dran. Daneben: Ball weg.
+- **Vorstoss:** Der Ballführende trägt den Ball selbst nach vorn. Beim Umschalten ist die Bahn frei, es braucht keinen Zweikampf, und der Konter läuft wie bisher vors Tor. In der Auslösung ist es der Dribbling-Parcours gegen die Gegner, die stören; vorbei heisst 3 gegen 2 (perfekt: auch der zweite Verteidiger ist überlaufen).
+- **Kurzer Pass:** sicher. In der Auslösung stellt sich danach alles neu auf, mit Center oder Flügel am Ball; von dort ist der lange Ball kürzer und leichter. Nach zwei Aktionen ohne Durchbruch steht die Abwehr des Gegners, und es geht als Positionsangriff mit drei Aktionen weiter. Im Konter führt der Empfänger den Konter weiter, ein Rückpass bricht ihn ab.
+- **Nach dem Durchbruch:** Wer aus der Auslösung in Überzahl ankommt, hat eine Aktion mehr als im Konter (die Mitspieler sind aufgerückt). Wer allein durch ist, schiesst oder legt quer auf den nachrückenden Mitspieler.
+- **Risiko hinten:** Ein grober Fehler in der eigenen Hälfte (Pass oder Vorstoss weit neben dem Feld) ist ein Konter direkt vor dem eigenen Tor, öfter als sonst ein Alleingang.
+- **Kein Schuss von hinten, kein Dribbling vor dem Tor:** Im Aufbau gibt es den Knopf «Schuss» nicht. Näher als 5.5 Meter am Tor und allein vor dem Goalie gibt es kein Dribbling mehr: Dort bleiben Schuss und Querpass, der Schuss-Knopf füllt dann die ganze Breite. Der Gegner hält sich an dieselben Regeln.
+- **Abwehr:** Baut der Gegner auf oder schaltet er um, gibt es einen Balken gegen seine Aktion (er hat im Aufbau eine). Einen langen Pass fängt schon «Im Feld» ab, daraus wird dein Konter; kommt er an, ist der Gegner in Überzahl oder allein durch und schiesst sofort. Ein Ballgewinn gegen Vorstoss oder kurzen Pass ist eine Chance direkt vor seinem Tor.
+- **Bild:** In 3D fährt die Kamera mit. Beim eigenen Aufbau steht sie hinter dem Ballführenden und so weit zurück, dass alle Mitspieler im Bild sind; baut der Gegner auf, zeigt sie den Ballführenden und, bei einem Pass, den Empfänger und seinen Gegenspieler. Der lange Ball fliegt im Bogen. Der Mitspieler in der Tiefe trägt ein goldenes Schild «tief». Nach dem Aufbau laufen alle sichtbar dorthin, wo es weitergeht, mit einer Ansage («Durchbruch», «2 gegen 1», «3 gegen 2», «Abwehr steht»). Die Sicht von oben zeigt im Aufbau fast das ganze Feld.
+- **Wirkung im Testlauf:** Derselbe gedachte Spieler wie oben erzielt rund 1.55 Tore pro Match, wenn er im Aufbau immer sicher spielt (vor dieser Änderung 1.6), rund 1.75, wenn er immer den langen Ball sucht, und rund 1.5, wenn er immer selbst vorstösst; der Gegner bleibt bei rund 0.9. Wer nichts riskiert, verliert also fast nichts, und der lange Ball lohnt sich für den, der das schmale Feld trifft. Pro Szene: Ein Konter mit Steilpass endet in rund 33 % mit einem Tor, mit Vorstoss in rund 27 %; eine Auslösung mit langem Ball in rund 28 %, sicher gespielt in rund 21 %. Gerechnet in je 400 Matches, nicht mit echten Spielern gemessen.
+- **Tests:** `test/field.test.js` prüft in der Engine, wo Chancen beginnen, die Aufstellungen, was jede Aktion im Aufbau bringt (für beide Seiten), den hohen langen Ball, das Dribbling-Verbot vor dem Tor und ganze Matches mit jeder Wahl im Aufbau.
+- **Noch nicht drin:** Aufstellungen und Abwehrsysteme zum Wählen (der Gegner stört immer Mann gegen Mann); Pässe hinter das Tor; Schüsse aus der eigenen Hälfte; im Vorstoss des Gegners mit freier Bahn zeigt die 3D-Halle keine eigene Szene, nur den Lauf.
+
 **Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
 
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
@@ -242,6 +258,10 @@ node test/world.test.js
 
 ```bash
 node test/styles.test.js
+```
+
+```bash
+node test/field.test.js
 ```
 
 ```bash

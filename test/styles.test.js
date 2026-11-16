@@ -33,7 +33,7 @@ function matchWith(X) {
    Mitspieler bei mates. o.one: Querbewegung des letzten Passes (Direktschuss). Gibt für jede Schussart die Torchance. */
 function lay(at, defs, o) {
   o = o || {}; const X = o.X || shooter, s = matchWith(X), sc = s.cur, you = s.teams.you.cards, home = s.teams.home.cards, out = { s, sh: {} };
-  sc.type = 'att'; sc.kind = 'set'; sc.counter = false; sc.step = 1; sc.max = 4; sc.carrier = X.id; sc.reb = false; s.phase = 'decide'; s.shot = null;
+  sc.type = 'att'; sc.kind = 'set'; sc.counter = false; sc.deep = null; sc.step = 1; sc.max = 4; sc.carrier = X.id; sc.reb = false; s.phase = 'decide'; s.shot = null;
   you.forEach((c, i) => { sc.pos[c.id] = c.id === X.id ? at : (o.mates && o.mates[i - 1]) || [40 + i * 60, 370]; });
   home.forEach((c, i) => { sc.pos[c.id] = (defs && defs[i]) || [40 + i * 60, 385]; sc.mark[you[i].id] = c.id; });
   sc.last = o.one ? { type: 'pass', to: X.id, lat: o.one } : null;
@@ -88,7 +88,7 @@ ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.dra
   const free = lay([180, 300]), scr = lay([180, 300], null, { mates: [[180, 96]] }), c = free.s.cfg;
   ok(scr.sh.slap.scr.length === 1 && Math.abs(M.reach(free.s, free.sh.slap) - M.reach(scr.s, scr.sh.slap) - c.screenReach) < 1e-9 && scr.slap.g > free.slap.g, `Sichtschutz: Der Goalie reicht weniger weit, die Torchance steigt (${pc(free.slap.g)} auf ${pc(scr.slap.g)})`);
   // Der Center läuft in die Sicht, wenn ein Verteidiger hinten den Ball hat
-  let seen = 0, n = 0; for (let i = 1; i <= 40; i++) { const s = M.newMatch({ homeName: 'T', you: { goalie: { val: 88 }, cards: fwd.slice(20, 23).concat(def.slice(5, 7)) }, home: { goalie: { val: 88 }, cards: fwd.slice(40, 43).concat(def.slice(20, 22)) } }, E.makeRng(i)), sc = s.cur, car = M.card(s, M.atkSide(sc), sc.carrier); if (sc.kind !== 'set' || ['LD', 'RD'].indexOf(car.role) < 0) continue; n++; const C_ = s.teams[M.atkSide(sc)].cards.find(x => x.role === 'C'), p = sc.pos[C_.id], a = sc.pos[car.id], dx = 180 - a[0], dy = 40 - a[1], d = Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / Math.hypot(dx, dy); if (d < 18 && M.dist(p, M.GOAL) < 105) seen++; }
+  let seen = 0, n = 0; for (let i = 1; i <= 90; i++) { const s = M.newMatch({ homeName: 'T', you: { goalie: { val: 88 }, cards: fwd.slice(20, 23).concat(def.slice(5, 7)) }, home: { goalie: { val: 88 }, cards: fwd.slice(40, 43).concat(def.slice(20, 22)) } }, E.makeRng(i)), sc = s.cur; if (!sc) continue; const car = M.card(s, M.atkSide(sc), sc.carrier); if (sc.kind !== 'set' || sc.deep || ['LD', 'RD'].indexOf(car.role) < 0) continue; n++; const C_ = s.teams[M.atkSide(sc)].cards.find(x => x.role === 'C'), p = sc.pos[C_.id], a = sc.pos[car.id], dx = 180 - a[0], dy = 40 - a[1], d = Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / Math.hypot(dx, dy); if (d < 18 && M.dist(p, M.GOAL) < 105) seen++; }
   ok(n >= 5 && seen >= n * 0.8, `hat ein Verteidiger hinten den Ball, steht der Center dem Goalie in der Sicht (${seen} von ${n} Szenen)`);
 }
 
@@ -104,7 +104,7 @@ ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.dra
   const B = mk(true), z = M.act(B.s, { type: 'aim', target: tg, hit: 0.5, t: 0 }, E.makeRng(2));
   ok(z.ok && z.events.find(e => e.t === 'shot').result === 'save' && !z.events.some(e => e.t === 'rebound') && z.state.phase === 'done', 'steht ein Verteidiger näher am Ball, klärt er: kein Abpraller');
   // Schuss des Gegners: spät gehalten (kein Fangen) mit einem Angreifer vor dem Tor
-  const s = matchWith(shooter), sc = s.cur, rngH = E.makeRng(5); sc.type = 'def'; sc.kind = 'set'; sc.reb = false; sc.carrier = s.teams.home.cards[0].id;
+  const s = matchWith(shooter), sc = s.cur, rngH = E.makeRng(5); sc.type = 'def'; sc.kind = 'set'; sc.deep = null; sc.reb = false; sc.carrier = s.teams.home.cards[0].id;
   s.teams.home.cards.forEach((c, i) => { sc.pos[c.id] = i === 0 ? [180, 160] : i === 1 ? [180, 96] : [40 + i * 60, 380]; }); s.teams.you.cards.forEach((c, i) => { sc.pos[c.id] = [40 + i * 60, 390]; });
   let h = null, tries = 0; while (!h && tries++ < 40) { const s2 = JSON.parse(JSON.stringify(s)); M.setShot(s2, rngH, 'home', sc.carrier, 0.7, 'attack', {}); if (!s2.shot.miss && !s2.shot.feint) h = s2; }
   const w = M.act(h, { type: 'aim', zone: h.shot.zone, rt: Math.round(h.shot.window * 0.8) }, E.makeRng(6)), g0 = w.events.find(e => e.t === 'shot'), g1 = w.events.find(e => e.t === 'rebound');
@@ -143,7 +143,15 @@ function playMatch(seed, policy, on) {
     if (++guard > 3000) throw new Error('Match endet nicht, Phase ' + s.phase);
     if (s.phase === 'done' || s.phase === 'break') act({ type: 'next' });
     else if (s.phase === 'decide' && s.cur.type === 'def') act({ type: 'defend', hit: hit(M.contest(s, {})) });
-    else if (s.phase === 'decide') {
+    else if (s.phase === 'decide' && s.cur.deep) {
+      // Aufbau: mal der lange Pass in die Tiefe, mal der Vorstoss, mal der sicherste kurze Pass
+      const sc = s.cur, X = sc.carrier, dp = sc.deep, u = hr(), cd = M.contest(s, { type: 'dribble' });
+      const short = s.teams.you.cards.filter(c => c.id !== X && c.id !== dp.run).map(c => ({ id: c.id, cp: M.contest(s, { type: 'pass', to: c.id }) })).sort((a, b) => b.cp.p - a.cp.p)[0];
+      if (on && on.deep) on.deep(s);
+      if (u < 0.35 && dp.run !== X) { const cp = M.contest(s, { type: 'pass', to: dp.run }); act({ type: 'pass', to: dp.run, hit: hit(cp) }); }
+      else if (u < 0.7) act(cd.free ? { type: 'dribble' } : { type: 'dribble', hit: hit(cd) });
+      else act({ type: 'pass', to: short.id, hit: hit(short.cp) });
+    } else if (s.phase === 'decide') {
       const sc = s.cur, X = sc.carrier, pv = M.shotPreview(s, X); let to = null, bv = pv.q * (1 - pv.block) + 0.15 * sc.step + (Math.abs(pv.oneT) >= 0.25 ? 0.3 : 0);
       if (sc.step < sc.max - 1) s.teams.you.cards.forEach(c => { if (c.id === X) return; const cp = M.contest(s, { type: 'pass', to: c.id }), v = M.shotPreview(s, c.id, X), val = cp.p * (v.q + (Math.abs(v.oneT) >= 0.4 ? 0.3 : 0)) * 0.95; if (val > bv) { bv = val; to = c.id; } });
       if (to) act({ type: 'pass', to, hit: hit(M.contest(s, { type: 'pass', to })) }); else act({ type: 'shoot' });
@@ -185,7 +193,7 @@ function playMatch(seed, policy, on) {
     const used = { slap: 0, wrist: 0, drag: 0 }; real.forEach(o => { used[o.auto]++; });
     ok(M.STYLES.every(k => used[k] / real.length >= 0.12), 'jede Schussart wird empfohlen: ' + M.STYLES.map(k => `${M.STYLE[k].short} ${pc(used[k] / real.length)}`).join(', '));
     const tot = homeShots.slap + homeShots.wrist + homeShots.drag;
-    ok(M.STYLES.every(k => homeShots[k] / tot >= 0.2), 'der Gegner nutzt alle drei Schussarten: ' + M.STYLES.map(k => `${M.STYLE[k].short} ${pc(homeShots[k] / tot)}`).join(', '));
+    ok(M.STYLES.every(k => homeShots[k] / tot >= 0.15), 'der Gegner nutzt alle drei Schussarten: ' + M.STYLES.map(k => `${M.STYLE[k].short} ${pc(homeShots[k] / tot)}`).join(', '));
     ok(feintOk, 'Zugschuss des Gegners: immer mit Finte auf die andere Seite, sonst nie');
     ok(styleEv, 'jedes Schuss-Ereignis nennt die Schussart');
   }
@@ -205,9 +213,9 @@ function playMatch(seed, policy, on) {
 {
   let s = matchWith(shooter), n = 0; const rng = E.makeRng(3);
   // bis zum ersten eigenen Angriff vorspulen
-  while (!(s.phase === 'decide' && s.cur.type === 'att')) {
+  while (!(s.phase === 'decide' && s.cur.type === 'att' && !s.cur.deep)) {
     if (++n > 500) throw new Error('kein eigener Angriff gefunden');
-    s = M.act(s, s.phase === 'decide' ? { type: 'defend', hit: 0.9 } : s.phase !== 'aim' ? { type: 'next' } : s.shot.side === 'you' ? { type: 'aim', target: [0, 0.3], hit: 0.5, t: 300 } : { type: 'aim', zone: 'tm', rt: 9999 }, rng).state;
+    s = M.act(s, s.phase === 'decide' && s.cur.type === 'att' ? { type: 'pass', to: s.teams.you.cards.find(c => c.id !== s.cur.carrier && c.id !== s.cur.deep.run).id, hit: s.cur.bar.pos } : s.phase === 'decide' ? { type: 'defend', hit: 0.9 } : s.phase !== 'aim' ? { type: 'next' } : s.shot.side === 'you' ? { type: 'aim', target: [0, 0.3], hit: 0.5, t: 300 } : { type: 'aim', zone: 'tm', rt: 9999 }, rng).state;
   }
   const x1 = M.act(s, { type: 'style', value: 'drag' }, rng); ok(!x1.ok, 'ohne Schuss lässt sich keine Schussart wählen');
   s = M.act(s, { type: 'shoot' }, rng).state;

@@ -163,9 +163,14 @@
 .s3tag.home b{color:#f7d774;background:rgba(5,8,24,.5)}
 .s3tag i{display:block;height:3px;margin:1px 2px 0;border-radius:2px;background:#070b1f;overflow:hidden}
 .s3tag u{display:block;height:100%;width:100%;background:#34d399}
+.s3tag.you{z-index:1}
+.s3tag.s3pick{z-index:2}
+.s3tag.s3free,.s3tag.s3deep{z-index:3}
 .s3tag.s3pick b{box-shadow:0 0 0 1.5px #fff}
 .s3tag.s3free b{background:#34d399;color:#03130c;box-shadow:0 0 0 1.5px #03130c}
 .s3tag.s3free b::after{content:" · frei"}
+.s3tag.s3deep b{background:#f7d774;color:#1a1300;box-shadow:0 0 0 1.5px #1a1300}
+.s3tag.s3deep b::after{content:" · tief"}
 .s3tags.cut .s3tag b{font-size:13px;padding:3px 8px 2px}
 .s3tags.cut .s3tag i{display:none}
 .led{position:absolute;left:0;right:0;top:5%;z-index:8;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none}
@@ -298,12 +303,16 @@ body.in-match #app{padding:0;max-width:none}
 .game .hud .tcinfo{position:absolute;left:8px;right:8px;top:100%;z-index:21;background:rgba(21,16,3,.97);box-shadow:0 14px 30px rgba(0,0,0,.55)}
 .game .stage.match{order:2;flex:0 1 auto;width:100%;max-height:46vh;max-height:46dvh;border-radius:0;border-left:0;border-right:0}
 .game .dock{order:3;flex:1 1 0;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
-.game .dock .prompt{min-height:0;gap:4px}
+.game .dock .prompt{min-height:0;gap:4px;flex-shrink:0}
+@media (max-height:700px){.game:not(.g3d) .dock .hist:not(.open) em{-webkit-line-clamp:1}}
 .game .dock .say{font-size:15px;line-height:1.25}
 /* Wenig Platz: Erklärungen sind auf zwei Zeilen gekürzt, ein Tipp darauf klappt sie auf */
 .game .dock .hist em,.game .dock .sty-note:not(.reb){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .game .dock .hist.open em,.game .dock .sty-note.open{-webkit-line-clamp:20}
 .game .dock .act{min-height:62px;padding:8px 10px;gap:3px}
+.actions2.one{grid-template-columns:minmax(0,1fr)}
+.act.deepb{border-color:#f7d774;background:#1c1a2e}
+.act .mini{margin-top:1px}
 .game .dock .act small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:12px}
 /* Pässe: eine Reihe zum Wischen statt vier grosse Knöpfe; anspielen geht auch direkt auf dem Feld */
 .game .dock .passes{display:flex;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:none;margin:0 -12px;padding:0 12px}
