@@ -27,7 +27,9 @@ const fwd = pool.filter(c => c.pos !== 'DEF'), def = pool.filter(c => c.pos === 
 const shooter = fwd.filter(c => M.favStyle(c) === 'slap' && !M.trait(c)).sort((a, b) => Math.abs(a.sco - 88) - Math.abs(b.sco - 88))[0];
 function matchWith(X) {
   const mates = fwd.filter(c => c.id !== X.id).slice(30, 35);
-  return M.newMatch({ homeName: 'Test', you: { goalie: { val: 88 }, cards: [X].concat(mates.slice(0, 2), def.slice(10, 12)) }, home: { goalie: { val: 88 }, cards: mates.slice(2, 5).concat(def.slice(12, 14)) } }, E.makeRng(7));
+  // Das Match beginnt mit dem Bully; für die gestellten Lagen folgt gleich ein eigener Positionsangriff
+  const r = E.makeRng(7), s = M.newMatch({ homeName: 'Test', you: { goalie: { val: 88 }, cards: [X].concat(mates.slice(0, 2), def.slice(10, 12)) }, home: { goalie: { val: 88 }, cards: mates.slice(2, 5).concat(def.slice(12, 14)) } }, r);
+  M.startChance(s, r, 'you', 'set', X.id, true, false); return s;
 }
 /* Stellt eine Lage auf dem Feld: der Schütze bei at, Gegner bei defs (die übrigen weit hinten, wo sie nichts decken),
    Mitspieler bei mates. o.one: Querbewegung des letzten Passes (Direktschuss). Gibt für jede Schussart die Torchance. */
@@ -74,7 +76,7 @@ ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.dra
   const sB = Object.assign({}, r.s, { shot: r.sh.slap }), v = M.evalShot(sB, [0.7, 0.8], 0.5, 300);
   ok(v.blocked && v.how === 'lane' && v.blockBy === r.home[0].id, 'ein perfekt getimter Schlagschuss in den Schatten ist geblockt, vom Gegner in der Schussbahn');
   const act = M.act(Object.assign(JSON.parse(JSON.stringify(r.s)), { shot: JSON.parse(JSON.stringify(r.sh.slap)), phase: 'aim' }), { type: 'aim', target: [0.7, 0.8], hit: 0.5, t: 300 }, E.makeRng(1)), e = act.events.find(x => x.t === 'shot');
-  ok(act.ok && e && e.result === 'blocked' && e.how === 'lane' && e.by === r.home[0].id && act.state.phase === 'done', 'als Eingabe: Schuss in den Block, der Ball ist weg');
+  ok(act.ok && e && e.result === 'blocked' && e.how === 'lane' && e.by === r.home[0].id && act.events.some(x => x.t === 'loose') && !act.state.shot, 'als Eingabe: Schuss in den Block, der Ball springt weg und liegt frei');
   // Gegner im Slot, weit weg vom Schützen: nur ein Streifen in der Mitte
   r = lay([180, 300], [[180, 110]]);
   const sl = r.sh.slap.shade[0], wr = r.sh.wrist.shade[0];
@@ -88,7 +90,7 @@ ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.dra
   const free = lay([180, 300]), scr = lay([180, 300], null, { mates: [[180, 96]] }), c = free.s.cfg;
   ok(scr.sh.slap.scr.length === 1 && Math.abs(M.reach(free.s, free.sh.slap) - M.reach(scr.s, scr.sh.slap) - c.screenReach) < 1e-9 && scr.slap.g > free.slap.g, `Sichtschutz: Der Goalie reicht weniger weit, die Torchance steigt (${pc(free.slap.g)} auf ${pc(scr.slap.g)})`);
   // Der Center läuft in die Sicht, wenn ein Verteidiger hinten den Ball hat
-  let seen = 0, n = 0; for (let i = 1; i <= 90; i++) { const s = M.newMatch({ homeName: 'T', you: { goalie: { val: 88 }, cards: fwd.slice(20, 23).concat(def.slice(5, 7)) }, home: { goalie: { val: 88 }, cards: fwd.slice(40, 43).concat(def.slice(20, 22)) } }, E.makeRng(i)), sc = s.cur; if (!sc) continue; const car = M.card(s, M.atkSide(sc), sc.carrier); if (sc.kind !== 'set' || sc.deep || ['LD', 'RD'].indexOf(car.role) < 0) continue; n++; const C_ = s.teams[M.atkSide(sc)].cards.find(x => x.role === 'C'), p = sc.pos[C_.id], a = sc.pos[car.id], dx = 180 - a[0], dy = 40 - a[1], d = Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / Math.hypot(dx, dy); if (d < 18 && M.dist(p, M.GOAL) < 105) seen++; }
+  let seen = 0, n = 0; for (let i = 1; i <= 90; i++) { const s = M.newMatch({ homeName: 'T', you: { goalie: { val: 88 }, cards: fwd.slice(20, 23).concat(def.slice(5, 7)) }, home: { goalie: { val: 88 }, cards: fwd.slice(40, 43).concat(def.slice(20, 22)) } }, E.makeRng(i)); M.startChance(s, E.makeRng(i + 500), i % 2 ? 'you' : 'home', 'set', null, true, false); const sc = s.cur; if (!sc) continue; const car = M.card(s, M.atkSide(sc), sc.carrier); if (sc.kind !== 'set' || sc.deep || ['LD', 'RD'].indexOf(car.role) < 0) continue; n++; const C_ = s.teams[M.atkSide(sc)].cards.find(x => x.role === 'C'), p = sc.pos[C_.id], a = sc.pos[car.id], dx = 180 - a[0], dy = 40 - a[1], d = Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / Math.hypot(dx, dy); if (d < 18 && M.dist(p, M.GOAL) < 105) seen++; }
   ok(n >= 5 && seen >= n * 0.8, `hat ein Verteidiger hinten den Ball, steht der Center dem Goalie in der Sicht (${seen} von ${n} Szenen)`);
 }
 
@@ -100,9 +102,9 @@ ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.dra
   ok(x.ok && e0.result === 'save' && e1 && e1.x === A.L.you[1].id && e0.rebound === e1.x && x.state.phase === 'aim' && x.state.shot.reb && x.state.shot.x === e1.x && x.state.shot.style === 'wrist' && x.state.shot.why === 'rebound', 'Parade ohne Festhalten, ein Angreifer steht am nächsten: Abpraller, er schiesst sofort nach');
   ok(!M.act(x.state, { type: 'style', value: 'slap' }, E.makeRng(1)).ok && Math.sign(x.state.shot.keeper.x) === Math.sign(tg[0]) && M.reach(x.state, x.state.shot) < R, 'beim Abpraller gibt es nur das Handgelenk; der Goalie liegt noch auf der Seite der Parade und reicht weniger weit');
   const y = M.act(x.state, { type: 'aim', target: [x.state.shot.keeper.x, x.state.cfg.kY + 0.3], hit: 0.5, t: 0 }, E.makeRng(3)), f0 = y.events.find(e => e.t === 'shot');
-  ok(y.ok && f0.ctx === 'rebound' && !y.events.some(e => e.t === 'rebound') && y.state.phase === 'done', 'höchstens ein Abpraller pro Chance: Danach ist die Szene zu Ende (' + f0.result + ')');
+  ok(y.ok && f0.ctx === 'rebound' && !y.events.some(e => e.t === 'rebound'), 'höchstens ein Nachschuss pro Szene (' + f0.result + ')');
   const B = mk(true), z = M.act(B.s, { type: 'aim', target: tg, hit: 0.5, t: 0 }, E.makeRng(2));
-  ok(z.ok && z.events.find(e => e.t === 'shot').result === 'save' && !z.events.some(e => e.t === 'rebound') && z.state.phase === 'done', 'steht ein Verteidiger näher am Ball, klärt er: kein Abpraller');
+  ok(z.ok && z.events.find(e => e.t === 'shot').result === 'save' && !z.events.some(e => e.t === 'rebound') && z.events.some(e => e.t === 'loose' && e.side === 'you'), 'steht ein Verteidiger näher am Ball, gibt es keinen Nachschuss: Der Ball liegt frei');
   // Schuss des Gegners: spät gehalten (kein Fangen) mit einem Angreifer vor dem Tor
   const s = matchWith(shooter), sc = s.cur, rngH = E.makeRng(5); sc.type = 'def'; sc.kind = 'set'; sc.deep = null; sc.reb = false; sc.carrier = s.teams.home.cards[0].id;
   s.teams.home.cards.forEach((c, i) => { sc.pos[c.id] = i === 0 ? [180, 160] : i === 1 ? [180, 96] : [40 + i * 60, 380]; }); s.teams.you.cards.forEach((c, i) => { sc.pos[c.id] = [40 + i * 60, 390]; });
@@ -110,7 +112,7 @@ ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.dra
   const w = M.act(h, { type: 'aim', zone: h.shot.zone, rt: Math.round(h.shot.window * 0.8) }, E.makeRng(6)), g0 = w.events.find(e => e.t === 'shot'), g1 = w.events.find(e => e.t === 'rebound');
   ok(w.ok && g0.result === 'save' && g1 && g1.side === 'home' && w.state.phase === 'aim' && w.state.shot.side === 'home' && w.state.shot.reb && w.state.shot.style === 'wrist', 'dein Goalie hält spät und lässt abprallen: Der Gegner schiesst nach');
   const w2 = M.act(h, { type: 'aim', zone: h.shot.zone, rt: Math.round(h.shot.window * 0.3) }, E.makeRng(6));
-  ok(w2.events.find(e => e.t === 'shot').result === 'catch' && !w2.events.some(e => e.t === 'rebound') && w2.state.phase === 'done', 'wer schnell reagiert, fängt den Ball: kein Abpraller');
+  ok(w2.events.find(e => e.t === 'shot').result === 'catch' && !w2.events.some(e => e.t === 'rebound' || e.t === 'loose') && (w2.state.phase === 'throw' || w2.state.phase === 'done'), 'wer schnell reagiert, fängt den Ball: kein Abpraller, es folgt der Auswurf oder Ruhe');
 }
 
 // --- Lieblingsschuss der Karten ---
@@ -142,6 +144,8 @@ function playMatch(seed, policy, on) {
   while (s.phase !== 'end') {
     if (++guard > 3000) throw new Error('Match endet nicht, Phase ' + s.phase);
     if (s.phase === 'done' || s.phase === 'break') act({ type: 'next' });
+    else if (s.phase === 'duel') act({ type: 'duel', rt: Math.max(120, 360 + gauss(hr) * 55) });      // Bully, freier Ball
+    else if (s.phase === 'throw') act(hr() < 0.5 ? { type: 'throw', quick: false } : { type: 'throw', quick: true, hit: hit(s.throw) });
     else if (s.phase === 'decide' && s.cur.type === 'def') act({ type: 'defend', hit: hit(M.contest(s, {})) });
     else if (s.phase === 'decide' && s.cur.deep) {
       // Aufbau: mal der lange Pass in die Tiefe, mal der Vorstoss, mal der sicherste kurze Pass
@@ -215,7 +219,7 @@ function playMatch(seed, policy, on) {
   // bis zum ersten eigenen Angriff vorspulen
   while (!(s.phase === 'decide' && s.cur.type === 'att' && !s.cur.deep)) {
     if (++n > 500) throw new Error('kein eigener Angriff gefunden');
-    s = M.act(s, s.phase === 'decide' && s.cur.type === 'att' ? { type: 'pass', to: s.teams.you.cards.find(c => c.id !== s.cur.carrier && c.id !== s.cur.deep.run).id, hit: s.cur.bar.pos } : s.phase === 'decide' ? { type: 'defend', hit: 0.9 } : s.phase !== 'aim' ? { type: 'next' } : s.shot.side === 'you' ? { type: 'aim', target: [0, 0.3], hit: 0.5, t: 300 } : { type: 'aim', zone: 'tm', rt: 9999 }, rng).state;
+    s = M.act(s, s.phase === 'duel' ? { type: 'duel', rt: 200 } : s.phase === 'throw' ? { type: 'throw', quick: false } : s.phase === 'decide' && s.cur.type === 'att' ? { type: 'pass', to: s.teams.you.cards.find(c => c.id !== s.cur.carrier && c.id !== s.cur.deep.run).id, hit: s.cur.bar.pos } : s.phase === 'decide' ? { type: 'defend', hit: 0.9 } : s.phase !== 'aim' ? { type: 'next' } : s.shot.side === 'you' ? { type: 'aim', target: [0, 0.3], hit: 0.5, t: 300 } : { type: 'aim', zone: 'tm', rt: 9999 }, rng).state;
   }
   const x1 = M.act(s, { type: 'style', value: 'drag' }, rng); ok(!x1.ok, 'ohne Schuss lässt sich keine Schussart wählen');
   s = M.act(s, { type: 'shoot' }, rng).state;

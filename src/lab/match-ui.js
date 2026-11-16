@@ -286,8 +286,9 @@
   function syncPositions(ms) {
     const sc = G.cur; if (!sc) return Promise.resolve();
     const moves = Object.keys(sc.pos).map(id => ({ id, to: ep(sc, id) }));
+    const far = moves.some(m => Math.hypot(pos[m.id][0] - m.to[0], pos[m.id][1] - m.to[1]) > 1.5);      // steht schon alles am Platz, geht es ohne Warten weiter
     moves.push({ id: 'ball', to: (p => [p[0] + 10, p[1] - 12])(ep(sc, sc.carrier)) });
-    return tween(moves, ms).then(() => setCarrier(sc.carrier));
+    return tween(moves, far || carrier !== sc.carrier ? ms : 0).then(() => setCarrier(sc.carrier));
   }
   function clearLanes() { $('lanes').innerHTML = ''; if (L3) S3.lanes([]); }
   function drawLanes() {
@@ -340,8 +341,8 @@
   function renderScore() {
     $('sc-you').textContent = disp.you; $('sc-home').textContent = disp.home; $('sc-club').textContent = HOME;
     if (G.pen) { $('sc-period').textContent = 'Penaltys'; $('sc-time').textContent = penDisp.you + ' : ' + penDisp.home; }
-    else { $('sc-period').textContent = Math.min(G.cfg.periods, G.period + 1) + '. Drittel'; $('sc-time').textContent = clockText(G.minute); }
-    // jede Chance ein Punkt: blau deine, gold die des Gegners, grün und rot die Tore, hell die laufende
+    else { $('sc-period').textContent = Math.min(G.cfg.periods, G.period + 1) + '. Drittel'; $('sc-time').textContent = clockText(clockHold !== null ? clockHold : G.clock); }
+    // jede Szene ein Punkt: blau deine Angriffe, gold die des Gegners, grün und rot die Tore, hell die laufende
     const dots = G.results.slice(-14).map(r => `<span class="dot ${r.goal ? 'g-' + r.goal : r.type === 'att' ? 'you' : 'home'}"></span>`);
     if (G.cur && !G.cur.done && !G.pen) dots.push('<span class="dot now"></span>');
     $('dots').innerHTML = dots.join('');
@@ -352,11 +353,19 @@
   const enPill = c => `<i class="en ${enLvl(c.en)}" aria-hidden="true"><u style="width:${Math.round(c.en)}%"></u></i>`;
   function renderEnergy() { if (G) G.teams.you.cards.forEach(c => { const f = fig[c.id]; if (f && f.en) { f.en.setAttribute('width', (22 * c.en / 100).toFixed(1)); f.en.setAttribute('fill', enCol[enLvl(c.en)]); } if (L3) S3.energy(c.id, c.en, enCol[enLvl(c.en)]); }); }
   const tempoTxt = ms => (ms >= 1000 ? 'ruhig' : ms >= 800 ? 'normal' : ms >= 600 ? 'schnell' : 'sehr schnell');
-  const clockText = m => Math.max(0, Math.min(G.cfg.periods * G.cfg.periodMin, Math.round(m))) + '. Minute';
+  // Uhr: Minuten und Sekunden seit dem Anpfiff. clockHold: Die Anzeige bleibt stehen, bis der Zeitsprung gezeigt ist.
+  let clockHold = null;
+  const clockText = m => { const t = Math.round(Math.max(0, Math.min(G.cfg.periods * G.cfg.periodMin, m)) * 60); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  function clockRun(from, to, ms) {
+    const el = $('sc-time'); el.classList.add('run');
+    const end = () => { el.textContent = clockText(to); el.classList.remove('run'); };
+    if (!T(ms)) { end(); return Promise.resolve(); }
+    return new Promise(res => { const t0 = performance.now(); (function tick(now) { const k = fast ? 1 : Math.min(1, (now - t0) / ms); if (k < 1) { el.textContent = clockText(from + (to - from) * io(k)); requestAnimationFrame(tick); } else { end(); res(); } })(t0); });
+  }
   /* Trainerleiste: Linien mit ihrer Energie (auf dem Feld, bereit zum Wechsel), Taktikkarten (frei, wirkt gerade, verbraucht),
      dazu was der Gegner gerade macht. Ohne Goalie ist das eigene Tor auf dem Feld leer. */
   const lineCards = (side, i) => { const T = G.teams[side]; return i === T.line ? T.cards : T.bench || []; };
-  const FXTXT = { press: n => `noch ${n} Abwehrszene${n === 1 ? '' : 'n'}`, play: () => 'nächste Chance', calm: () => 'nächster Schuss', empty: () => 'läuft', wall: () => 'läuft' };
+  const FXTXT = { press: n => `noch ${n} Abwehrszene${n === 1 ? '' : 'n'}`, play: () => 'nächster Angriff', calm: () => 'nächster Schuss', empty: () => 'läuft', wall: () => 'läuft' };
   const fxOn = (side, id) => { const f = G.fx[side]; return id === 'press' ? f.press : id === 'play' ? f.play : id === 'calm' ? f.calm + (G.shot && G.shot.side === side && G.shot.calm ? 1 : 0) : id === 'empty' ? +f.empty : id === 'wall' ? +f.wall : 0; };
   let infoCard = null;
   function renderCoach() {
@@ -385,15 +394,15 @@
     if (!G || G.phase === 'end' || $('screen-match').hidden) return;
     const r = M.act(G, { type: 'line', value: v }, rng); if (!r.ok) return;
     G = r.state; renderCoach();
-    addTick(v === G.teams.you.line ? `Die ${v + 1}. Linie bleibt auf dem Feld.` : `Die ${v + 1}. Linie macht sich bereit: Wechsel vor der nächsten Chance.`);
+    addTick(v === G.teams.you.line ? `Die ${v + 1}. Linie bleibt auf dem Feld.` : `Die ${v + 1}. Linie macht sich bereit: Wechsel beim nächsten Unterbruch.`);
   }
   // Was eine Karte bewirkt, als Meldung. Bei Karten des Gegners aus seiner Sicht.
   const CARDSAY = {
     timeout: mine => (mine ? 'Time-out: Alle bekommen Energie zurück.' : `${HOME} nimmt ein Time-out und erholt sich.`),
     press: mine => (mine ? 'Pressing: In zwei Abwehrszenen gewinnt schon «Im Feld» den Ball.' : `${HOME} presst: Deine Felder sind in den nächsten zwei Angriffen schmaler.`),
-    play: mine => (mine ? 'Spielzug: Deine nächste Chance ist ein Konter 3 gegen 2 mit breiteren Feldern.' : `${HOME} hat einen Spielzug einstudiert: Die nächste Chance ist schwerer zu verteidigen.`),
+    play: mine => (mine ? 'Spielzug: Dein nächster Angriff aus dem Spiel ist ein Konter 3 gegen 2 mit breiteren Feldern.' : `${HOME} hat einen Spielzug einstudiert: Der nächste Angriff ist schwerer zu verteidigen.`),
     calm: () => 'Kaltblütig: Beim nächsten Schuss läuft der Strich langsamer.',
-    empty: mine => (mine ? 'Goalie raus: mehr Chancen, aber dein Tor ist leer.' : `${HOME} nimmt den Goalie raus: Das Tor ist leer!`),
+    empty: mine => (mine ? 'Goalie raus: Du bleibst öfter am Drücker, aber dein Tor ist leer.' : `${HOME} nimmt den Goalie raus: Das Tor ist leer!`),
     wall: mine => (mine ? 'Mauern: Der Gegner kommt bis zum Drittelsende seltener vors Tor.' : `${HOME} mauert bis zum Schluss.`)
   };
   function useCard(id) {
@@ -503,7 +512,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     const tx = long ? [`${X.last} spielt den langen Ball auf ${T.last}`, `${d.D.last} geht dazwischen`, 'Antizipation', 'Vorlage'] : sc.deep && d.kind === 'dribble' ? [`${X.last} stösst mit dem Ball vor`, `${d.D.last} ${it.free ? 'setzt nach' : 'stellt ihn'}`, 'Zweikampf', 'Dribbling'] : DEFTXT[d.kind](X, d.D, T);
     setTag('Abwehr', 'home');
     say(`${tx[0]}. ${tx[1]}: triff das Timing.`);
-    $('hist').innerHTML = long && !G.fx.you.empty ? '<em><b class="tr">Langer Pass</b>: Schon «Im Feld» fängt ihn ab. Kommt er an, ist der Gegner durch.</em>' : sc.deep && !sc.pressing && !G.fx.you.empty ? `<em>${sc.deep.kind === 'turn' ? `${esc(HOME)} schaltet um. ` : `${esc(HOME)} baut hinten auf. `}Im Feld: Gegner gestört. Genau in der Mitte: Ball gewonnen, weit vorne.</em>` : sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit. Genau in der Mitte: Ball gewonnen und Konter.</em>`;
+    $('hist').innerHTML = long && !G.fx.you.empty ? '<em><b class="tr">Langer Pass</b>: Schon «Im Feld» fängt ihn ab. Kommt er an, ist der Gegner durch.</em>' : sc.deep && sc.gegen && !sc.pressing && !G.fx.you.empty ? `<em><b class="tr">Gegenpressing</b>: Deine Spieler stehen noch vorne. Schon «Im Feld» holt den Ball zurück, und dein Angriff geht weiter.</em>` : sc.deep && !sc.pressing && !G.fx.you.empty ? `<em>${sc.deep.kind === 'turn' ? `${esc(HOME)} schaltet um. ` : `${esc(HOME)} baut hinten auf. `}Im Feld: Gegner gestört. Genau in der Mitte: Ball gewonnen, weit vorne.</em>` : sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}${d.kind === 'shoot' ? 'Im Feld: Schuss geblockt, der Ball liegt frei.' : 'Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit.'} Genau in der Mitte: Ball gewonnen und Konter.</em>`;
     const g = $('lanes'), a = pos[sc.carrier], b = d.kind === 'pass' ? pos[d.to] : d.kind === 'shoot' ? goalOf('home') : null; clearLanes();
     if (b) { svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: '#ff8a8a', 'stroke-width': 3, 'stroke-dasharray': '6 6', opacity: 0.85, 'stroke-linecap': 'round' }, g); if (L3) S3.lanes([{ a, b, col: '#ff8a8a', w: 3 }]); }
     // Im Aufbau des Gegners spielt sich alles hinten im Bild ab: Der Balken liegt dann unten, sonst oben
@@ -735,6 +744,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     $('panel').hidden = true; clearLanes(); Object.keys(els).forEach(k => els[k].classList.remove('pick'));
     showHint('Tippe aufs Feld, um vorzuspulen');
     G = r.state;
+    if (!G.pen) $('sc-time').textContent = clockText(G.clock);
     await playEvents(r.events, before); skip3 = false;
     await after();
   }
@@ -805,13 +815,13 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
           moves.push({ id: 'ball', to: [spot[0] + 8, spot[1] - 10] });
           const s3 = await act3(lane ? { kind: 'pass', atk: 'home', players: pl, from: e.x, to: e.target, ok: false, by: e.by, long: !!e.long } : { kind: 'dribble', atk: 'home', players: pl, x: e.x, by: e.by, result: 'lost' }, moves, e.long ? 900 : 640, true);
           setCarrier(e.by);
-          stamp(e.long ? 'Abgefangen' : 'Ball gewonnen', e.long ? `${Dc.last} fängt den langen Ball ab.` : `${Dc.last} nimmt ${X.last} den Ball ab.`, 'good');
+          stamp(e.long ? 'Abgefangen' : 'Ball gewonnen', e.long ? `${Dc.last} fängt den langen Ball ab.` : nx && nx.t === 'turn' ? `Gegenpressing: ${Dc.last} holt den Ball zurück.` : `${Dc.last} nimmt ${X.last} den Ball ab.`, 'good');
           addTick(e.long ? `${Dc.last} fängt den langen Pass von ${X.last} ab.` : `${Dc.last} gewinnt den Ball gegen ${X.last}.`);
           await end3(s3, 1100); hideStamp();
         } else {
           const Tg = it.to ? card('home', it.to) : null;
           const w = e.long ? (e.grade === 'near' ? ['Knapp dran', `${Dc.last} ist dran, aber der lange Ball kommt an.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `Der lange Ball kommt an, ${Tg.last} hat freie Bahn.`, 'bad'] : ['Zu spät', `Der lange Ball findet ${Tg.last}.`, 'bad'])
-            : e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', it.kind === 'pass' ? `Der Pass zu ${Tg.last} kommt an.` : `${X.last} kommt glatt durch.`, 'bad'];
+            : e.blocked ? ['Geblockt', `${Dc.last} wirft sich in den Schuss von ${X.last}.`, 'good'] : e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', it.kind === 'pass' ? `Der Pass zu ${Tg.last} kommt an.` : `${X.last} kommt glatt durch.`, 'bad'];
           let s3 = null;
           if (it.kind === 'pass') {
             const to = !e.deep && G.cur.pos[it.to] ? ep(G.cur, it.to) : pos[it.to];
@@ -828,7 +838,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
             if (s3) { await s3.impact; stamp(w[0], w[1], w[2], 'low'); tween(moves.concat([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: ep(G.cur, e.by) }]), 0); }
             else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); await tween([{ id: e.x, to }, { id: 'ball', to: [to[0] + 10, to[1] - 12] }, { id: e.by, to: ep(G.cur, e.by) }], 560); }
             setCarrier(e.x);
-          } else { await tween(moves, 480); stamp(w[0], w[1], w[2], 'low'); }
+          } else { if (e.blocked) { moves.push({ id: 'ball', to: [spot[0], spot[1] + 6] }); buzz(20); } await tween(moves, e.blocked ? 380 : 480); stamp(w[0], w[1], w[2], 'low'); if (e.blocked) { setCarrier(null); addTick(`${Dc.last} blockt den Schuss von ${X.last}.`); } }
           await end3(s3, 900); hideStamp();
         }
       } else if (e.t === 'carry') {
@@ -851,17 +861,77 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
         if (G.cur && G.phase !== 'aim') { camMode = 'scene'; await syncPositions(700); }
       } else if (e.t === 'fx' && !e.on) { addTick(e.side === 'you' ? 'Dein Goalie steht wieder im Tor.' : `Der Goalie von ${HOME} steht wieder im Tor.`); renderCoach(); }
       else if (e.t === 'shot') await shotSeq(e, before);
+      else if (e.t === 'duel') {
+        // Bully oder freier Ball: Der Sieger hat den Ball
+        const mine = e.won === 'you', X = card(e.won, e[e.won]);
+        if (e.kind === 'faceoff') {
+          setCarrier(X.id); await tween([{ id: 'ball', to: [pos[X.id][0] + 8, pos[X.id][1] + (mine ? 16 : -16)] }], 240);
+          addTick(mine ? `Bully gewonnen: ${X.last}${e.clean ? ', sauber nach vorn' : ''}.` : `Bully verloren${e.early ? ' (zu früh getippt)' : ''}: ${HOME} hat den Ball.`);
+          await sceneIntro(faceoffStamp(e), false);
+        } else {
+          const at = toRink(e.at, e.att);
+          await tween([{ id: X.id, to: lerp(pos[X.id], at, 0.9) }, { id: 'ball', to: at }], 240); setCarrier(X.id);
+          stamp(mine ? 'Ball geholt' : 'Ball weg', mine ? `${X.last} ist zuerst am Ball.` : e.early ? `Zu früh: ${X.last} nimmt den Ball mit.` : `${X.last} ist schneller am Ball.`, mine ? 'good' : 'bad', 'low');
+          addTick(mine ? `Freier Ball: ${X.last} holt ihn.` : `Freier Ball: ${HOME} holt ihn (${X.last}).`);
+          await hold(650); hideStamp();
+        }
+      } else if (e.t === 'loose') {
+        // Der Ball liegt frei vor dem Tor: zurück aufs Feld, der Ball springt an seinen Platz
+        const at = toRink(e.at, e.side);
+        leaveGoal(); hideStamp(); camMode = 'scene'; setCarrier(null);
+        await tween([{ id: 'ball', to: at, via: lerp(ballP, at, 0.5) }], 320);
+        if (e.auto) {
+          const mine = e.won === 'you', X = card(e.won, e.x), atk = e.won === e.side;
+          await tween([{ id: e.x, to: lerp(pos[e.x], at, 0.9) }], 300); setCarrier(e.x);
+          stamp(atk ? 'Abpraller' : 'Geklärt', mine ? `${X.last} ist als Erster am Ball.` : `${X.last} holt den freien Ball.`, mine ? 'good' : atk ? 'bad' : 'warn', 'low');
+          addTick(mine ? `Freier Ball: ${X.last} ist zuerst da.` : `Freier Ball: ${X.last} (${HOME}) ist zuerst da.`);
+          await hold(650); hideStamp();
+        } else say('Der Ball liegt frei!');
+      } else if (e.t === 'wave') {
+        const mine = e.side === 'you', X = card(e.side, e.x);
+        stamp('Zweite Welle', mine ? `${X.last} hat den Ball: nachsetzen!` : `${HOME} bleibt dran: ${X.last} hat den Ball.`, mine ? 'good' : 'bad', 'low');
+        addTick(mine ? `Zweite Welle über ${X.last}.` : `${HOME} bleibt vor deinem Tor: ${X.last} am Ball.`);
+        setCarrier(e.x); await Promise.all([syncPositions(450), hold(700)]); hideStamp();
+      } else if (e.t === 'turn') {
+        // Der Ballbesitz wechselt, das Spiel läuft weiter: Alle laufen dorthin, wo die neue Szene beginnt
+        const mine = e.side === 'you', X = e.x ? card(e.side, e.x) : null, kt = KINDTXT[e.kind], who = X ? X.last : (mine ? 'Dein Team' : HOME);
+        const st = e.how === 'press' ? ['Dein Ball', `${who} hat den Ball zurückgeholt: Der Angriff geht weiter.`, 'good'] : e.near ? ['Ball weg', `${HOME} hat den Ball vor deinem Tor.`, 'bad']
+          : kt ? [mine ? 'Umschalten' : 'Gegenstoss', mine ? `${who} hat den Ball: ${kt[0]}.` : `${HOME} schaltet um: ${kt[0]}.`, mine ? 'good' : 'bad']
+            : e.how === 'behind' ? [mine ? 'Dein Ball' : 'Ballwechsel', mine ? `${who} holt den Ball hinter dem Tor: Auslösung.` : `${HOME} holt den Ball hinter dem Tor und baut auf.`, 'warn']
+              : [mine ? 'Dein Ball' : 'Ballwechsel', mine ? `${who} hat den Ball: Auslösung.` : `${HOME} hat den Ball und baut auf: Störe früh.`, 'warn'];
+        hideStamp(); if (X) setCarrier(X.id);
+        await sceneIntro(st);
+      } else if (e.t === 'throw') {
+        // Der Goalie hält den Ball fest und wirft aus. Deiner: Die Wahl folgt (siehe after und renderThrow).
+        leaveGoal(); hideStamp(); setCarrier(null);
+        await tween([{ id: 'ball', to: e.side === 'you' ? [180, 740] : [180, 60] }], 200);
+        if (e.side === 'home') await sceneIntro(e.quick ? ['Schneller Auswurf', `Der Goalie von ${HOME} wirft sofort aus: ${(KINDTXT[e.kind] || ['Konter'])[0]}.`, 'bad'] : ['Auswurf', `Der Goalie von ${HOME} hält fest, ${HOME} baut auf: Störe früh.`, 'warn']);
+      } else if (e.t === 'throwOut') {
+        const R = e.to ? card('you', e.to) : null, g = e.grade;
+        if (!e.quick) await sceneIntro(['Auslösung', `Dein Goalie leitet ruhig aus: ${card('you', G.cur.carrier).last} baut auf.`, 'warn']);
+        else if (g === 'perfect' || g === 'good' || g === 'near') await sceneIntro(g === 'perfect' ? ['Auswurf perfekt', `${R.last} ist auf und davon: zwei gegen einen.`, 'good'] : g === 'good' ? ['Auswurf sitzt', `${R.last} nimmt den Ball mit: drei gegen zwei.`, 'good'] : ['Knapp', `${R.last} hat den Ball, aber ${HOME} steht schon.`, 'warn']);
+        else { await tween([{ id: 'ball', to: [180 + (Math.random() - 0.5) * 120, 470], via: [180, 620] }], 520); stamp('Abgefangen', `Der Auswurf landet bei ${HOME}.`, 'bad'); addTick('Auswurf abgefangen.'); buzz(50); await hold(900); hideStamp(); }
+      } else if (e.t === 'end' && e.calm) {
+        // Das Spiel kommt zur Ruhe: Die Sequenz ist vorbei
+        hideStamp(); leaveGoal();
+        stamp('Ruhe im Spiel', e.ball === 'you' ? 'Du hast den Ball und baust in Ruhe auf.' : `${HOME} hat den Ball und baut in Ruhe auf.`, 'warn');
+        addTick(e.ball === 'you' ? 'Du hast den Ball, das Spiel beruhigt sich.' : `${HOME} hat den Ball, das Spiel beruhigt sich.`);
+        await hold(1100); hideStamp();
+      }
     }
   }
   async function after() {
     if (G.phase === 'aim') { await toGoal(); return; }
+    if (G.phase === 'duel') { renderScore(); await toDuel(); return; }
+    if (G.phase === 'throw') { leaveGoal(); renderScore(); renderThrow(); return; }
     if (G.phase === 'decide') { leaveGoal(); await syncPositions(650); renderScore(); renderDecision(); return; }
     if (G.phase === 'end') { finish(); return; }
     if (G.phase === 'done') {
+      const calm = !G.pen && !(G.cur && G.cur.goal);      // Ruhe im Spiel: schon angesagt, es geht gleich weiter
       phase = 'pause'; fast = false;
-      showHint(G.pen ? (M.penOver(G.pen) ? 'Tippe für das Resultat' : 'Tippe für den nächsten Penalty') : 'Tippe: das Spiel läuft weiter', 1500);
+      showHint(G.pen ? (M.penOver(G.pen) ? 'Tippe für das Resultat' : 'Tippe für den nächsten Penalty') : calm ? 'Das Spiel läuft weiter' : 'Tippe: weiter mit dem Bully', calm ? 0 : 1500);
       renderScore();
-      await hold(1500);
+      await hold(calm ? 250 : 1500);
       next();
     }
   }
@@ -873,10 +943,13 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     await flow(r.events);
   }
   const KINDTXT = { rush32: ['Konter 3 gegen 2', 'drei gegen zwei'], rush21: ['Konter 2 gegen 1', 'zwei gegen einen'], solo: ['Alleingang', 'allein vor dem Tor'] };
-  /* Das Spiel läuft, bis die Engine eine Chance meldet oder das Drittel vorbei ist. Die Uhr läuft mit. */
+  /* Nach einem Unterbruch (Anpfiff, Tor, Ruhe im Spiel, Pause) geht es weiter: Linien und Taktik melden; beginnt eine neue
+     Sequenz, springt die Uhr (Zeitsprung). Danach das Bully oder die Szene, mit der das Spiel weitergeht. */
   async function flow(evs) {
     phase = 'play'; fast = false;
-    leaveGoal(); renderScore(); setKeeperColor(); closeBar();
+    const seq = (evs || []).filter(e => e.t === 'seq')[0] || null, over = (evs || []).some(e => e.t === 'period');
+    clockHold = seq || over ? G.from : null;
+    leaveGoal(); renderScore(); setKeeperColor(); closeBar(); closeDuel();
     setTag('Spiel läuft', 'warn'); $('panel').hidden = true; $('hist').innerHTML = '';
     showHint('Tippe aufs Feld, um vorzuspulen');
     let changed = false, shout = null;
@@ -888,19 +961,126 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     if (changed) rebuildPlayers();
     renderCoach();
     if (shout) { stamp(M.CARDS[shout].name, CARDSAY[shout](false), 'bad'); await hold(1500); hideStamp(); }
-    $('sc-time').textContent = clockText(lastMinute);
-    camMode = 'follow';
-    await leadIn();
-    if (!G.cur) { await periodEnd(); return; }
-    const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), kt = KINDTXT[sc.kind];
-    camMode = 'scene';
-    await tween([], 450);
-    renderScore();
-    const build = !!sc.deep && sc.deep.kind === 'build';
-    if (kt) { stamp(kt[0], att ? `${X.last} zieht los, ${kt[1]}.` : `${HOME} kontert über ${X.last}, ${kt[1]}.`, att ? 'good' : 'bad'); await hold(1000); hideStamp(); }
-    else if (build) { stamp('Auslösung', att ? `${X.last} baut hinten auf, ${HOME} stört früh.` : `${HOME} baut hinten auf: Störe früh.`, 'warn'); await hold(900); hideStamp(); }
-    addTick(build ? (att ? `Auslösung: ${X.last} am Ball.` : `${HOME} baut auf: ${X.last} am Ball.`) : att ? `${kt ? kt[0] : 'Chance'}: ${X.last} am Ball.` : `${kt ? kt[0] + ' ' + HOME : HOME + ' greift an'}: ${X.last} am Ball.`);
+    if (over) { await clockRun(G.from, G.clock, 900); clockHold = null; await periodEnd(); return; }
+    if (seq && seq.n > 1) await timeSkip(seq.from, seq.clock);
+    clockHold = null; renderScore();
+    if (G.phase === 'duel') { await toDuel(); return; }
+    await sceneIntro(null);
     if (G.phase === 'aim') await toGoal(); else renderDecision();
+  }
+  /* Zeitsprung zwischen zwei Sequenzen: Die Uhr läuft im Zeitraffer, die Spieler sammeln sich in der Mitte. */
+  const KICK = { C: [180, 424], LW: [82, 436], RW: [278, 436], LD: [122, 508], RD: [238, 508] };
+  function kickoff() { const wp = {}; G.teams.you.cards.forEach(c => { wp[c.id] = KICK[c.role]; }); G.teams.home.cards.forEach(c => { const q = KICK[c.role]; wp[c.id] = [360 - q[0], 800 - q[1]]; }); return wp; }
+  async function timeSkip(from, to) {
+    const mins = Math.max(1, Math.round(to - from)), wp = kickoff();
+    setTag('Zeitsprung', 'warn'); say(`${mins} ${mins === 1 ? 'Minute' : 'Minuten'} später.`);
+    stamp('Zeitsprung', `${mins} ${mins === 1 ? 'Minute' : 'Minuten'} später`, 'warn', 'low');
+    setCarrier(null); camMode = 'follow';
+    await Promise.all([clockRun(from, to, 1100), tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [180, 400] }]), 900)]);
+    await hold(300); hideStamp();
+  }
+  /* Eine neue Szene beginnt: Ansage, was jetzt läuft, und alle laufen an ihre Plätze. st: eigene Ansage [Titel, Text, Ton],
+     sonst nach der Art der Szene. tick: auch in den Ticker (false: nicht). */
+  function sceneStamp() {
+    const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), kt = KINDTXT[sc.kind], dk = sc.deep ? sc.deep.kind : null;
+    if (dk === 'build') return ['Auslösung', att ? `${X.last} baut hinten auf, ${HOME} stört früh.` : `${HOME} baut hinten auf: Störe früh.`, 'warn'];
+    if (kt) return [kt[0], att ? `${X.last} zieht los, ${kt[1]}.` : `${HOME} kontert über ${X.last}, ${kt[1]}.`, att ? 'good' : 'bad'];
+    return [att ? 'Angriff' : 'Abwehr', att ? `${X.last} hat den Ball, ${HOME} steht.` : `${HOME} greift an: ${X.last} am Ball.`, 'warn'];
+  }
+  async function sceneIntro(st, tick) {
+    const sc = G.cur; if (!sc) return;
+    st = st || sceneStamp(); leaveGoal(); camMode = 'scene';
+    stamp(st[0], st[1], st[2], 'low'); if (tick !== false) addTick(`${st[0]}: ${st[1]}`);
+    setTag('Spiel läuft', 'warn'); say(st[1]); $('hist').innerHTML = ''; $('panel').hidden = true; showHint('Tippe aufs Feld, um vorzuspulen');
+    renderScore();
+    await Promise.all([syncPositions(1000), hold(1000)]);
+    hideStamp();
+  }
+  // Ansage nach dem Bully: wer es gewonnen hat und wie es weitergeht
+  function faceoffStamp(e) {
+    const sc = G.cur, mine = e.won === 'you', X = card(e.won, sc.carrier), build = !!sc.deep, rush = sc.kind !== 'set';
+    if (mine) return ['Bully gewonnen', rush ? `Sauber nach vorn: ${X.last} zieht los, drei gegen zwei.` : build ? `${X.last} baut hinten auf.` : `${X.last} hat den Ball, dein Team setzt sich fest.`, 'good'];
+    return [e.early ? 'Zu früh' : 'Bully verloren', rush ? `Der Ball geht an ${HOME}: ${X.last} zieht los, drei gegen zwei.` : build ? `${HOME} baut hinten auf: Störe früh.` : `${HOME} greift an.`, 'bad'];
+  }
+  /* --- Bully und freier Ball ---
+     Der User tippt, sobald der Ball frei ist (irgendwo auf dem Bildschirm). Gemessen wird die Zeit vom Signal bis zur
+     Berührung; wer vor dem Signal tippt, ist zu früh. Die Engine sagt, wie lange das Signal auf sich warten lässt (delay)
+     und wie viel Zeit bleibt (window). Kurz nach dem Aufbau zählt noch kein Tipp, damit ein Vorspulen nicht als
+     Frühstart gilt. */
+  let du = null;
+  async function toDuel() {
+    const d = G.duel, fo = d.kind === 'faceoff', A = card('you', d.you), B = card('home', d.home);
+    leaveGoal(); closeBar(); hideStamp(); clearLanes(); $('hint').hidden = true; $('panel').hidden = true;
+    Object.keys(els).forEach(k => els[k].classList.remove('pick'));
+    phase = 'play';
+    if (fo) {
+      camMode = 'follow'; setCarrier(null);
+      const wp = kickoff();
+      await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [180, 400] }]), 700);
+    } else {
+      const at = toRink(d.at, d.att);      // die beiden gehen zum Ball
+      await tween([{ id: d.you, to: lerp(pos[d.you], at, 0.55) }, { id: d.home, to: lerp(pos[d.home], at, 0.55) }], 300);
+    }
+    setTag(fo ? 'Bully' : 'Freier Ball', 'warn');
+    say(fo ? `Bully: ${A.last} gegen ${B.last}. Tippe, sobald der Ball fällt.` : `Freier Ball: ${A.last} gegen ${B.last}. Tippe, sobald er frei ist.`);
+    $('hist').innerHTML = `<em>Du hast <b>${d.window} ms</b> Zeit: ${esc(A.last)} ${r0(M.duelVal(A))} gegen ${esc(B.last)} ${r0(M.duelVal(B))} (Form und Erfahrung)${fo ? '' : ', dazu zählt, wer näher steht'}. Zu früh getippt: Der Ball geht an ${esc(HOME)}.${fo ? ' Sehr schnell getippt: Der Ball geht sofort nach vorn.' : ''}</em>`;
+    $('panel').hidden = false;
+    $('panel').innerHTML = `<div class="tb"><button type="button" class="tb-pad duel" id="du-pad">Warten<small>${fo ? 'tippe, sobald der Ball fällt' : 'tippe, sobald der Ball frei ist'}</small></button></div>`;
+    const ov = $('duelov'), now = performance.now();
+    fast = false; phase = 'duel';
+    ov.className = 'duelov wait ' + (fo ? 'fo' : d.att === 'you' ? 'lo-att' : 'lo-def'); ov.hidden = false;
+    $('du-t').textContent = fo ? 'Bully' : 'Freier Ball'; $('du-w').textContent = 'Bereit'; $('du-r').textContent = '';
+    ov.dataset.state = 'wait'; ov.dataset.window = d.window;
+    du = { d, armed: now + 450, at: now + 650 + d.delay, sig: 0, raf: 0, timer: 0, done: false };
+    (function loop(t) {
+      const x = du; if (!x || x.done) return;
+      if (t >= x.at) {
+        x.sig = performance.now(); ov.classList.remove('wait'); ov.classList.add('go'); ov.dataset.state = 'go'; $('du-w').textContent = 'Jetzt!'; buzz(25);
+        const pad = $('du-pad'); if (pad) { pad.classList.add('go'); pad.firstChild.textContent = 'Jetzt!'; }
+        x.timer = setTimeout(() => endDuel(null), d.window + 800);      // keine Reaktion: zu spät
+        return;
+      }
+      x.raf = requestAnimationFrame(loop);
+    })(now);
+  }
+  function tapDuel(ts) {
+    const x = du; if (phase !== 'duel' || !x || x.done) return;
+    const now = performance.now(), t = ts && ts <= now && now - ts < 250 ? ts : now;
+    if (t < x.armed) return;
+    endDuel(x.sig ? Math.max(0, t - x.sig) : 'early');
+  }
+  function endDuel(rt) {
+    const x = du; if (!x || x.done) return;
+    x.done = true; cancelAnimationFrame(x.raf); clearTimeout(x.timer);
+    const ov = $('duelov'), early = rt === 'early', late = rt === null, won = !early && !late && rt <= x.d.window;
+    ov.classList.remove('wait', 'go'); ov.classList.add(won ? 'won' : 'lost'); ov.dataset.state = 'done';
+    $('du-w').textContent = early ? 'Zu früh' : won ? 'Gewonnen' : 'Zu spät';
+    $('du-r').textContent = early ? 'vor dem Signal getippt' : late ? `keine Reaktion · Zeit waren ${x.d.window} ms` : `${Math.round(rt)} ms · Zeit waren ${x.d.window} ms`;
+    const pad = $('du-pad'); if (pad) { pad.classList.remove('go'); pad.classList.add(won ? 'g-good' : 'g-bad'); pad.firstChild.textContent = early ? 'Zu früh' : won ? 'Gewonnen' : 'Zu spät'; }
+    buzz(won ? 20 : 60); phase = 'barhold';
+    setTimeout(() => { closeDuel(); phase = 'decide'; run(early ? { type: 'duel', early: true } : late ? { type: 'duel' } : { type: 'duel', rt }); }, reduce ? 220 : 560);
+  }
+  function closeDuel() { if (du) { du.done = true; cancelAnimationFrame(du.raf); clearTimeout(du.timer); du = null; } $('duelov').hidden = true; }
+  /* --- Auswurf ---
+     Dein Goalie hält den Ball fest. Schnell auswerfen ist ein Balken (im Feld: Konter in Überzahl), ruhig aufbauen ist
+     die Auslösung hinten. */
+  function renderThrow() {
+    const t = G.throw, R = card('you', t.to), panel = $('panel');
+    phase = 'decide'; $('hint').hidden = true; panel.hidden = false; clearLanes(); setCarrier(null); camMode = 'scene';
+    Object.keys(els).forEach(k => els[k].classList.remove('pick'));
+    setTag('Auswurf', 'you');
+    say(`Dein Goalie hält den Ball fest. Schnell auf ${R.last} auswerfen oder ruhig aufbauen?`);
+    panel.innerHTML = `<div class="actions2">
+<button type="button" class="act deepb" data-throw="quick"><b>${ic('long')}Schnell auswerfen</b><span class="pct">${fieldPct(t)}</span>${mini(t)}<small><em>auf ${esc(R.last)}</em> · im Feld: Konter 3 gegen 2, perfekt: 2 gegen 1 · daneben: Ball weg</small></button>
+<button type="button" class="act" data-throw="calm"><b>${ic('pass')}Ruhig aufbauen</b><small><em>sicher</em> · Auslösung hinten, ${esc(HOME)} stört früh</small></button></div>`;
+    $('hist').innerHTML = `<em>${t.high ? `${esc(HOME)} ist aufgerückt: Ein schneller Auswurf erwischt sie auf dem falschen Fuss.` : `${esc(HOME)} ist schon wieder hinten: Der schnelle Auswurf ist schwerer.`} Die Zahl ist die Breite des grünen Felds in Prozent.</em>`;
+  }
+  function chooseThrow(quick) {
+    if (phase !== 'decide' || G.phase !== 'throw') return;
+    const t = G.throw, R = card('you', t.to);
+    if (!quick) { run({ type: 'throw', quick: false }); return; }
+    say(`Auswurf auf ${R.last}. Triff das Timing.`);
+    openBar({ type: 'throw', quick: true }, { c: { p: t.p, w: t.w, pos: t.pos, start: t.start, sweep: t.sweep }, at: 'bot', title: `Auswurf auf ${esc(R.last)}`, sub: `Goalie ${G.teams.you.goalie.val} · im Feld: Konter`, back: true });
   }
   // Drittelsende: Zwischenstand, in der Pause lässt sich die Taktik ändern. Nach dem dritten Drittel Schluss oder Penaltys.
   async function periodEnd() {
@@ -917,63 +1097,6 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     next();
   }
 
-  /* Offenes Spiel vor der Szene, ohne Eingriff: Die Engine liefert die Folge (Pässe, Ballverluste, Distanzschüsse),
-     hier wird sie gezeigt. Das angreifende Team spielt immer nach oben; wechselt der Ball, dreht die Ansicht mit.
-     Am Ende stehen alle genau so, wie die Engine die Szene aufgestellt hat. */
-  let lastMinute = 0, view = 'you';
-  const KIND = { intercept: 'fängt den Pass ab', tackle: 'gewinnt den Zweikampf' };
-  function formation(side, depth) {
-    const wp = {}, atk = G.teams[side].cards;
-    atk.forEach(c => { const b = M.FORM[c.role]; wp[c.id] = [Math.max(30, Math.min(330, b[0] + (Math.random() - 0.5) * 50)), Math.min(385, b[1] + depth * 160 + (Math.random() - 0.5) * 30)]; });
-    const opp = G.teams[side === 'you' ? 'home' : 'you'].cards, byRole = {}; opp.forEach(c => { byRole[c.role] = c; });
-    atk.forEach(c => { const d = byRole[M.MARKS[c.role]], a = wp[c.id], mp = lerp(a, [180, 40], 0.27), sd = a[0] < 170 ? 1 : -1; wp[d.id] = [mp[0] + sd * 20, mp[1] - 6]; });
-    Object.keys(wp).forEach(id => { wp[id] = toRink(wp[id], side); });
-    return wp;
-  }
-  function turnView(side) { view = side; }   // nur noch: wer hat den Ball; das Feld dreht nicht mehr
-  async function leadIn() {
-    const sc = G.cur, ev = (sc ? sc.open : G.fill) || [], m0 = lastMinute, m1 = G.minute, nm = id => card(sideOf(id), id).last, tm = side => (side === 'you' ? 'Du' : HOME);
-    if (!ev.length && !sc) { lastMinute = G.minute; return; }
-    let holder = ev.length ? ev[0].from : sc.carrier;
-    turnView(ev.length ? ev[0].side : M.atkSide(sc));
-    await tween(Object.entries(formation(view, 0.95)).map(([id, to]) => ({ id, to })).concat([{ id: 'ball', to: null }]).filter(m => m.to), 700);
-    setCarrier(holder);
-    say(`${tm(view)} ${view === 'you' ? 'hast' : 'hat'} den Ball, ${nm(holder)} baut auf.`);
-    for (let k = 0; k < ev.length; k++) {
-      const e = ev[k], last = k === ev.length - 1;
-      $('sc-time').textContent = clockText(m0 + (m1 - m0) * (k + 1) / ev.length);
-      if (e.kind === 'pass' || e.kind === 'hold') {
-        const wp = e.final ? Object.fromEntries(Object.keys(sc.pos).map(id => [id, ep(sc, id)])) : formation(e.side, e.depth), to = e.kind === 'hold' ? e.from : e.to;
-        if (e.kind === 'pass') say(`${nm(e.from)} spielt zu ${nm(to)}.`);
-        await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[to][0] + 10, wp[to][1] - 12] }]), last ? 750 : 820);
-        setCarrier(to); holder = to;
-      } else if (e.kind === 'intercept' || e.kind === 'tackle') {
-        const fwd = e.side === 'you' ? -70 : 70, cut = e.kind === 'tackle' ? pos[e.from] : lerp(pos[e.from], [pos[e.from][0] + (Math.random() - 0.5) * 120, pos[e.from][1] + fwd], 0.6);
-        say(`${nm(e.by)} ${KIND[e.kind]}. Ballwechsel.`);
-        await tween([{ id: e.by, to: cut }, { id: 'ball', to: cut }], 600);
-        setCarrier(e.by); addTick(`${nm(e.by)} ${KIND[e.kind]} gegen ${nm(e.from)}.`);
-        await wait(250);
-        turnView(e.side === 'you' ? 'home' : 'you');
-        const wp = e.final && sc ? Object.fromEntries(Object.keys(sc.pos).map(id => [id, ep(sc, id)])) : formation(view, 0.85); wp[e.by] = wp[e.by] || pos[e.by];
-        if (e.final) camMode = 'scene';
-        await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat([{ id: 'ball', to: [wp[e.by][0] + 10, wp[e.by][1] - 12] }]), 800);
-        setCarrier(e.by); holder = e.by;
-      } else {
-        const g = goalOf(e.side), dir = e.side === 'you' ? 1 : -1, tgt = e.kind === 'save' ? [180 + (Math.random() - 0.5) * 16, g[1] + dir * 10] : [180 + (Math.random() < 0.5 ? -40 : 40), g[1] - dir * 18];
-        say(`${nm(e.from)} versucht es aus der Distanz.`);
-        await tween([{ id: 'ball', to: tgt }], 520);
-        addTick(`Distanzschuss ${nm(e.from)}: ${e.kind === 'save' ? 'gehalten' : 'daneben'}.`);
-        say(e.kind === 'save' ? 'Der Goalie hält und leitet aus.' : 'Daneben. Abstoss.');
-        await wait(350);
-        turnView(e.side === 'you' ? 'home' : 'you');
-        const wp = formation(view, 0.95), nb = (ev[k + 1] || {}).from;
-        await tween(Object.keys(wp).map(id => ({ id, to: wp[id] })).concat(nb ? [{ id: 'ball', to: [wp[nb][0] + 10, wp[nb][1] - 12] }] : []), 850);
-        if (nb) { setCarrier(nb); holder = nb; }
-      }
-    }
-    if (sc) { turnView(M.atkSide(sc)); setCarrier(sc.carrier); }
-    $('sc-time').textContent = clockText(m1); lastMinute = G.minute;
-  }
 
   // --- Tor von vorne: wie im Testduell ---
   const START = [180, 290];
@@ -1455,7 +1578,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     const m = M.newMatch(setup(opp), E.makeRng(1)), order = ['LW', 'C', 'RW', 'LD', 'RD'], st = S.state();
     const names = l => l.slice().sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role)).map(c => `${esc(c.last)} <i>${c.ovr}</i>`).join(' · '), l2 = m.teams.you.bench || [];
     $('play-lines').innerHTML = `<strong>1. Linie · Angriff ${Math.round(m.val.you.att)} · Abwehr ${Math.round(m.val.you.def)}</strong><span>${names(m.teams.you.cards)}</span><strong>2. Linie · Angriff ${Math.round(M.attackVal(l2))} · Abwehr ${Math.round(M.defenceVal(l2))}</strong><span>${names(l2)}</span>`;
-    $('tac-note').textContent = { def: 'Defensiv: weniger Chancen auf beiden Seiten, deine kommen öfter aus Kontern.', bal: 'Normal: ausgeglichen. Du kannst im Match jederzeit umstellen.', off: 'Offensiv: mehr Chancen für dich, aber hinten offen, der Gegner kontert öfter.' }[tactic];
+    $('tac-note').textContent = { def: 'Defensiv: Das Spiel kommt schneller zur Ruhe, beide greifen seltener an, du öfter über Konter.', bal: 'Normal: ausgeglichen. Du kannst im Match jederzeit umstellen.', off: 'Offensiv: Du bleibst öfter am Drücker, aber hinten offen, der Gegner kontert öfter.' }[tactic];
     $('btn-start').textContent = 'Anpfiff gegen ' + W.club(opp).short;
     $('tac-pick').innerHTML = C.TAC.map(t => {
       const own = st.tacOwned.indexOf(t.id) >= 0, on = st.tac.indexOf(t.id) >= 0;
@@ -1465,15 +1588,15 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     $('tac-pick-note').innerHTML = (sel.length ? sel.join('<br>') : 'Keine Karte gewählt.') + (st.tac.length < 3 && st.tacOwned.length > st.tac.length ? '<br>Du kannst noch eine Karte wählen.' : '');
     $('opps').innerHTML = OPPS.map(id => {
       const mm = M.newMatch(setup(id), E.makeRng(1));
-      const r = M.rates(Object.assign({}, mm, { tactic: { you: tactic, home: 'bal' } })), n = x => (x * 60).toFixed(0), o = C.OPPS.find(x => x.id === id), b = mm.teams.home.bench;
-      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Sieg: ${S.fmt(o.win)} Münzen · 2. Linie ${Math.round(M.strength(b))} · etwa ${n(r.you)} Chancen für dich, ${n(r.home)} gegen dich</span><i>${Math.round(M.strength(mm.teams.home.cards))}</i></button>`;
+      const r = M.rates(Object.assign({}, mm, { tactic: { you: tactic, home: 'bal' } })), o = C.OPPS.find(x => x.id === id), b = mm.teams.home.bench;
+      return `<button type="button" class="opp${id === opp ? ' on' : ''}" data-opp="${id}" aria-pressed="${id === opp}"><b>${esc(W.club(id).name)}</b><span>Sieg: ${S.fmt(o.win)} Münzen · 2. Linie ${Math.round(M.strength(b))} · Spielanteil etwa ${Math.round(100 * r.you / (r.you + r.home))} % für dich</span><i>${Math.round(M.strength(mm.teams.home.cards))}</i></button>`;
     }).join('');
     renderTac();
   }
   function start() {
     HOME = W.club(opp).short;
     G = M.newMatch(setup(opp), rng);
-    disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0; infoCard = null;
+    disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; clockHold = null; infoCard = null;
     show('match'); fullscreen(true); drawer(false); stage3(use3d() && S3.mount($('view3d'))); buildPlayers();
     G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400], true); camSet(190, 420);
     addTick(`Anpfiff. Du spielst ${M.TACTICS[G.tactic.you].name.toLowerCase()}.`);
@@ -1487,11 +1610,11 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     $('res-score').textContent = G.pen ? (y + (won ? 1 : 0)) + ':' + (o + (won ? 0 : 1)) : y + ':' + o;
     $('res-sub').textContent = 'Du gegen ' + HOME + (G.pen ? ', Penaltys ' + G.pen.you + ':' + G.pen.home : '');
     $('stats').innerHTML = [
-      [`${G.chances.you} : ${G.chances.home}`, 'Chancen, du und Gegner'],
+      [`${G.chances.you} : ${G.chances.home}`, 'Angriffe, du und Gegner'],
       [`${st.goals} von ${st.shots}`, 'eigene Schüsse im Tor'],
       [`${st.passOk} von ${st.passes}`, 'Pässe angekommen'],
       [`${st.hits} von ${st.bars}`, `Timing getroffen, ${st.perfects} perfekt`],
-      [`${st.changes} · ${G.tac.you.filter(t => t.used).length}`, 'Linienwechsel und gespielte Taktikkarten'],
+      [`${st.duelsWon} von ${st.duels}`, 'Bullys und freie Bälle gewonnen'],
       [`${st.saved} von ${st.onGoal}`, 'Schüsse aufs Tor gehalten']
     ].map(r => `<li><b>${r[0]}</b><span>${r[1]}</span></li>`).join('');
     $('ticker-end').innerHTML = $('ticker').innerHTML;
@@ -1513,7 +1636,8 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   $('panel').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.disabled) return;
     if (b.id === 'drib-back') { if (phase === 'drib' && db && !db.started) { closeDribble(); phase = 'decide'; renderDecision(); } return; }
-    if (b.id === 'tb-back') { if (phase === 'bar') { const shot = bar && bar.shot; closeBar(); if (shot) reAim(); else renderDecision(); } return; }
+    if (b.id === 'tb-back') { if (phase === 'bar') { const shot = bar && bar.shot; closeBar(); if (shot) reAim(); else if (G.phase === 'throw') renderThrow(); else renderDecision(); } return; }
+    if (b.dataset.throw) { chooseThrow(b.dataset.throw === 'quick'); return; }
     if (b.dataset.sty) { setStyle(b.dataset.sty); return; }
     if (phase !== 'decide') return;
     if (b.dataset.a) choose({ type: b.dataset.a }); else if (b.dataset.to) choose({ type: 'pass', to: b.dataset.to });
@@ -1532,6 +1656,9 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   $('panel').addEventListener('click', e => { const n = e.target.closest('.sty-note'); if (n) n.classList.toggle('open'); });
   document.addEventListener('pointerdown', e => { if (phase === 'bar' && !e.target.closest('#tb-back, .coach, #tac, #btn-coach')) { e.preventDefault(); tapBar(e.timeStamp); } });
   document.addEventListener('keydown', e => { if (phase === 'bar' && (e.key === ' ' || e.key === 'Enter') && e.target.id !== 'tb-back') { e.preventDefault(); tapBar(e.timeStamp); } });
+  // Bully und freier Ball: getippt wird irgendwo auf dem Bildschirm (ausser im Trainer-Blatt), auch mit Leertaste oder Enter
+  document.addEventListener('pointerdown', e => { if (phase === 'duel' && !e.target.closest('.coach, #tac, #btn-coach')) { e.preventDefault(); tapDuel(e.timeStamp); } });
+  document.addEventListener('keydown', e => { if (phase === 'duel' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); tapDuel(e.timeStamp); } });
   $('pls').addEventListener('click', e => {
     const g = e.target.closest('.pl'); if (!g || phase !== 'decide' || !g.classList.contains('pick')) return;
     choose({ type: 'pass', to: g.getAttribute('data-id') });
@@ -1539,12 +1666,12 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   stage.addEventListener('click', e => {
     // 3D: Wer von den anspielbaren Mitspielern liegt unter dem Finger?
     if (L3 && phase === 'decide') { const to = S3.pick(e.clientX, e.clientY, Object.keys(els).filter(k => els[k].classList.contains('pick'))); if (to) choose({ type: 'pass', to }); return; }
-    if (phase === 'aim' || phase === 'react' || phase === 'wait' || phase === 'bar' || phase === 'barhold' || e.target.closest('.zone') || e.target.closest('.pl.pick')) return;
+    if (phase === 'aim' || phase === 'react' || phase === 'wait' || phase === 'bar' || phase === 'barhold' || phase === 'duel' || e.target.closest('.zone') || e.target.closest('.pl.pick')) return;
     if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake();
   });
   $('hint').addEventListener('click', () => { if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake(); });
   S.onChange(() => { if (!$('screen-intro').hidden || phase === 'end' || phase === 'idle') renderIntro(); });
   // Für Tests: den Zustand des laufenden Matchs lesen und einen gestellten Zustand laden (eine bestimmte Lage prüfen, ohne darauf zu warten)
-  window.HKMatchTest = { state: () => G, phase: () => phase, load(s) { closeBar(); G = s; phase = 'play'; return after(); } };
+  window.HKMatchTest = { state: () => G, phase: () => phase, load(s) { closeBar(); closeDuel(); G = s; phase = 'play'; return after(); } };
   renderIntro();
 })();

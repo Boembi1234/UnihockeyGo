@@ -69,6 +69,34 @@
 /* Timing-Balken: liegt über dem Feld, grünes Feld mit hellem Kern, weisser Strich. Darunter die grosse Tippfläche. */
 .tbov{position:absolute;left:8px;right:8px;z-index:9;display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;border-radius:12px;background:rgba(5,8,24,.92);border:1px solid var(--line)}
 .tbov.bot{bottom:8px}.tbov.top{top:8px}
+/* Bully und freier Ball: grosses Signal über dem Feld. Grau heisst warten, Grün heisst jetzt. */
+.duelov{position:absolute;left:50%;top:24%;z-index:8;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;text-align:center;transform:translate(-50%,-50%)}
+.duelov.lo-att{top:66%}.duelov.lo-def{top:30%}
+.duelov .du-t{margin:0;padding:5px 11px 4px;border-radius:999px;background:rgba(5,8,24,.88);border:1px solid var(--line);font-family:var(--display);font-weight:800;font-size:13px;line-height:1;letter-spacing:.14em;text-transform:uppercase;color:#fff}
+.duelov .du-ring{position:relative;width:112px;height:112px;border-radius:50%;display:grid;place-items:center;background:rgba(5,8,24,.86);border:5px solid #6b7699;box-shadow:0 8px 28px rgba(0,0,0,.5);transition:transform .1s ease-out}
+.duelov .du-ring b{font-family:var(--display);font-weight:800;font-size:23px;line-height:1;letter-spacing:.05em;text-transform:uppercase;color:#c9d3ea}
+.duelov .du-ball{position:absolute;left:50%;top:-13px;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#c9d3ea);border:1.5px solid #050818;transition:transform .13s cubic-bezier(.5,0,1,.6)}
+.duelov.wait .du-ring{animation:duwait .9s ease-in-out infinite alternate}
+.duelov.go .du-ring{border-color:#34d399;background:#0c8f62;box-shadow:0 0 0 10px rgba(52,211,153,.3),0 8px 28px rgba(0,0,0,.5);transform:scale(1.14)}
+.duelov.go .du-ring b{color:#fff;font-size:31px}
+.duelov.go .du-ball,.duelov.won .du-ball,.duelov.lost .du-ball{transform:translateY(22px)}
+.duelov.won .du-ring{border-color:#34d399;background:rgba(6,78,59,.94)}.duelov.won .du-ring b{color:#a7f3d0}
+.duelov.lost .du-ring{border-color:#ef4444;background:rgba(127,29,29,.94)}.duelov.lost .du-ring b{color:#fecaca}
+.duelov .du-r{margin:0;min-height:17px;padding:0 8px;font-family:var(--body);font-weight:700;font-size:13px;line-height:1.3;color:#fff;text-shadow:0 1px 3px #000,0 0 8px #000}
+@keyframes duwait{from{border-color:#6b7699}to{border-color:#b6c0de}}
+.tb-pad.duel{border-color:var(--line);background:#0b1230;color:var(--mute)}
+.tb-pad.duel.go{border-color:#34d399;background:#0c8f62;color:#fff}
+.tb-pad.duel.g-good{border-color:#34d399;background:#06231b;color:#a7f3d0}.tb-pad.duel.g-bad{border-color:#ef4444;background:#2a0b0f;color:#fecaca}
+.time.run{color:var(--gold)}
+/* Sicht von oben: Das Signal liegt am Rand, wo keine Spieler stehen (beim Bully und in der Abwehr oben, im Angriff unten) */
+.game:not(.g3d) .duelov{top:8px;transform:translate(-50%,0)}
+.game:not(.g3d) .duelov.lo-att{top:auto;bottom:8px}
+.game:not(.g3d) .duelov .du-t{display:none}
+.game:not(.g3d) .duelov .du-ring{width:88px;height:88px;border-width:4px}
+.game:not(.g3d) .duelov .du-ring b{font-size:19px}.game:not(.g3d) .duelov.go .du-ring b{font-size:25px}
+.game:not(.g3d) .duelov.go .du-ring{transform:scale(1.08)}
+.game:not(.g3d) .duelov .du-ball{top:-9px;width:18px;height:18px;margin-left:-9px}
+@media (prefers-reduced-motion:reduce){.duelov.wait .du-ring{animation:none}.duelov .du-ring,.duelov .du-ball{transition:none}}
 .tb{display:flex;flex-direction:column;gap:8px}
 .tb-t{display:flex;flex-direction:column;gap:2px;margin:0;font-family:var(--display);text-transform:uppercase;line-height:1.05}
 .tb-t b{font-weight:800;font-size:18px;letter-spacing:.05em}
@@ -336,6 +364,9 @@ body.in-match #app{padding:0;max-width:none}
 .game.g3d .stage .tell{top:auto;bottom:calc(var(--dock) + 8px);max-width:44%;font-size:13px;white-space:nowrap}
 .game.g3d .stage .tbov.bot{bottom:calc(var(--dock) + 6px)}
 .game.g3d .stage .tbov.top{top:calc(var(--hud) + 6px)}
+.game.g3d .stage .duelov{top:calc(var(--hud) + (100% - var(--hud) - var(--dock)) * .72)}
+.game.g3d .stage .duelov.lo-att{top:calc(var(--hud) + (100% - var(--hud) - var(--dock)) * .62)}
+.game.g3d .stage .duelov.lo-def{top:calc(var(--hud) + (100% - var(--hud) - var(--dock)) * .3)}
 .game.g3d .stage .stamp:not(.low){top:calc(var(--hud) + (100% - var(--hud) - var(--dock)) * .3)}
 .game.g3d .stage .stamp.low{top:calc(var(--hud) + 8px);bottom:auto}
 .game.g3d .stage .led{top:calc(var(--hud) + 4px)}
@@ -516,6 +547,7 @@ body.in-match #app{padding:0;max-width:none}
     <div class="stamp" id="stamp" hidden><b></b><span></span></div>
     <div class="led" id="led" hidden><div class="led-panel"><i class="led-rays"></i><b id="led-t">TOR!</b></div><span id="led-s"></span></div>
     <div class="tbov" id="tbov" hidden></div>
+    <div class="duelov" id="duelov" hidden><p class="du-t" id="du-t">Bully</p><div class="du-ring"><i class="du-ball" aria-hidden="true"></i><b id="du-w">Bereit</b></div><p class="du-r" id="du-r"></p></div>
   </div>
   <div class="hud" id="hud">
   <div class="sb">

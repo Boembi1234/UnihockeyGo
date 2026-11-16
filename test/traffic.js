@@ -59,8 +59,9 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
   const sd = await p.evaluate(() => window.HKMatchTest.state().shot.shade[0]);
   await shoot([sd.x, 0.4]);
   ok(await stampIs('In den Block'), 'A: Schlagschuss mitten in den Schatten: «In den Block»'); await p.waitForTimeout(700); await snap('a-in-den-block');
-  await until(() => ['pause', 'decide', 'bar'].indexOf(window.HKMatchTest.phase()) >= 0 && window.HKMatchTest.state().phase !== 'aim', null, 30000);
-  const tick = await p.evaluate(() => document.querySelector('#ticker li span').textContent); ok(/in den Block/.test(tick), 'A: Ticker: ' + tick);
+  await until(() => ['pause', 'decide', 'bar', 'duel'].indexOf(window.HKMatchTest.phase()) >= 0 && window.HKMatchTest.state().phase !== 'aim', null, 30000);
+  // Der Ball bleibt im Spiel: Nach dem Block folgen weitere Meldungen (freier Ball, Ballwechsel), die Meldung zum Block steht darunter
+  const tick = await p.evaluate(() => [...document.querySelectorAll('#ticker li span')].map(e => e.textContent)); ok(tick.some(t => /in den Block/.test(t)), 'A: Ticker: ' + tick.find(t => /Block/.test(t)));
   await idle();
   }
   if (want('B')) {
@@ -113,7 +114,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
   if (rebC) {
     await snap('c-abpraller-gegner'); await save(0.15);
     await until(() => window.HKMatchTest.state().phase !== 'aim', null, 30000).catch(() => {});
-    ok(await p.evaluate(() => window.HKMatchTest.state().phase === 'done'), 'C: nach dem Nachschuss ist die Chance zu Ende: ' + await p.evaluate(() => document.querySelector('#ticker li span').textContent));
+    ok(await p.evaluate(() => ['done', 'throw', 'duel', 'decide'].indexOf(window.HKMatchTest.state().phase) >= 0), 'C: nach dem Nachschuss gibt es keinen zweiten, das Spiel geht weiter oder kommt zur Ruhe (' + await p.evaluate(() => window.HKMatchTest.state().phase + ': ' + document.querySelector('#ticker li span').textContent) + ')');
   }
   }
   console.log(errors.length ? '\nFEHLER: ' + errors.join(' | ') : '\nAlle Prüfungen bestanden');

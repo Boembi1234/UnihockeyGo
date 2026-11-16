@@ -9,7 +9,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
   // Wo es WebGL gibt, läuft das ganze Match in der 3D-Halle. Der letzte Lauf erzwingt WebGL (in Software gerechnet) und
   // verlangt, dass das Match in 3D läuft; der Lauf mit reduzierter Bewegung bleibt in der Sicht von oben.
   const b = await chromium.launch(), bgl = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] }), N = +process.argv[2] || 1; let fail = 0;
-  const RUNS = [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true }, { width: 375, shots: true, gl: true }].filter(r => !process.env.ONLY || (process.env.ONLY === 'gl') === !!r.gl);
+  const RUNS = [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true, shots: !!process.env.SHOTS }, { width: 375, shots: true, gl: true }].filter(r => !process.env.ONLY || (process.env.ONLY === 'gl') === !!r.gl).filter((r, i) => !process.env.RUN || +process.env.RUN === i);
   const window_styles = ['slap', 'wrist', 'drag'];
   let lastStyle = null; const document_style = () => lastStyle;
   for (const run of RUNS) {
@@ -18,7 +18,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if ((m.type() === 'error' && !/Failed to load resource/.test(m.text())) || /3D-Szene ausgefallen/.test(m.text())) errors.push(m.text()); });
     await p.goto('file://' + path.resolve(__dirname, '..', 'dist', 'lab', 'match', 'index.html'), { waitUntil: 'load' });
     await p.evaluate(() => Promise.all(['600', '700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
-    const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + (run.gl ? '-3d' : '') + '-' + name + '.png'), fullPage: !!full }); };
+    const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + (run.gl ? '-3d' : run.reduce ? '-2d' : '') + '-' + name + '.png'), fullPage: !!full }); };
     if (run.gl) { await p.waitForFunction(() => !!window.THREE, null, { timeout: 15000 }).catch(() => {}); if (!(await p.evaluate(() => !!window.HKScene3D && window.HKScene3D.ok()))) errors.push('3D-Darstellung nicht verfügbar'); }
     // Ohne Grafikkarte rechnet die 3D-Halle langsam, und der Testspieler träfe nichts mehr. In den Läufen, die den Ablauf prüfen, läuft sie darum mit winzigem Bild; nur der letzte Lauf zeigt sie in voller Güte.
     if (!run.gl && !run.reduce) await p.evaluate(() => { if (window.HKScene3D) window.HKScene3D.quality(3); });
@@ -31,8 +31,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
       if (m > 0) { if (!(await p.isVisible('#btn-other'))) { errors.push('Match ' + m + ' kam nicht ans Ende: ' + await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-period').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent].join(' / '))); break; } await p.click('#btn-other'); }
       await p.evaluate(() => { const o = [...document.querySelectorAll('#opps [data-opp]')]; o[Math.floor(Math.random() * o.length)].click(); });
       await p.evaluate(() => { const o = [...document.querySelectorAll('#tac-intro [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
-      await p.click('#btn-start');
-      for (let g = 0; g < 6000; g++) {
+      await p.click('#btn-start'); const tStart = Date.now();
+      for (let g = 0; g < (process.env.NOSKIP ? 40000 : 6000); g++) {
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
@@ -43,13 +43,15 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
           if (sd.aim === '1' && (l3 ? s3.mode() === 'aim' : !document.getElementById('goalview').hidden)) return 'aim';
           if (l3 ? sd.react === '1' : document.getElementById('zones').classList.contains('armed')) return 'react';
-          const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
+          const dv = document.getElementById('duelov'); if (v(dv)) return dv.dataset.state === 'done' ? 'wait' : 'duel';
+          const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-throw]')) return 'throw';
+          if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
           return 'wait';
         });
         seen[st] = (seen[st] || 0) + 1;
         if (!seen.live3 && g % 20 === 0 && await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) seen.live3 = 1;
         if (process.env.DEBUG && (g % 400 === 0 || st !== seen._last)) { seen._last = st; console.log(g, st, await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent.slice(0, 60), document.getElementById('hint').hidden ? '' : document.getElementById('hint-text').textContent].join(' / '))); }
-        if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
+        if (st === 'end') { if (process.env.NOSKIP) console.log('Dauer ' + Math.round((Date.now() - tStart) / 1000) + ' s, ' + n + ' Eingaben bisher'); await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att') {
           await snap('01-angriff'); await over('angriff'); n++;
           if (await p.evaluate(() => !!document.querySelector('#panel .deepb'))) { seen.deep = 1; await p.waitForTimeout(taken['01-aufbau'] ? 0 : 900); await snap('01-aufbau'); await over('aufbau'); }
@@ -70,6 +72,29 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
               const dr = q('#panel [data-a="dribble"]:not(:disabled)'), b = want && dr ? dr : deep ? (u < 0.4 ? dr : u < 0.6 ? deep : [...document.querySelectorAll('#panel .passes [data-to]')][0] || pick) : u < 0.3 ? q('#panel [data-a="shoot"]') || pick : pick; b.click(); return deep ? (b === deep ? 'long' : b.dataset.a ? 'carry' : 'short') : q('#panel .actions2.one') ? 'nodrib' : 'zone'; }, !seen.drib && Math.random() < 0.7);
             seen[did] = (seen[did] || 0) + 1; if (did !== 'zone') await snap('01-' + ({ long: 'aufbau-langer-pass', carry: 'aufbau-vorstoss', short: 'aufbau-kurzer-pass', nodrib: 'vor-dem-tor-ohne-dribbling' })[did]);
           }
+          await p.waitForTimeout(40); continue;
+        }
+        if (st === 'duel') {
+          // Bully oder freier Ball: warten, bis das Signal kommt, dann tippen. Selten zu früh, selten gar nicht.
+          n++; seen.duel = 1;
+          const kind = await p.evaluate(() => document.getElementById('du-t').textContent), nm = kind === 'Bully' ? '00-bully' : '03-freier-ball', r = Math.random();
+          if (kind !== 'Bully') seen.loose = 1;
+          await snap(nm); await over('duell');
+          const out = await p.evaluate(mode => new Promise(done => {
+            const ov = document.getElementById('duelov'), t0 = performance.now(), tap = () => document.getElementById('stage').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+            if (mode === 'early' && ov.dataset.state === 'wait') { setTimeout(() => { tap(); done('early'); }, 500); return; }
+            (function poll() { if (ov.dataset.state === 'go') { if (mode === 'none') return done('none'); setTimeout(() => { tap(); done('tap'); }, 120 + Math.random() * 380); } else if (ov.hidden || ov.dataset.state === 'done' || performance.now() - t0 > 6000) done('gone'); else setTimeout(poll, 4); })();
+          }), !taken[nm + '-signal'] && run.shots ? 'none' : r < 0.06 ? 'early' : r < 0.1 ? 'none' : 'tap');
+          if (out === 'none') await snap(nm + '-signal');
+          seen['duel-' + out] = (seen['duel-' + out] || 0) + 1;
+          await p.waitForTimeout(260); await snap(nm + '-ergebnis');
+          if (out === 'none') await p.waitForTimeout(1400);
+          continue;
+        }
+        if (st === 'throw') {
+          // Auswurf: schnell (mit Balken) oder ruhig
+          n++; seen.throw = 1; await snap('03-auswurf'); await over('auswurf');
+          await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-throw]')]; l[Math.random() < 0.6 ? 0 : 1].click(); });
           await p.waitForTimeout(40); continue;
         }
         if (st === 'live') {
@@ -165,8 +190,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) {
             await snap('08-parade-3d');
             // Tippen ins Tor muss die richtige Zone treffen, auch wenn das Tor des Gegners gespiegelt steht
-            const zbad = await p.evaluate(() => { const M = window.HKMatch, S3 = window.HKScene3D; return M.ZONES.filter(z => { const at = S3.goalAt(M.ZC[z]), g = S3.pickGoal(at[0], at[1]); return M.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1]))) !== z; }); });
-            if (zbad.length && !taken.zbad) { taken.zbad = 1; errors.push('Parade in 3D: Tippen trifft die Zone nicht: ' + zbad.join(', ')); }
+            const zbad = await p.evaluate(() => { const M = window.HKMatch, S3 = window.HKScene3D; if (S3.mode() !== 'aim' || document.getElementById('stage').dataset.react !== '1') return []; return M.ZONES.filter(z => { const at = S3.goalAt(M.ZC[z]), g = S3.pickGoal(at[0], at[1]); return M.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1]))) !== z; }); });
+            if (zbad.length && !taken.zbad) { taken.zbad = 1; errors.push('Parade in 3D: Tippen trifft die Zone nicht: ' + zbad.join(', ') + ' ' + await p.evaluate(() => { const G = window.HKMatchTest.state(), S3 = window.HKScene3D, M = window.HKMatch; return JSON.stringify({ mode: S3.mode(), ui: window.HKMatchTest.phase(), ph: G.phase, shot: G.shot && { side: G.shot.side, ctx: G.shot.ctx, reb: G.shot.reb }, cur: G.cur && { type: G.cur.type, kind: G.cur.kind, waves: G.cur.waves, done: G.cur.done }, at: M.ZONES.map(z => S3.goalAt(M.ZC[z]).map(Math.round)), pick: M.ZONES.map(z => { const a = S3.goalAt(M.ZC[z]); return S3.pickGoal(a[0], a[1]).map(v => Math.round(v * 100) / 100); }), tag: document.getElementById('tag').textContent }); })); }
             // Mal dorthin, wo der Ring ist, mal zufällig, mal gar nicht
             if (r < 0.85) { const at = await p.evaluate(hit => { const l = document.getElementById('stage').dataset.land.split(',').map(Number), g = hit ? [Math.max(-0.9, Math.min(0.9, l[0])), Math.max(0.1, Math.min(0.9, l[1]))] : [[-0.62, 0, 0.62][Math.floor(Math.random() * 3)], Math.random() < 0.5 ? 0.25 : 0.72]; return window.HKScene3D.goalAt(g); }, r < 0.6); await p.mouse.move(at[0], at[1]); await p.mouse.down(); await p.mouse.up(); }
             await p.waitForTimeout(300); continue;
@@ -183,6 +208,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (!taken['12-' + what[0]] || Math.random() < 0.3) { await p.waitForTimeout(what[0] === 'tor' ? 1500 : 450); await snap('12-' + what[0]); }
           if (await p.evaluate(() => { const c = document.querySelector('#view3d canvas'), s = document.getElementById('stage'); return !!c && !document.getElementById('view3d').hidden && (Math.abs(c.clientWidth - s.clientWidth) > 2 || Math.abs(c.clientHeight - s.clientHeight) > 2); })) errors.push('3D-Sicht füllt die Bühne nicht');
         }
+        // Ansagen auf dem Feld: von jeder ein Bild
+        if (run.shots) { const sx = await p.evaluate(() => { const s = document.getElementById('stamp'); return s.hidden ? '' : s.querySelector('b').textContent; }); if (sx) { seen['stamp:' + sx] = 1; const k = '13-ansage-' + sx.toLowerCase().replace(/[^a-zäöü0-9]+/g, '-'); if (!taken[k]) { await p.waitForTimeout(160); await snap(k); } } }
         if (Math.random() < 0.02) await p.evaluate(() => { const o = [...document.querySelectorAll('#tac [data-tac]')]; o[Math.floor(Math.random() * o.length)].click(); });
         // Trainer: ab und zu die Linie wechseln oder eine Taktikkarte ansehen und einsetzen
         if (Math.random() < (seen.line ? 0.012 : 0.05)) { await p.evaluate(() => { const o = [...document.querySelectorAll('#lines [data-line]')]; o[Math.floor(Math.random() * o.length)].click(); }); seen.line = 1; }
@@ -190,11 +217,12 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           const had = await p.evaluate(() => { const o = [...document.querySelectorAll('#tcards [data-card]:not(:disabled)')]; if (!o.length) return false; o[Math.floor(Math.random() * o.length)].click(); return true; });
           if (had) { await p.waitForTimeout(60); await snap('10-taktikkarte'); await over('taktikkarte'); await p.evaluate(() => { const b = document.querySelector('#tcinfo [data-use]:not([data-use=""])'); if (b) b.click(); }); seen.card = 1; }
         }
-        await p.evaluate(() => document.getElementById('stage').click());
+        if (!process.env.NOSKIP) await p.evaluate(() => document.getElementById('stage').click());      // NOSKIP: nicht vorspulen (für die Messung der Dauer)
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
+    // Den Auswurf gibt es nur, wenn der Goalie festhält: In der langsam gerechneten 3D-Halle reagiert der Testspieler dafür zu spät
+    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp', 'duel', 'loose'].concat(run.gl ? ['3d'] : ['throw']).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
     if (run.reduce && seen.live3) errors.push('bei reduzierter Bewegung lief das Match in 3D'); if ((seen.missTap || 0) > 2 && !seen.tap3) errors.push('Tippen auf eine Figur wählt den Pass nicht: ' + seen.missTap + ' Versuche'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
