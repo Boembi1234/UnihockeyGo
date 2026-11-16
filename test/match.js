@@ -13,7 +13,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
   for (const run of RUNS) {
     const ctx = await (run.gl ? bgl : b).newContext({ viewport: { width: run.width, height: 900 }, deviceScaleFactor: 1, reducedMotion: run.reduce ? 'reduce' : 'no-preference' });
     const p = await ctx.newPage(), errors = [], taken = {}, res = [], seen = {}; let n = 0;
-    p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+    p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if ((m.type() === 'error' && !/Failed to load resource/.test(m.text())) || /3D-Szene ausgefallen/.test(m.text())) errors.push(m.text()); });
     await p.goto('file://' + path.resolve(__dirname, '..', 'dist', 'lab', 'match', 'index.html'), { waitUntil: 'load' });
     await p.evaluate(() => Promise.all(['600', '700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
     const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + (run.gl ? '-3d' : '') + '-' + name + '.png'), fullPage: !!full }); };
