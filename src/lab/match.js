@@ -5,7 +5,10 @@
    Eine Chance ist ein Positionsangriff, ein Konter 3 gegen 2, ein Konter 2 gegen 1 oder selten ein Alleingang.
    Nichts wird gewürfelt, was der User selbst entscheiden kann. Jeder Zweikampf läuft über einen Timing-Balken: Ein Strich
    läuft hin und her, der User tippt, wenn er im grünen Feld ist. Die Karten bestimmen, wie breit das Feld ist.
-   Angriff: Der Ballführende kann schiessen, passen oder dribbeln. Die Mitspieler laufen sich frei: einer in den Slot, der
+   Eigener Angriff, live: Die Chance läuft als durchgehende Szene auf dem Feld (siehe «Live-Szene»). Der User zeichnet vom
+   Ball aus eine Linie: zu einem Mitspieler (Pass), ins Tor (Schuss) oder in den freien Raum (laufen). Alle bewegen sich
+   weiter: Mitspieler laufen sich frei, Verteidiger decken, stören den Ballführenden und gehen in Passwege.
+   Angriff in Schritten (ältere Form, noch für Tests und den Gegner): Der Ballführende kann schiessen, passen oder dribbeln. Die Mitspieler laufen sich frei: einer in den Slot, der
    ballferne Flügel an den zweiten Pfosten. Ein Dribbling schlägt den Gegenspieler und zieht den nächsten Verteidiger als
    Hilfe an, dessen Mann wird frei. Jedes weitere Dribbling desselben Spielers ist deutlich schwerer, und näher als bis vor
    den Slot kommt man so nicht. Ein Pass verschiebt den Goalie: Wer direkt nach einem Querpass schiesst (Direktschuss),
@@ -61,7 +64,7 @@
        direkt vor dem Tor, reachDist dazu von ganz weit, reachVal weniger pro Punkt Abschluss über dem Goalie.
        Er ahnt die Ecke: creepDelay ms nach dem Setzen des Ziels rückt er mit creepSpeed pro Sekunde dorthin, höchstens creepMax. */
     kOff: 0.12, kY: 0.3, kYs: 1.3,
-    reach: 0.72, reachDist: 0.46, reachVal: 0.003, reachTrait: 0.07, reachMin: 0.45, reachMax: 1.25,
+    reach: 0.58, reachDist: 0.46, reachVal: 0.003, reachTrait: 0.07, reachMin: 0.45, reachMax: 1.25,
     creepDelay: 1500, creepSpeed: 0.3, creepMax: 0.45,
     enSpread: 0.5,                                                    // müder Schütze des Gegners streut bis so viel mehr
     // Energie: Kosten pro Chance (für alle; mal enTacOff bei offensiver, mal enTacDef bei defensiver Taktik), Pass, Annahme, Dribbling, Schuss, Abwehraktion; Erholung in der Pause;
@@ -76,7 +79,7 @@
        fxEmptyAtt. Mauern: Chancen des Gegners mal fxWallOpp, eigene mal fxWallOwn. */
     fxTimeout: 30, fxPress: 2, fxPressAi: 0.8, fxPlay: 1.25, fxPlayAi: 0.85, fxCalm: 1.4, fxEmptyOwn: 2, fxEmptyAtt: 1.15, fxWallOpp: 0.5, fxWallOwn: 0.6,
     // Reaktionsparade: Zeit in ms, bis der Ball im Tor ist
-    aiPowMin: 0.1, rxBase: 400, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
+    aiPowMin: 0.1, rxBase: 440, rxPow: 700, rxVal: 5, rxDist: 200, rxCounter: 90, rxTrait: 70, rxLate: 90, rxMin: 360, rxMax: 1000, rxEdge: 0.12,
     blockBase: 0.65,                                                  // Schuss geblockt, wenn ein Gegner ganz nah steht
     // Pass und Dribbling
     /* Dribbling: Raumgewinn in Feldeinheiten (perfekt mehr), aber nie näher ans Tor als dribStop. Jedes weitere Dribbling
@@ -94,6 +97,19 @@
        (mal dbHelp), der Stockbereich aber grösser (dbHelpBrush): An ihm kommt man selten ganz sauber vorbei. */
     dbHz: 60, dbLane: 118, dbFirst: 125, dbGap: 100, dbEnd: 55, dbVa: 211, dbVaVal: 0.8, dbAcc: 5.5, dbAdv: 38, dbAdvDelay: 0.5, dbAdvMax: 70, dbTime: 6,
     dbCore: 24, dbCoreP: 5, dbBrush: 12, dbVd: 87, dbVdP: 36, dbLag: 136, dbLagP: 100, dbHelp: 0.75, dbHelpBrush: 34,
+    /* Live-Szene (eigener Angriff in Echtzeit). Zeit in Sekunden, Wege in Feldeinheiten, Tempo pro Sekunde.
+       lvTime, lvTimeRush: Dauer einer Chance (Positionsangriff, Konter). Tempo: Mitspieler ohne Ball lvRun, Ballführender
+       lvDrib plus lvDribVal pro Punkt Dribbling über 60, Pass lvPass plus lvPassVal pro Punkt Pass über 60, Verteidiger
+       lvDef plus lvDefVal pro Punkt Zweikampf über 75. Verteidiger reagieren mit lvLag ms Verzögerung (lvLagVal weniger pro
+       Punkt), nehmen dem Ballführenden im Umkreis lvCore den Ball ab und fangen Pässe im Umkreis lvReach ab (plus
+       lvReachVal pro Punkt Antizipation über 75). Sie gehen in einen Passweg, wenn er näher als lvCut liegt. Der Gegenspieler
+       des Ballführenden greift nach lvPress Sekunden an (nach einer Annahme nach lvPressRecv), mit lvAttack mal seinem Tempo. lvCatch: so nah muss der Ball für die Annahme sein. lvOneT: so lange
+       nach der Annahme gilt ein Schuss als Direktschuss. lvWob: Radius der Laufwege, mit denen sich Mitspieler freilaufen.
+       lvEnRun: Energie pro Feldeinheit mit Ball. */
+    lvHz: 60, lvTime: 9, lvTimeRush: 6.5, lvRun: 128, lvDrib: 128, lvDribVal: 1.5, lvPass: 380, lvPassVal: 5, lvDef: 118, lvDefVal: 1.4,
+    lvLag: 300, lvLagVal: 5, lvCore: 15, lvReach: 15, lvReachVal: 0.25, lvCut: 30, lvPress: 1.3, lvPressRecv: 0.7, lvAttack: 0.75, lvCatch: 15, lvOneT: 1.0, lvWob: 30, lvEnRun: 0.05,
+    // Unaufmerksamkeit: Ein Verteidiger ohne Ball schaut immer wieder kurz nur auf den Ball und verliert seinen Mann (lvLapse: Schwelle bei Antizipation 75, lvLapseVal pro Punkt strenger)
+    lvLapse: 0.72, lvLapseVal: 0.012,
     /* Deckung: Wer gefährlich steht (näher als dangerDist am Tor), wird im Passweg gedeckt (denyAt: Anteil des Wegs zum
        Ball). Mit Wahrscheinlichkeit lateProb kommt sein Gegenspieler zu spät: Dann ist er frei. */
     dangerDist: 150, denyAt: 0.3, lateProb: 0.3,
@@ -359,6 +375,161 @@
     else if (a.type === 'pass') { const pi = passInfo(s, sc, X, a.to); p = 1 - pi.risk; by = pi.by; }
     else { const di = dribInfo(s, sc, X); p = di.p; by = di.by; }
     return { p, w: free ? 1 : clamp(zone(c, p) * (sc.boost || 1), c.barMin, c.barMax), pos: sc.bar.pos, start: sc.bar.start, by, free, sweep: Math.round(c.barSweep * tired(c, card(s, 'you', X))) };
+  }
+
+  // --- Live-Szene: der eigene Angriff in Echtzeit ---
+  /* Baut die Szene aus der laufenden Chance. pl: alle zehn Spieler mit Ort und ihren Werten für diese Szene. carrier: wer den
+     Ball hat (null, solange ein Pass fliegt). fly: der Pass in der Luft. path: wohin der Ballführende läuft. mark: wer wen
+     deckt. hist: Orte der letzten Schritte, damit Verteidiger verzögert reagieren. */
+  function liveInit(s) {
+    const sc = s.cur, c = s.cfg, boost = sc.boost || 1, pl = {}, fresh = x => 0.5 + 0.5 * tired(c, x);
+    players(s, 'you').forEach((x, i) => {
+      const p = P(sc, x.id);
+      pl[x.id] = { id: x.id, side: 'you', role: x.role, x: p[0], y: p[1], sp: c.lvRun * fresh(x), spBall: (c.lvDrib + (dribVal(x) - 60) * c.lvDribVal) * fresh(x) * Math.sqrt(boost), pass: (c.lvPass + (passVal(x) - 60) * c.lvPassVal) * (has(x, 'passer') ? 1.15 : 1) * Math.sqrt(boost), ph: i * 1.9 + sc.bar.start * 6 };
+    });
+    players(s, 'home').forEach(x => {
+      const p = P(sc, x.id), z = stanceVal(x, 'zwei');
+      pl[x.id] = { id: x.id, side: 'home', x: p[0], y: p[1], sp: (c.lvDef + (z - 75) * c.lvDefVal) * (sc.pressed ? 1.1 : 1) * fresh(x), core: c.lvCore * (has(x, 'kampf') ? 1.2 : 1), reach: (c.lvReach + (stanceVal(x, 'pass') - 75) * c.lvReachVal) * (has(x, 'anti') ? 1.3 : 1), lag: Math.max(4, Math.round((c.lvLag - (z - 75) * c.lvLagVal) / 1000 * c.lvHz)), lapse: clamp(c.lvLapse + (stanceVal(x, 'pass') - 75) * c.lvLapseVal, 0.5, 0.97), ph: (p[0] * 7 + p[1] * 3) % 6.283, tx: p[0], ty: p[1] };
+    });
+    return { t: 0, hz: c.lvHz, limit: Math.round((sc.kind === 'set' ? c.lvTime : c.lvTimeRush) * c.lvHz), done: false, out: null, kind: sc.kind, carrier: sc.carrier, fly: null, loose: null, path: null, pl, mark: Object.assign({}, sc.mark),
+      left: P(sc, sc.carrier)[0] < 180, last: null, grace: Math.round(c.lvPress * c.lvHz), pressAt: Math.round(c.lvPress * c.lvHz), helpAt: -99, hist: [], cost: {}, n: { pass: 0, passOk: 0, beat: 0 } };
+  }
+  const lvAtk = L => Object.keys(L.pl).filter(id => L.pl[id].side === 'you'), lvDef = L => Object.keys(L.pl).filter(id => L.pl[id].side === 'home');
+  const lvBall = L => (L.fly ? [L.fly.x, L.fly.y] : L.loose ? L.loose : L.carrier ? [L.pl[L.carrier].x, L.pl[L.carrier].y] : [180, 200]);
+  function lvStep(q, tx, ty, sp, dt) { const dx = tx - q.x, dy = ty - q.y, d = Math.hypot(dx, dy), st = sp * dt; if (d <= st || d < 0.01) { q.x = tx; q.y = ty; return d; } q.x += dx / d * st; q.y += dy / d * st; return st; }
+  /* Wie offen ist der Passweg vom Ballführenden zum Mitspieler id gerade? Kleinster Abstand eines Verteidigers zur Linie,
+     abzüglich seiner Reichweite und des Wegs, den er während des Flugs noch macht. Über 0: frei. */
+  function liveLane(L, id) {
+    const a = L.pl[L.carrier], b = L.pl[id]; if (!a || !b) return -99;
+    const fl = Math.hypot(b.x - a.x, b.y - a.y) / a.pass; let m = Infinity;
+    lvDef(L).forEach(k => { const d = L.pl[k], v = distSeg([d.x, d.y], [a.x, a.y], [b.x, b.y]) - d.reach - d.sp * Math.max(0, fl - d.lag / L.hz) * 0.6; if (v < m) m = v; });
+    return m;
+  }
+  // Lage und Blockgefahr für einen Schuss von Spieler id aus dem jetzigen Stand der Szene, dazu ob es ein Direktschuss wäre
+  function liveShot(s, L, id) {
+    const pos = {}; Object.keys(L.pl).forEach(k => { pos[k] = [L.pl[k].x, L.pl[k].y]; });
+    const si = shotInfo(s, Object.assign({}, s.cur, { pos }), id);
+    return { q: si.q, block: si.block, by: si.by, oneT: L.last && L.last.to === id && L.t - L.last.at <= s.cfg.lvOneT * L.hz ? L.last.lat : 0 };
+  }
+  /* Befehl aus der gezeichneten Linie. Nur wer den Ball am Stock hat, kann etwas tun.
+     { k: 'run', x, y } laufen, { k: 'pass', to } Pass zum Mitspieler, { k: 'shoot' } Schuss: die Szene endet, es folgt der Abschluss. */
+  function liveCmd(s, L, cmd) {
+    const c = s.cfg, car = L.carrier ? L.pl[L.carrier] : null; if (!car || L.fly || L.done || !cmd) return;
+    if (cmd.k === 'shoot') { L.done = true; L.out = { type: 'shot', x: L.carrier, oneT: L.last && L.last.to === L.carrier && L.t - L.last.at <= c.lvOneT * L.hz ? L.last.lat : 0 }; return; }
+    if (cmd.k === 'pass') {
+      const R = L.pl[cmd.to]; if (!R || R.side !== 'you' || cmd.to === L.carrier) return;
+      const len = Math.hypot(R.x - car.x, R.y - car.y) || 1;
+      L.fly = { x: car.x, y: car.y, sx: car.x, sy: car.y, tx: R.x, ty: R.y, v: car.pass, from: L.carrier, to: cmd.to, len, lat: clamp((R.x - car.x) / 160, -1, 1), t0: L.t };
+      L.n.pass++; L.cost[L.carrier] = (L.cost[L.carrier] || 0) + c.enPass; L.cost[cmd.to] = (L.cost[cmd.to] || 0) + c.enRecv; L.carrier = null; L.path = null; return;
+    }
+    if (cmd.k === 'run' && isFinite(cmd.x) && isFinite(cmd.y)) L.path = [clamp(+cmd.x, 24, 336), clamp(+cmd.y, 58, 392)];
+  }
+  /* Ein Schritt der Szene. Reihenfolge: Befehl, Ballführender läuft, Ball fliegt (Annahme oder abgefangen), Mitspieler laufen
+     sich frei, Verteidiger decken und stören mit Verzögerung, Zweikampf am Ball, Uhr. */
+  function liveTick(s, L, cmd) {
+    if (L.done) return L;
+    const c = s.cfg, dt = 1 / L.hz, atk = lvAtk(L), def = lvDef(L);
+    if (cmd) liveCmd(s, L, cmd);
+    if (L.done) return L;
+    const car = L.carrier ? L.pl[L.carrier] : null;
+    if (car) {
+      if (L.path) { const d = lvStep(car, L.path[0], L.path[1], car.spBall, dt); L.cost[car.id] = (L.cost[car.id] || 0) + d * c.lvEnRun; if (car.x === L.path[0] && car.y === L.path[1]) L.path = null; }
+      if (car.x < 172) L.left = true; else if (car.x > 188) L.left = false;
+    }
+    // Ball in der Luft
+    if (L.fly) {
+      const f = L.fly, dx = f.tx - f.sx, dy = f.ty - f.sy, st = f.v * dt, done = Math.hypot(f.x - f.sx, f.y - f.sy) + st;
+      f.x = f.sx + dx / f.len * Math.min(done, f.len + 40); f.y = f.sy + dy / f.len * Math.min(done, f.len + 40);
+      let got = null;
+      for (let i = 0; i < def.length && !got; i++) { const d = L.pl[def[i]]; if (Math.hypot(d.x - f.x, d.y - f.y) < d.reach) got = d.id; }
+      if (got) { L.done = true; L.out = { type: 'lost', how: 'pass', by: got, x: f.from, gross: done < f.len * 0.35 }; return L; }
+      for (let i = 0; i < atk.length; i++) { const a = L.pl[atk[i]]; if (a.id !== f.from && Math.hypot(a.x - f.x, a.y - f.y) < c.lvCatch) { L.carrier = a.id; L.last = { type: 'pass', to: a.id, lat: f.lat, at: L.t }; L.fly = null; L.grace = 16; L.pressAt = L.t + Math.round(c.lvPressRecv * L.hz); L.n.passOk++; break; } }
+      if (L.fly && done >= f.len + 40) { L.loose = [f.x, f.y]; L.fly = null; }      // niemand war da: freier Ball
+    }
+    // Freier Ball: der Nächste holt ihn
+    if (L.loose) {
+      let best = null, bd = Infinity; Object.keys(L.pl).forEach(k => { const q = L.pl[k], d = Math.hypot(q.x - L.loose[0], q.y - L.loose[1]); if (d < bd) { bd = d; best = q; } });
+      if (bd < 12) { if (best.side === 'you') { L.carrier = best.id; L.loose = null; L.grace = 10; L.pressAt = L.t + Math.round(c.lvPressRecv * L.hz); L.n.passOk++; } else { L.done = true; L.out = { type: 'lost', how: 'loose', by: best.id, x: null, gross: false }; return L; } }
+    }
+    const ball = lvBall(L), snap = { ball }; atk.forEach(id => { snap[id] = [L.pl[id].x, L.pl[id].y]; }); L.hist.push(snap);
+    // Mitspieler ohne Ball: auf ihre Plätze, mit kleinen Laufwegen, um sich freizulaufen. Der Angespielte läuft dem Ball entgegen.
+    atk.forEach(id => {
+      if (id === L.carrier) return; const a = L.pl[id];
+      if (L.fly && L.fly.to === id) { lvStep(a, L.fly.tx, L.fly.ty, a.sp, dt); return; }
+      if (L.loose) { lvStep(a, L.loose[0], L.loose[1], a.sp, dt); return; }
+      const sp = spotOf(a.role, L.left), w = L.t / L.hz * 2.3 + a.ph, far = Math.hypot(sp[0] - GOAL[0], sp[1] - GOAL[1]) > 170 ? 0.4 : 1;
+      lvStep(a, clamp(sp[0] + Math.cos(w) * c.lvWob * far, 28, 332), clamp(sp[1] + Math.sin(w * 1.3) * c.lvWob * 0.8 * far, 70, 380), a.sp * 0.9, dt);
+    });
+    // Hilfe: Ist der Ballführende an seinem Gegenspieler vorbei, stellt sich ihm der nächste Verteidiger in den Weg; dessen Mann wird frei
+    if (car && L.t - L.helpAt > 36) {
+      const m = L.pl[L.mark[car.id]];
+      if (m && Math.hypot(car.x - GOAL[0], car.y - GOAL[1]) < Math.hypot(m.x - GOAL[0], m.y - GOAL[1]) - 10 && Math.hypot(car.x - m.x, car.y - m.y) > 22) {
+        let h = null, hd = c.helpRange; def.forEach(k => { if (k === m.id) return; const d = Math.hypot(L.pl[k].x - car.x, L.pl[k].y - car.y); if (d < hd) { hd = d; h = k; } });
+        if (h) { atk.forEach(a => { if (L.mark[a] === h && a !== car.id) L.mark[a] = m.id; }); L.mark[car.id] = h; L.helpAt = L.t; L.n.beat++; }
+        else if (L.helpAt < 0) { L.helpAt = L.t; L.n.beat++; }
+      }
+    }
+    // Verteidiger
+    const press = L.t > L.pressAt, sec = L.t / L.hz;
+    def.forEach(k => {
+      const d = L.pl[k], old = L.hist[Math.max(0, L.hist.length - 1 - d.lag)], ob = old.ball; let tx = d.x, ty = d.y, sp = d.sp;
+      const mine = atk.filter(a => L.mark[a] === k), tgt = mine.indexOf(L.carrier) !== -1 ? L.carrier : mine.sort((a, b) => Math.hypot(old[a][0] - GOAL[0], old[a][1] - GOAL[1]) - Math.hypot(old[b][0] - GOAL[0], old[b][1] - GOAL[1]))[0];
+      if (L.fly) {
+        // Pass unterwegs: Wer nah an der Bahn steht, geht dazwischen. Der Gegenspieler des Angespielten rückt zu ihm.
+        const f = L.fly, ux = (f.tx - f.sx) / f.len, uy = (f.ty - f.sy) / f.len, along = clamp((d.x - f.sx) * ux + (d.y - f.sy) * uy, 0, f.len), qx = f.sx + ux * along, qy = f.sy + uy * along, off = Math.hypot(d.x - qx, d.y - qy), flown = Math.hypot(f.x - f.sx, f.y - f.sy);
+        if (L.t - f.t0 < d.lag) { tx = d.tx; ty = d.ty; }                         // er braucht einen Moment, bis er den Pass erkennt
+        else if (off < c.lvCut && along > flown) { tx = qx; ty = qy; } else if (tgt === f.to) { tx = f.tx + (GOAL[0] - f.tx) * 0.1; ty = f.ty + (GOAL[1] - f.ty) * 0.1; }
+      } else if (L.loose) { tx = L.loose[0]; ty = L.loose[1]; }
+      else if (tgt && tgt === L.carrier) {
+        // Am Ballführenden: erst torseitig vor ihn, dann greift er an
+        const cx = old[tgt][0], cy = old[tgt][1], dg = Math.hypot(cx - GOAL[0], cy - GOAL[1]) || 1;
+        if (press) { tx = cx; ty = cy; sp *= c.lvAttack; } else { tx = cx + (GOAL[0] - cx) * 32 / dg; ty = cy + (GOAL[1] - cy) * 32 / dg; }
+      } else if (tgt && Math.sin(sec * 1.9 + d.ph) > d.lapse) { tx = d.tx; ty = d.ty; }      // unaufmerksam: Er schaut nur auf den Ball und bleibt stehen
+      else if (tgt) {
+        // Ohne Ball: Wer gefährlich steht, wird im Passweg gedeckt, die anderen locker torseitig
+        const ax = old[tgt][0], ay = old[tgt][1];
+        if (Math.hypot(ax - GOAL[0], ay - GOAL[1]) > c.dangerDist) { tx = ax + (GOAL[0] - ax) * 0.36; ty = ay + (GOAL[1] - ay) * 0.36; }
+        else { const px = ax + (ob[0] - ax) * c.denyAt, py = ay + (ob[1] - ay) * c.denyAt; tx = px + (GOAL[0] - px) * 0.1; ty = py + (GOAL[1] - py) * 0.1; }
+        sp *= 0.9;
+      } else { tx = d.x + (GOAL[0] - d.x) * 0.02; ty = d.y + (150 - d.y) * 0.02; }
+      d.tx = tx; d.ty = ty; lvStep(d, tx, ty, sp, dt);
+    });
+    // Zweikampf: Kommt ein Verteidiger an den Ballführenden, ist der Ball weg. Wer in ihn hineinläuft, lädt zum Konter ein.
+    if (L.grace > 0) L.grace--;
+    else if (car) {
+      for (let i = 0; i < def.length; i++) {
+        const d = L.pl[def[i]];
+        if (Math.hypot(d.x - car.x, d.y - car.y) < d.core) { const into = L.path ? ((L.path[0] - car.x) * (d.x - car.x) + (L.path[1] - car.y) * (d.y - car.y)) / ((Math.hypot(L.path[0] - car.x, L.path[1] - car.y) || 1) * (Math.hypot(d.x - car.x, d.y - car.y) || 1)) : 0; L.done = true; L.out = { type: 'lost', how: 'tackle', by: d.id, x: car.id, gross: into > 0.75 }; return L; }
+      }
+    }
+    if (++L.t >= L.limit) { L.done = true; L.out = { type: 'time', x: L.carrier, by: L.carrier ? L.mark[L.carrier] : null }; }
+    return L;
+  }
+  // Spielt eine ganze Szene nach. cmds: Befehle mit dem Schritt t, in dem sie kamen, aufsteigend
+  function liveRun(s, cmds) {
+    const L = liveInit(s), list = (cmds || []).filter(x => x && typeof x.t === 'number').slice(0, 400); let i = 0;
+    while (!L.done) { let cmd = null; while (i < list.length && list[i].t <= L.t) { cmd = list[i]; i++; } liveTick(s, L, cmd); }
+    return L;
+  }
+  /* Wendet eine gespielte Live-Szene an: Orte, Energie und Statistik übernehmen, dann Schuss (es folgt der Abschluss vor dem
+     Tor), Ballverlust (bei einem groben Fehler Konter) oder Zeit abgelaufen. */
+  function liveAction(s, rng, ev, a) {
+    const sc = s.cur, c = s.cfg; if (!Array.isArray(a.cmds)) return false;
+    const L = liveRun(s, a.cmds), o = L.out;
+    Object.keys(L.pl).forEach(id => { sc.pos[id] = [L.pl[id].x, L.pl[id].y]; });
+    Object.keys(L.cost).forEach(id => drain(card(s, 'you', id), L.cost[id]));
+    Object.keys(L.mark).forEach(k => { sc.mark[k] = L.mark[k]; });
+    s.stats.passes += L.n.pass; s.stats.passOk += L.n.passOk; s.stats.dribbles += L.n.beat; s.stats.dribOk += L.n.beat;
+    if (o.type === 'shot') {
+      sc.carrier = o.x; sc.last = o.oneT ? { type: 'pass', to: o.x, lat: o.oneT } : null;
+      const me = card(s, 'you', o.x), sh = shotInfo(s, sc, o.x), D = card(s, 'home', sh.by);
+      ev.push({ t: 'shootStart', live: true, x: o.x, q: sh.q, block: sh.block, by: sh.by, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
+      setShot(s, rng, 'you', o.x, sh.q, sc.counter ? 'counter' : 'attack', { block: sh.block, by: sh.by, oneT: o.oneT }); return;
+    }
+    if (o.x) sc.carrier = o.x;
+    ev.push({ t: 'live', out: o.type, how: o.how || null, by: o.by || null, x: o.x || null, gross: !!o.gross });
+    if (o.type === 'lost') return lost(s, rng, ev, o.by, o.gross || s.fx.you.empty);
+    endScene(s, ev, 'lost');
   }
 
   // --- Dribbling-Parcours ---
@@ -802,7 +973,8 @@
 
   /* Einziger Einstieg für Eingaben. Gibt einen neuen Zustand und die Ereignisse zurück, der alte bleibt unverändert.
      hit ist die Stelle des Strichs auf dem Timing-Balken beim Tippen (0 bis 1), siehe contest().
-     Angriff:  { type: 'shoot' } | { type: 'pass', to, hit } | { type: 'dribble', run }
+     Angriff live: { type: 'live', cmds } die gespielte Szene: Befehle mit Schritt, siehe liveCmd und liveRun
+     Angriff in Schritten: { type: 'shoot' } | { type: 'pass', to, hit } | { type: 'dribble', run }
                run: der Lauf durch den Dribbling-Parcours, pro Schritt die gewischte Richtung x und y in Hundertsteln,
                siehe dribCourse, dribTick und dribRun
      Abwehr:   { type: 'defend', hit }
@@ -819,6 +991,7 @@
     if (a.type === 'tactic') { if (TACTICS[a.value] && s.phase !== 'end') s.tactic.you = a.value; else ok = false; }
     else if (a.type === 'line') { const T = s.teams.you; if (T.bench && (a.value === 0 || a.value === 1) && s.phase !== 'end' && !s.pen) T.want = a.value; else ok = false; }
     else if (a.type === 'card') ok = useCard(s, 'you', a.id, ev);
+    else if (s.phase === 'decide' && s.cur.type === 'att' && a.type === 'live') ok = liveAction(s, rng, ev, a) !== false;
     else if (s.phase === 'decide' && s.cur.type === 'att' && ['shoot', 'pass', 'dribble'].indexOf(a.type) !== -1) ok = attAction(s, rng, ev, a) !== false;
     else if (s.phase === 'decide' && s.cur.type === 'def' && a.type === 'defend') ok = defAction(s, rng, ev, a) !== false;
     else if (s.phase === 'aim' && a.type === 'aim') ok = shoot(s, rng, ev, a) !== false;
@@ -827,5 +1000,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, liveInit, liveTick, liveRun, liveLane, liveShot, spotOf, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

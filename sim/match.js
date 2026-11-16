@@ -56,6 +56,53 @@ function chance(pf, s, sc, id, from) {
   sides.forEach(sg => TG.forEach(g => { const tg = [sg * g[0], g[1]]; if (!goal(tg, 0)) return; const p = (erf(edge(tg, 1) / (sd * Math.SQRT2)) + erf(edge(tg, -1) / (sd * Math.SQRT2))) / 2; if (p > best) best = p; }));
   return clamp(best * 0.9, 0.02, 0.95);
 }
+/* Modell-Spieler in der Live-Szene. Er schaut alle paar Zehntelsekunden hin und entscheidet: schiessen, wenn die Lage gut
+   und die Schussbahn frei ist (oder die Zeit abläuft); sonst den Mitspieler anspielen, der gefährlich steht und dessen
+   Passweg offen aussieht; sonst mit dem Ball dorthin laufen, wo Platz ist und es näher zum Tor geht; wird es eng und
+   nichts geht, ein sicherer Rückpass. Zwischen Entscheid und Ausführung liegt seine Verzögerung (vis), und er schätzt
+   Passwege ungenau: so entstehen Fehlpässe. Gibt die Befehle der Szene zurück. */
+function livePlay(s, pf, r) {
+  // Gezeichnet wird in Zeitlupe: Vom Entscheid bis zum Loslassen vergeht in der Szene nur ein Bruchteil der eigenen Verzögerung
+  const L = M.liveInit(s), cmds = [], vis = Math.round(pf.vis * 0.35 / 1000 * L.hz), G = M.GOAL;
+  const first = Math.round((0.3 + r() * 0.3) * L.hz); let next = first, pend = null;
+  const defs = () => Object.keys(L.pl).filter(k => L.pl[k].side === 'home').map(k => L.pl[k]);
+  const segD = (d, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, t = clamp(((d.x - a[0]) * dx + (d.y - a[1]) * dy) / l, 0, 1); return Math.hypot(d.x - a[0] - t * dx, d.y - a[1] - t * dy); };
+  while (!L.done) {
+    let cmd = null;
+    if (pend && L.t >= pend.at) { cmd = pend.cmd; pend = null; }
+    if (!pend && !cmd && L.carrier && !L.fly && L.t % 4 === 0 && L.t >= first) {
+      const car = L.pl[L.carrier], sh = M.liveShot(s, L, L.carrier), left = (L.limit - L.t) / L.hz, D = defs(), near = Math.min.apply(null, D.map(d => Math.hypot(d.x - car.x, d.y - car.y))); let pick = null;
+      // Immer wach: Schuss aus guter Lage und Pass auf den freien, gefährlich stehenden Mitspieler
+      if (left < 1.1 || (sh.q >= 0.6 && sh.block < 0.25) || (sh.oneT && sh.q >= 0.5 && sh.block < 0.3)) pick = { k: 'shoot' };
+      if (!pick) {
+        let best = null, bv = 0.45;
+        Object.keys(L.pl).forEach(k => { const a = L.pl[k]; if (a.side !== 'you' || k === L.carrier) return; const lane = M.liveLane(L, k) + gauss(r) * 7 * pf.s / 70; if (lane <= 9) return; const q = M.liveShot(s, L, k).q, v = q + 0.25 * Math.abs(clamp((a.x - car.x) / 160, -1, 1)); if (q >= 0.45 && v > bv) { bv = v; best = k; } });
+        if (best) pick = { k: 'pass', to: best };
+      }
+      if (!pick && L.t >= next) {
+        // Sonst alle paar Zehntelsekunden: mit dem Ball dorthin, wo Platz ist (weg von den Gegnern), eher Richtung Tor als zurück
+        let bo = null, bs = -Infinity;
+        for (let o = 0; o < 8; o++) {
+          const ang = o * Math.PI / 4, tx = clamp(car.x + Math.cos(ang) * 52, 30, 330), ty = clamp(car.y + Math.sin(ang) * 52, 84, 380);
+          const way = Math.min.apply(null, D.map(d => segD(d, [car.x, car.y], [tx, ty]) - d.core)), room = Math.min.apply(null, D.map(d => Math.hypot(d.x - tx, d.y - ty)));
+          const sc_ = (way < 14 ? -3 : 0) + 1.6 * Math.min(room, 80) / 80 - Math.hypot(tx - G[0], ty - (G[1] + 70)) / 260 + r() * 0.15;
+          if (sc_ > bs) { bs = sc_; bo = [tx, ty]; }
+        }
+        if (bs > -1.5) pick = { k: 'run', x: Math.round(bo[0]), y: Math.round(bo[1]) };
+        if (!pick || near < 26) {
+          // eng und kein Weg: sicherer Rückpass, sonst Schuss
+          let back = null, bl = 12; Object.keys(L.pl).forEach(k => { const a = L.pl[k]; if (a.side !== 'you' || k === L.carrier) return; const lane = M.liveLane(L, k) + gauss(r) * 5 * pf.s / 70; if (lane > bl) { bl = lane; back = k; } });
+          if (back) pick = { k: 'pass', to: back }; else if (!pick) pick = { k: 'shoot' };
+        }
+        next = L.t + vis + Math.round((0.25 + r() * 0.2) * L.hz);
+      }
+      if (pick) pend = { at: L.t + vis, cmd: pick };
+    }
+    if (cmd) { if (L.carrier && !L.fly) cmds.push(Object.assign({ t: L.t }, cmd)); else cmd = null; }
+    M.liveTick(s, L, cmd);
+  }
+  return { cmds, L };
+}
 /* Modell-Spieler im Dribbling-Parcours. Er wischt nach vorne und lenkt seitlich: Bei jedem Verteidiger täuscht er zur einen
    Seite an und zieht dann zur anderen, wo mehr Platz ist, so spät, wie er es sich mit seinem Timing zutraut. Er sieht die
    Verteidiger mit seiner Verzögerung (vis). Gibt den Lauf (gewischte Richtung pro Schritt) und den Endzustand zurück. */
@@ -110,6 +157,7 @@ function coach(s, style) {
 function policy(pf, style) {
   return (s, r) => {
     const sc = s.cur, tap = (pos, sweep) => clamp(pos + gauss(r) * pf.s / sweep, 0, 1);
+    if (s.phase === 'decide' && sc.type === 'att' && !(style && style.steps)) return { type: 'live', cmds: livePlay(s, pf, r).cmds };      // der Angriff läuft live
     if (s.phase === 'decide' && sc.type === 'att') {
       const X = sc.carrier, last = sc.step >= sc.max - 1;
       const val = a => { const c = M.contest(s, a); return c.free ? 1 : pHit(pf, c.w, c.sweep); };
@@ -149,7 +197,7 @@ function play(squad, opp, pol, n, seed, cfg, tactic) {
   }
   return m;
 }
-module.exports = { box, PROFILES, STYLE, policy, coach, dribPlay, dribOdds, play, shift, shotPlan, tapTime, chance, gauss };
+module.exports = { box, PROFILES, STYLE, policy, coach, livePlay, dribPlay, dribOdds, play, shift, shotPlan, tapTime, chance, gauss };
 if (require.main === module) {
   const n = +process.argv[2] || 1500, cfg = JSON.parse(JSON.stringify(M.CFG));
   process.argv.slice(3).forEach(kv => { const [k, v] = kv.split('='); cfg[k] = +v; });

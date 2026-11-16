@@ -56,6 +56,21 @@ Wirkung der Taktik für den mittleren Modell-Spieler (zwei Linien um 81 und 76 g
 
 Auch die Gegner haben Karten (WASA nur ein Time-out, GC drei). Nimmt der Gegner den Goalie raus, schiesst du aufs leere Tor.
 
+**Der eigene Angriff läuft live auf dem Feld.** Es gibt keine Aktionsliste und keinen Timing-Balken mehr für Pass und Dribbling. Die Chance läuft als durchgehende Szene von oben, und du zeichnest vom Ball aus eine Linie:
+
+- **Zum Mitspieler:** Pass. Die Linie ist grün, wenn der Weg frei ist, gelb, wenn es eng wird, rot, wenn ein Gegner dazwischenkommt.
+- **Ins Tor:** Schuss. Es folgt der Abschluss vor dem Tor wie bisher (Ziel setzen, Schuss-Balken, Goalie). Direkt nach einem Querpass steht der Goalie noch falsch.
+- **In den freien Raum:** Der Ballführende läuft dorthin.
+- **Zeitlupe:** Solange der Finger aufliegt, läuft die Szene mit gut einem Fünftel des Tempos. Ein Befehl, der während eines Passes gezeichnet wird, gilt für den, der den Ball annimmt: So geht der Direktschuss.
+- **Was sich bewegt:** Die Mitspieler laufen auf ihre Plätze (Slot, zweiter Pfosten, Bande, hinten) und laufen sich dort in kleinen Bögen frei. Die Verteidiger decken mit Verzögerung, stellen Passwege zu und sind immer wieder kurz unaufmerksam: Dann erscheint beim Mitspieler ein grüner Ring mit «FREI». Der Gegenspieler des Ballführenden greift nach gut einer Sekunde an; wer an ihm vorbei ist, zieht den nächsten Verteidiger an, dessen Mann frei wird.
+- **Ballverlust:** Kommt ein Verteidiger an den Ballführenden (roter Kreis), ist der Ball weg, ebenso wenn ein Pass durch die Reichweite eines Verteidigers geht. Wer in einen Gegner hineinläuft oder ihm den Ball direkt in den Stock spielt, lädt zum Konter ein. Oben läuft die Zeit: neun Sekunden im Positionsangriff, sechseinhalb im Konter.
+- **Karten:** Dribbling bestimmt das Tempo mit Ball, Pass das Tempo des Balls, Zweikampf und Antizipation der Gegner ihr Tempo, ihre Reaktion, ihre Reichweite und wie selten sie unaufmerksam sind. Müde Spieler sind langsamer.
+- **Technik:** Die Szene wird in festen Schritten gerechnet (`liveTick` in `src/lab/match.js`). Der Bildschirm rechnet mit derselben Funktion; die Befehle gehen mit ihrem Schritt an die Engine, die die Szene nachspielt.
+
+Die Abwehr läuft noch wie vorher (Timing-Balken, dann Parade). Die folgenden Abschnitte zu Passwegen, Dribbling-Parcours und Spielweisen beschreiben die ältere Form in Schritten; sie steckt noch in der Engine (für Tests), wird im Spiel aber nicht mehr gezeigt.
+
+Simulation der Live-Szene mit dem mittleren Modell-Spieler bei gleichen Karten: 81 % der Chancen enden mit einem Schuss, 16 % mit einem abgefangenen Pass, 3 % im Zweikampf; 78 % der Pässe kommen an, 41 % der Schüsse sind Direktschüsse, eine Szene dauert im Schnitt gut zwei Sekunden.
+
 **Angriff mit Spielzügen.** Früher war «dreimal dribbeln, dann schiessen» die beste Spielweise, Pässe brachten nichts. Jetzt hat jede Aktion ihren Zweck:
 
 - **Aufstellung:** Im Positionsangriff steht der Ballführende an der Bande, in der Mitte oder hinten. Der Center läuft in den Slot, der ballferne Flügel an den zweiten Pfosten, der ballnahe bleibt als Anspielstation, die Verteidiger sichern. Die Gegner decken gefährliche Spieler im Passweg. Kommt einer zu spät, ist sein Mann frei: grüner Ring und Schild «FREI» auf dem Feld, der Pass steht zuoberst in der Liste.
@@ -103,13 +118,13 @@ Torquote eines Schusses für den mittleren Modell-Spieler, nach Abschlusswert un
 
 Ein müder Schütze (Energie 30) trifft aus der Nähe statt 31, 45, 62 und 70 % noch 24, 35, 47 und 57 %.
 
-Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 300 Matches je Feld, Siegquote:
+Abgestimmt ist das Match so, dass eine Stufe Können etwa sechs Kartenpunkte wert ist. Simulation mit zwei Linien und den drei Start-Taktikkarten, mit drei Modell-Spielern (Streuung beim Tippen 45, 70 und 105 ms, Zielfehler im Tor 3, 5 und 8 % der halben Torbreite, der mittlere und der schwache schauen dem Schuss-Balken einen halben und einen ganzen Durchlauf länger zu, Reaktionszeit 480, 560 und 650 ms), erste Linie um 81 und zweite um 76 gegen WASA (81 und 76), normale Taktik, 250 Matches je Feld, mit dem Angriff als Live-Szene, Siegquote:
 
 | Spieler | Karten −12 | −6 | gleich | +6 | +12 |
 |---|---|---|---|---|---|
-| stark | 36 % | 63 % | 93 % | 99 % | 100 % |
-| mittel | 4 % | 12 % | 46 % | 77 % | 95 % |
-| schwach | 0 % | 2 % | 6 % | 29 % | 59 % |
+| stark | 21 % | 56 % | 86 % | 98 % | 100 % |
+| mittel | 2 % | 14 % | 46 % | 77 % | 93 % |
+| schwach | 1 % | 1 % | 7 % | 22 % | 49 % |
 
 Die Profile sind Annahmen, keine Messung. `node sim/match.js` rechnet die Tabelle gegen Köniz nach; die Werte stehen in `CFG` in `src/lab/match.js`.
 

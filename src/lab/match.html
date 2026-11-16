@@ -115,6 +115,20 @@
 .kreach.hot{stroke:#ff8a8a;stroke-width:2.2}
 .tbov.hot{border-color:#ff8a8a;animation:tbhot .45s ease-in-out infinite alternate}
 @keyframes tbhot{to{box-shadow:0 0 0 4px rgba(255,138,138,.35)}}
+/* Live-Szene: Linie zeichnen auf dem Feld, Zeitlupe solange der Finger aufliegt */
+.stage.livemode{touch-action:none;cursor:crosshair}
+.stage.livemode #pls .pl[data-side="home"] .lab{display:none}
+.live-bar{position:absolute;left:10px;right:10px;top:9px;z-index:6;height:6px;border-radius:3px;background:rgba(5,8,24,.7);overflow:hidden;pointer-events:none}
+.live-bar i{display:block;height:100%;width:100%;background:var(--gold)}
+.slowlab{display:none;position:absolute;left:50%;top:22px;z-index:6;margin:0;transform:translateX(-50%);padding:3px 9px 2px;border-radius:999px;background:rgba(5,8,24,.85);border:1px solid var(--gold);font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);pointer-events:none}
+.stage.slowmo .slowlab{display:block}
+.stage.slowmo::after{content:"";display:block;position:absolute;inset:0;z-index:4;pointer-events:none;box-shadow:inset 0 0 0 3px rgba(247,215,116,.7),inset 0 0 60px rgba(5,8,24,.55)}
+#pitch .livelab{font-family:'Saira Condensed','Arial Narrow',sans-serif;font-weight:800;font-size:15px;letter-spacing:.08em;text-transform:uppercase;paint-order:stroke;stroke:#050818;stroke-width:4px}
+.livehelp{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.livehelp li{position:relative;padding:8px 10px 8px 40px;border-radius:10px;border:1px solid var(--line);background:#070b1f;font-size:12.5px;line-height:1.3;color:var(--mute)}
+.livehelp b{display:block;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--ice);line-height:1.1}
+.livehelp .k{position:absolute;left:11px;top:50%;width:18px;height:18px;margin-top:-9px;border-radius:50%;border:3px solid #34d399}
+.livehelp .k.shot{border-color:var(--gold)}.livehelp .k.run{border-color:#fff;border-style:dotted}
 /* Dribbling-Parcours: Bahn von oben, gesteuert mit dem Finger */
 .dribview{position:absolute;inset:0;z-index:5;touch-action:none;cursor:grab}
 .drib-timer{position:absolute;left:8px;right:8px;top:62px;height:5px;border-radius:3px;background:rgba(5,8,24,.7);overflow:hidden;pointer-events:none}
@@ -310,6 +324,8 @@
       <ellipse id="mball-s" rx="5" ry="3" fill="#000" opacity=".3"/><circle id="mball" r="4.8" fill="url(#ballg)" stroke="#050818" stroke-width="1.3"/>
     </svg>
     <div class="vignette" id="vignette"></div>
+    <div class="live-bar" id="live-bar" hidden><i id="live-time"></i></div>
+    <p class="slowlab" aria-hidden="true">Zeitlupe</p>
     <div class="dribview" id="dribview" hidden>
       <svg viewBox="0 0 360 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect x="-200" y="-50" width="760" height="900" fill="url(#floorg)"/><rect x="-200" y="-50" width="760" height="900" fill="url(#planks)"/><ellipse cx="200" cy="220" rx="190" ry="130" fill="url(#gloss)"/><g id="drib-g"></g></svg>
       <p class="drib-top" id="drib-top"></p>

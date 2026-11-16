@@ -28,6 +28,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
+          if (document.getElementById('stage').classList.contains('livemode')) return 'live';
           if (v(document.getElementById('dribview'))) return document.getElementById('drib-msg').hidden ? 'drib' : 'wait';
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
           if (document.getElementById('goalview').dataset.aim === '1' && !document.getElementById('goalview').hidden) return 'aim';
@@ -43,6 +44,20 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (Math.random() < 0.25) await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
           else await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')]; l[Math.floor(Math.random() * l.length)].click(); });
           await p.waitForTimeout(40); continue;
+        }
+        if (st === 'live') {
+          // Live-Szene: Linien zeichnen. Mal zu einem Mitspieler (lieber zu einem freien), mal ins Tor, mal in den freien Raum; mal kurz halten (Zeitlupe).
+          await snap('01-live'); await over('live'); n++;
+          const r = await p.locator('#stage').boundingBox();
+          for (let k = 0; k < 14; k++) {
+            if (!(await p.evaluate(() => document.getElementById('stage').classList.contains('livemode')))) break;
+            const m = await p.evaluate(() => [...document.querySelectorAll('#pls .pl[data-side="you"]')].filter(e => e.querySelector('.carrier-ring').getAttribute('visibility') !== 'visible').map(e => { const b = e.querySelector('.body').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }));
+            const x = Math.random(), to = x < 0.45 && m.length ? m[Math.floor(Math.random() * m.length)] : x < 0.75 ? [r.x + r.width * 0.5, r.y + r.height * 0.07] : [r.x + r.width * (0.15 + Math.random() * 0.7), r.y + r.height * (0.25 + Math.random() * 0.45)];
+            await p.mouse.move(r.x + r.width * 0.5, r.y + r.height * 0.7); await p.mouse.down(); await p.mouse.move(to[0], to[1], { steps: 3 });
+            if (Math.random() < 0.4) { await p.waitForTimeout(260); await snap('01-live-zeitlupe'); }
+            await p.mouse.up(); await p.waitForTimeout(250 + Math.random() * 500);
+          }
+          continue;
         }
         if (st === 'drib') {
           // Dribbling-Parcours: wischen. Erst nach vorne, dann schräg zur einen Seite, dann zur anderen, danach weiter nach vorne.
@@ -104,7 +119,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    const missing = ['live', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].filter(k => !seen[k]); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();
