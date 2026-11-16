@@ -291,6 +291,11 @@ body.lock{overflow:hidden}
 .sheet-trait svg{flex-shrink:0;width:26px;height:26px;fill:none;stroke:var(--gold);stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
 .sheet-trait svg .f{fill:var(--gold);stroke:none}
 .sheet-trait b{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+/* Lieblingsschuss der Karte: wie die Spezialfähigkeit, aber in Grün */
+.sheet-fav{background:#06231b;border-color:#1f6a52;color:#c9f5e4}
+.sheet-fav svg{stroke:#6ff0c0}
+.sheet-fav svg .f{fill:#6ff0c0}
+.sheet-fav b{color:#6ff0c0}
 @media (prefers-reduced-motion:reduce){.pk-shine,.po-hand i,.po-rays::before,.pc.glow .pc-back .hc{animation:none}}
 
 /* Zweite Linie und Taktikkarten */

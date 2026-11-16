@@ -268,6 +268,31 @@
 .tcp .tc{height:100%}
 .dots{flex-wrap:wrap;justify-content:center;max-width:150px;min-height:10px}
 /*__STORECSS__*/
+/* Schussarten: drei Knöpfe beim eigenen Schuss, die gewählte grün, «Tipp» für die empfohlene; Ansage beim Schuss des Gegners */
+.styles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sty{min-width:0;min-height:96px;border:1px solid var(--line);border-radius:12px;background:#101a45;display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:8px 9px;text-align:left;font-family:var(--display);text-transform:uppercase;overflow:hidden}
+.sty:hover{border-color:var(--mute)}
+.sty .top{display:flex;align-items:center;justify-content:space-between}
+.sty .top .ic{color:var(--gold)}
+.sty .top .ic svg{width:20px;height:20px}
+.sty .pct{font-family:var(--display);font-weight:800;font-size:18px;line-height:1;color:var(--gold);font-variant-numeric:tabular-nums}
+.sty b{font-weight:800;font-size:15px;letter-spacing:.03em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sty small{font-family:var(--body);font-weight:500;font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--mute);line-height:1.2}
+.sty small em{font-style:normal;font-weight:700}
+.sty small em.bad{color:#ff8a8a}
+.sty .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:auto}
+.sty .tags .tr{margin-left:0}
+.sty.on{border-color:#34d399;border-width:2px;padding:7px 8px;background:#06231b;box-shadow:0 0 0 3px rgba(52,211,153,.25)}
+.sty.on b,.sty.on .top .ic{color:#6ff0c0}
+.sty-note{font-size:13px;line-height:1.35;color:var(--mute)}
+.sty-note b{color:var(--ice);font-weight:700}
+.sty-note .tr{margin-left:2px}
+.tr.fav{background:#6ff0c0;color:#03130c}
+.tell{display:flex;align-items:center;gap:6px}
+.tell .ic svg{width:18px;height:18px;stroke-width:3.2}
+.tell.sty-slap{background:#ff8a8a}
+.tell.sty-drag{background:#6ff0c0}
+.stage.live3d .tell{top:auto;bottom:10px}
 </style>
 </head>
 <body>
@@ -508,6 +533,7 @@
     <p class="sheet-meta" id="sheet-meta"></p>
     <ul class="bars" id="sheet-bars"></ul>
     <p class="sheet-trait" id="sheet-trait" hidden></p>
+    <p class="sheet-trait sheet-fav" id="sheet-fav"></p>
     <button type="button" class="cta" id="sheet-do"></button>
   </div>
 </div>

@@ -23,6 +23,10 @@
    Schützen läuft der Strich schneller. Der Goalie steht in der Mitte und hält, was in seiner Reichweite landet: aus der
    Distanz fast alles ausser den Ecken, aus der Nähe viel weniger. Sobald das Ziel steht, ahnt er die Ecke und rückt
    langsam dorthin: Wer lange wartet, findet die Ecke zu.
+   Schussarten: Jeder Schuss ist ein Schlagschuss (hart, aber langes Ausholen: am besten aus der Distanz und direkt nach
+   einem Querpass), ein Handgelenkschuss (schnell und genau: aus der Nähe und mit einem Gegner am Mann) oder ein Zugschuss
+   (der Ball wird am Stock eines Gegners in der Schussbahn vorbeigezogen, der Goalie steht noch auf der alten Seite). Die
+   passende Art ist eingestellt, der User kann eine andere wählen. Jeder Spieler hat einen Lieblingsschuss (siehe STYLES).
    Linien: Jedes Team hat zwei Linien zu fünf Feldspielern. Eine steht auf dem Feld, die andere erholt sich auf der Bank.
    Gewechselt wird zwischen zwei Chancen; der Wunsch lässt sich jederzeit setzen. Die Werte der Linie auf dem Feld bestimmen,
    wie viele Chancen entstehen.
@@ -117,6 +121,23 @@
        Passes), reicht weniger weit (reachOneT) und rutscht nach oneTDelay ms mit oneTSpeed herüber, höchstens oneTMax.
        Schuss des Gegners direkt nach einem Querpass: rxOneT ms weniger Zeit für die Parade. */
     kOneT: 0.58, reachOneT: 0.16, oneTDelay: 500, oneTSpeed: 0.35, oneTMax: 0.9, rxOneT: 110,
+    /* Schussarten: Schlagschuss (slap), Handgelenkschuss (wrist), Zugschuss (drag). Jede verändert denselben Schuss.
+       Dein Schuss. w: Breite des grünen Felds mal; sweep: Dauer des Strichs mal (kleiner heisst schneller); reach: Reichweite
+       des Goalies plus (negativ: harter Schuss), reachFar: dazu aus der Distanz (mal 1 - Lage); lane: Druck eines Gegners in
+       der Schussbahn mal, tight: Druck eines Gegners direkt auf den Füssen mal (wer ausholt, wird leicht geblockt; ein Zug
+       geht am Stock vorbei, braucht aber Platz); one: so viel bleibt vom Vorteil des Direktschusses; hard: Wer unter Druck
+       ausholt, wird schon geblockt, wenn der Strich knapp neben dem Feld steht (sonst erst klar daneben).
+       Schuss des Gegners. rx: Zeit für die Parade mal; sd: Streuung mal; gain: so stark wirkt deine Störung.
+       Zugschuss: Der Ball wird zur Mitte gezogen, der Goalie steht noch um pull auf der alten Seite. Er rutscht nach
+       pullDelay ms mit pullSpeed zurück, höchstens pullMax. Beim Gegner zieht der Ball zuerst zur falschen Seite: so lange
+       wie der Anteil feint des Zeitfensters (mindestens feintMin, höchstens feintMax ms); diese Zeit kommt oben drauf.
+       favW: Im Lieblingsschuss des Spielers ist das Feld so viel breiter, favSd: beim Gegner streut er so viel weniger. */
+    styles: {
+      slap: { w: 0.85, sweep: 0.9, reach: -0.05, reachFar: -0.26, lane: 1.6, tight: 1.6, one: 1, hard: true, rx: 0.84, sd: 1.25, gain: 1.5 },
+      wrist: { w: 1.15, sweep: 1.06, reach: 0, reachFar: 0.15, lane: 1, tight: 0.5, one: 0.4, rx: 1, sd: 0.85, gain: 0.6 },
+      drag: { w: 1, sweep: 1, reach: 0.03, reachFar: 0.08, lane: 0.15, tight: 1.25, one: 0, rx: 1, sd: 1, gain: 1 }
+    },
+    pull: 0.34, pullDelay: 400, pullSpeed: 0.45, pullMax: 0.75, feint: 0.3, feintMin: 110, feintMax: 220, favW: 1.15, favSd: 0.9,
     laneRange: 36, laneMore: 0.35, intercept: 0.55, passLong: 700,
     drib: 0.52, dribSlope: 0.022, dribMin: 0.12, dribMax: 0.9,
     // Abwehrszene: richtige Abwehr stoppt so oft, verschoben um den Wertevergleich
@@ -199,16 +220,44 @@
     const side = atkSide(sc), X = card(s, side, id), p = P(sc, id), d = dist(p, GOAL);
     const q = clamp(1 - (d - 55) / 250, 0.12, 1) * clamp(1 - Math.abs(p[0] - 180) / 280, 0.5, 1);
     // Blocken kann, wer in der Schussbahn steht (je näher am Schützen, desto eher) oder ihm direkt auf den Füssen steht
-    const n = { c: null, d: Infinity }; let press = 0;
+    // lane: stärkster Druck aus der Schussbahn, tight: stärkster Druck direkt am Mann (für die Schussarten getrennt)
+    const n = { c: null, d: Infinity }; let press = 0, lane = 0, tight = 0;
     players(s, other(side)).forEach(x => {
-      const q_ = P(sc, x.id), near = dist(q_, p), v = Math.max(clamp(1 - distSeg(q_, p, GOAL) / 30, 0, 1) * clamp(1.25 - near / 130, 0.25, 1), clamp(1 - near / 22, 0, 1));
+      const q_ = P(sc, x.id), near = dist(q_, p), vl = clamp(1 - distSeg(q_, p, GOAL) / 30, 0, 1) * clamp(1.25 - near / 130, 0.25, 1), vt = clamp(1 - near / 22, 0, 1), v = Math.max(vl, vt);
+      lane = Math.max(lane, vl); tight = Math.max(tight, vt);
       if (v > press || (!n.c && near < n.d)) { if (v >= press) { press = v; n.c = x; n.d = near; } }
     });
     if (!n.c) { const m = nearest(s, sc, other(side), p); n.c = m.c; n.d = m.d; }
-    const block = clamp(press * s.cfg.blockBase * clamp(1 + (stanceVal(n.c, 'block') - shotVal(X)) * 0.02, 0.5, 1.5) * (has(n.c, 'wand') ? 1.4 : 1), 0, 0.75);
+    const bk = s.cfg.blockBase * clamp(1 + (stanceVal(n.c, 'block') - shotVal(X)) * 0.02, 0.5, 1.5) * (has(n.c, 'wand') ? 1.4 : 1), block = clamp(press * bk, 0, 0.75);
     // Grobe Torchance für die Anzeige, bei einem guten Schuss in eine freie Ecke
     const est = (1 - block) * clamp(0.5 + (shotVal(X) - 88) * 0.012 + (q - 0.6) * 0.7 + (has(X, 'kanone') ? 0.1 : 0), 0.05, 0.9);
-    return { q, block, by: n.c.id, est };
+    return { q, block, by: n.c.id, est, lane, tight, bk, px: p[0] };
+  }
+  /* --- Schussarten ---
+     Lieblingsschuss eines Spielers, aus seinen Werten: Wer vor allem trifft, schlägt; wer in wichtigen Momenten stark
+     ist, schiesst aus dem Handgelenk; wer in Form ist, zieht. Kanone schlägt immer, Dribbelkönig zieht immer. */
+  const STYLES = ['slap', 'wrist', 'drag'];
+  const STYLE = { slap: { name: 'Schlagschuss', short: 'Schlag' }, wrist: { name: 'Handgelenkschuss', short: 'Handgelenk' }, drag: { name: 'Zugschuss', short: 'Zug' } };
+  function favStyle(c) {
+    const t = trait(c); if (t === 'kanone') return 'slap'; if (t === 'dribbler') return 'drag';
+    const v = c.pos === 'DEF' ? { slap: c.sco - 70, wrist: c.clu - 76, drag: c.frm - 76 } : { slap: c.sco - 79, wrist: c.clu - 76, drag: c.frm - 77 };      // gemessen an der Mitte aller Karten: je etwa ein Drittel, Verteidiger schlagen öfter
+    return STYLES.reduce((b, k) => (v[k] > v[b] ? k : b), 'slap');
+  }
+  // Druck auf den Schützen für eine Schussart: aus der Schussbahn und direkt am Mann, je nach Art verschieden schwer
+  const styleBlock = (c, o, st) => clamp(Math.max((o.lane || 0) * c.styles[st].lane, (o.tight || 0) * c.styles[st].tight) * (o.bk || 0), 0, 0.75);
+  /* Welche Schussart passt zur Lage? o: { q, lane, tight, bk, oneT, empty }. Gibt { style, why } zurück.
+     direct: Direktschuss nach einem Querpass, niemand im Weg: schlagen. tight: Gegner am Mann, nur das Handgelenk ist
+     schnell genug. lane: Gegner in der Schussbahn, der Zug geht an seinem Stock vorbei. far: aus der Distanz hilft nur
+     Härte. near: aus der Nähe zählt Genauigkeit. fav: nichts davon, also der Lieblingsschuss. empty: leeres Tor. */
+  function pickStyle(c, X, o) {
+    if (o.empty) return { style: 'wrist', why: 'empty' };
+    const one = Math.abs(o.oneT || 0), blk = st => styleBlock(c, o, st), free = st => blk(st) < c.blockFree;
+    if (one >= 0.25 && free('slap') && (o.q < 0.78 || one >= 0.6)) return { style: 'slap', why: 'direct' };
+    if (!free('wrist') || !free('drag')) return blk('wrist') <= blk('drag') ? { style: 'wrist', why: 'tight' } : { style: 'drag', why: 'lane' };
+    if (!free('slap')) return o.q < 0.5 && one < 0.25 ? { style: 'drag', why: 'lane' } : { style: 'wrist', why: 'tight' };
+    if (o.q < 0.5) return { style: 'slap', why: 'far' };
+    if (o.q >= 0.78) return { style: 'wrist', why: 'near' };
+    return { style: X ? favStyle(X) : 'wrist', why: 'fav' };
   }
   // Risiko, dass der Pass abgefangen wird: Gegner nahe der Passlinie, Länge des Passes, Vorlagen des Passgebers
   function passInfo(s, sc, from, to) {
@@ -524,7 +573,7 @@
       sc.carrier = o.x; sc.last = o.oneT ? { type: 'pass', to: o.x, lat: o.oneT } : null;
       const me = card(s, 'you', o.x), sh = shotInfo(s, sc, o.x), D = card(s, 'home', sh.by);
       ev.push({ t: 'shootStart', live: true, x: o.x, q: sh.q, block: sh.block, by: sh.by, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
-      setShot(s, rng, 'you', o.x, sh.q, sc.counter ? 'counter' : 'attack', { block: sh.block, by: sh.by, oneT: o.oneT }); return;
+      setShot(s, rng, 'you', o.x, sh.q, sc.counter ? 'counter' : 'attack', Object.assign({}, sh, { oneT: o.oneT })); return;
     }
     if (o.x) sc.carrier = o.x;
     ev.push({ t: 'live', out: o.type, how: o.how || null, by: o.by || null, x: o.x || null, gross: !!o.gross });
@@ -609,16 +658,34 @@
     return post ? 'post' : land[1] >= 1 ? 'high' : 'wide';
   }
   function favZone(id) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return ['tl', 'br', 'tr', 'bl', 'bm'][h % 5]; }
-  // Reichweite des Goalies um seinen Körper für deinen Schuss: aus der Distanz gross, aus der Nähe klein.
-  function reach(s, sh) {
-    const c = s.cfg, X = card(s, 'you', sh.x);
-    if (sh.empty) return -1;                                                            // Goalie des Gegners ist draussen: leeres Tor
-    return clamp(c.reach + c.reachDist * (1 - sh.q) - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0) - c.reachOneT * Math.abs(sh.oneT || 0), c.reachMin, c.reachMax);
+  // Schuss ohne Schussart (ältere Aufrufe): alles wie bisher
+  const PLAIN = { w: 1, sweep: 1, reach: 0, reachFar: 0, lane: 1, tight: 1, one: 1, rx: 1, sd: 1, gain: 1 };
+  const stOf = (c, sh) => (sh.style && c.styles[sh.style]) || PLAIN;
+  // Was vom Direktschuss bleibt: Der Schlagschuss nimmt den Ball direkt, das Handgelenk braucht eine kurze Annahme, der Zug eine ganze
+  const oneOf = (c, sh) => (sh.oneT || 0) * stOf(c, sh).one;
+  // Wo der Goalie steht, wenn du zum Schuss ansetzt: fast in der Mitte; nach einem Querpass noch auf der Seite, von der der
+  // Ball kam; beim Zugschuss noch dort, wo der Ball vor dem Zug lag (pull: wohin gezogen wird, -1 links, 1 rechts)
+  function keeperStart(c, sh) {
+    const one = oneOf(c, sh), kr = sh.kr || 0;
+    if (one) return clamp(-one * c.kOneT + kr * 0.05, -0.6, 0.6);
+    if (sh.style === 'drag') return clamp(-(sh.pull || 1) * c.pull + kr * 0.05, -0.6, 0.6);
+    return kr * c.kOff;
   }
-  // Wo der Goalie t ms nach dem Setzen des Ziels steht: Er rückt zur Seite des Ziels, aber nie darüber hinaus.
+  // Stellt die Schussart ein: Druck des Gegners und Stand des Goalies hängen von ihr ab
+  function setStyle(c, sh, style) { sh.style = style; sh.block = styleBlock(c, sh, style); sh.keeper = { x: keeperStart(c, sh) }; }
+  // Reichweite des Goalies um seinen Körper für deinen Schuss: aus der Distanz gross, aus der Nähe klein, je härter der Schuss, desto kleiner.
+  function reach(s, sh) {
+    const c = s.cfg, X = card(s, 'you', sh.x), st = stOf(c, sh);
+    if (sh.empty) return -1;                                                            // Goalie des Gegners ist draussen: leeres Tor
+    return clamp(c.reach + c.reachDist * (1 - sh.q) - (shotVal(X) - s.teams.home.goalie.val) * c.reachVal - (has(X, 'kanone') ? c.reachTrait : 0) - (sh.ctx === 'counter' ? 0.05 : 0) - c.reachOneT * Math.abs(oneOf(c, sh))
+      + st.reach + st.reachFar * (1 - sh.q), c.reachMin, c.reachMax);
+  }
+  /* Wo der Goalie t ms nach dem Setzen des Ziels steht: Er rückt zur Seite des Ziels, aber nie darüber hinaus. Nach einem
+     Querpass rutscht er sofort und schnell herüber, nach einem Zug ebenso: Wer zieht, muss schnell abschliessen. */
   function keeperAt(s, sh, target, t) {
-    const c = s.cfg, k0 = sh.keeper.x, gap = target[0] - k0, one = !!sh.oneT;                 // nach einem Querpass rutscht er sofort und schnell herüber
-    const move = Math.min(one ? c.oneTMax : c.creepMax, Math.max(0, (t || 0) - (one ? c.oneTDelay : c.creepDelay)) / 1000 * (one ? c.oneTSpeed : c.creepSpeed), Math.abs(gap));
+    const c = s.cfg, k0 = sh.keeper.x, gap = target[0] - k0, one = !!oneOf(c, sh), pull = !one && sh.style === 'drag';
+    const delay = one ? c.oneTDelay : pull ? c.pullDelay : c.creepDelay, speed = one ? c.oneTSpeed : pull ? c.pullSpeed : c.creepSpeed, max = one ? c.oneTMax : pull ? c.pullMax : c.creepMax;
+    const move = Math.min(max, Math.max(0, (t || 0) - delay) / 1000 * speed, Math.abs(gap));
     return k0 + Math.sign(gap) * move;
   }
   // Abstand eines Punkts im Tor vom Körper des Goalies, wie er für die Parade zählt
@@ -634,47 +701,61 @@
     const tx = target[0], ty = (target[1] - 0.45) / 0.69, tl = Math.hypot(tx, ty) || 1, hx = Math.max(Math.abs(tx) / tl, 0.6), hy = (tx < 0 ? -1 : 1) * ty / tl, hl = Math.hypot(hx, hy);
     const sg = e < 0 ? -1 : 1, land = [tx + sg * dev * hx / hl, Math.max(0.03, target[1] + sg * dev * hy / hl * 0.69)], miss = missOf(c, land);
     const kx = keeperAt(s, sh, target, t), R = pre ? pre.R : reach(s, sh), kd = kDist(c, kx, land);
-    return { land, target, kx, reach: R, kd, grade: g, dir: sg, dev, miss, blocked: b.pressed && (g === 'bad' || g === 'gross'), result: miss ? 'miss' : kd <= R ? (kd <= R * 0.4 ? 'catch' : 'save') : 'goal' };
+    return { land, target, kx, reach: R, kd, grade: g, dir: sg, dev, miss, blocked: b.pressed && (g === 'bad' || g === 'gross' || (g === 'near' && !!stOf(c, sh).hard)), result: miss ? 'miss' : kd <= R ? (kd <= R * 0.4 ? 'catch' : 'save') : 'goal' };
   }
   /* Schuss-Balken für deinen laufenden Schuss. Das Feld liegt in der Mitte: breit aus der Nähe, schmal aus der Distanz und
-     unter Druck (Gegner nah).
-     sweep ist die Dauer eines Durchlaufs in ms: kürzer, also schneller, bei schwachem Abschluss und bei wenig Energie. */
+     unter Druck (Gegner nah). Die Schussart macht es breiter oder schmaler, der Lieblingsschuss des Spielers breiter.
+     sweep ist die Dauer eines Durchlaufs in ms: kürzer, also schneller, bei schwachem Abschluss, bei wenig Energie und beim Schlagschuss. */
   function shotBar(s) {
-    const c = s.cfg, sh = s.shot, X = card(s, 'you', sh.x);
-    const tempo = clamp(1 + (shotVal(X) - 88) * c.shotTempo, c.tempoMin, c.tempoMax) * (has(X, 'kanone') ? 1.15 : 1) * tired(c, X) * (sh.calm ? c.fxCalm : 1);
-    return { w: clamp((c.shotW + c.shotWq * sh.q) * (1 - c.shotPress * clamp(sh.block / 0.75, 0, 1)), c.shotWMin, c.barMax), pos: 0.5, start: sh.start, sweep: Math.round(Math.max(c.sweepMin, c.barSweep * tempo)), pressed: sh.block >= c.blockFree, by: sh.by };
+    const c = s.cfg, sh = s.shot, X = card(s, 'you', sh.x), st = stOf(c, sh), fav = !!sh.style && favStyle(X) === sh.style;
+    const tempo = clamp(1 + (shotVal(X) - 88) * c.shotTempo, c.tempoMin, c.tempoMax) * (has(X, 'kanone') ? 1.15 : 1) * tired(c, X) * (sh.calm ? c.fxCalm : 1) * st.sweep;
+    return { w: clamp((c.shotW + c.shotWq * sh.q) * (1 - c.shotPress * clamp(sh.block / 0.75, 0, 1)), c.shotWMin, c.barMax) * st.w * (fav ? c.favW : 1), pos: 0.5, start: sh.start, sweep: Math.round(Math.max(c.sweepMin, c.barSweep * tempo)), pressed: sh.block >= c.blockFree, by: sh.by, fav };
   }
+  // Wohin der Ball beim Zugschuss gezogen wird: zur Mitte des Felds; wer schon in der Mitte steht, zieht nach links oder rechts (kr)
+  const pullDir = (px, kr) => (px === undefined || Math.abs(px - 180) < 15 ? (kr < 0 ? -1 : 1) : px < 180 ? 1 : -1);
   /* Vorschau für einen Schuss von Spieler id aus der laufenden Szene: Lage, Druck, Reichweite des Goalies und Schuss-Balken.
-     from: als käme der Ball jetzt per Pass von diesem Spieler (Direktschuss). sh ist der gedachte Schuss für evalShot. */
-  function shotPreview(s, id, from) {
-    const sc = s.cur, si = shotInfo(s, sc, id), oneT = from ? passInfo(s, sc, from, id).lat : oneTimer(sc, id);
-    const sh = { side: 'you', x: id, q: si.q, ctx: sc.counter ? 'counter' : 'attack', block: si.block, by: si.by, start: 0, oneT, keeper: { x: clamp(-oneT * s.cfg.kOneT, -0.6, 0.6) }, calm: !!(s.fx && s.fx.you.calm > 0), empty: !!(s.fx && s.fx.home.empty) };
+     from: als käme der Ball jetzt per Pass von diesem Spieler (Direktschuss). style: mit dieser Schussart, sonst mit der
+     empfohlenen (auto, why: siehe pickStyle). sh ist der gedachte Schuss für evalShot. */
+  function shotPreview(s, id, from, style) {
+    const sc = s.cur, c = s.cfg, si = shotInfo(s, sc, id), oneT = from ? passInfo(s, sc, from, id).lat : oneTimer(sc, id), X = card(s, 'you', id);
+    const sh = { side: 'you', x: id, q: si.q, ctx: sc.counter ? 'counter' : 'attack', by: si.by, start: 0, oneT, kr: 0, lane: si.lane, tight: si.tight, bk: si.bk, pull: pullDir(si.px, 0), calm: !!(s.fx && s.fx.you.calm > 0), empty: !!(s.fx && s.fx.home.empty) };
+    const pk = pickStyle(c, X, Object.assign({ oneT, empty: sh.empty }, si)); sh.auto = pk.style; sh.why = pk.why;
+    setStyle(c, sh, c.styles[style] ? style : pk.style);
     const b = shotBar(Object.assign({}, s, { shot: sh }));
-    return { q: si.q, block: si.block, by: si.by, reach: reach(s, sh), sweep: b.sweep, w: b.w, pressed: b.pressed, oneT, free: isFree(s, sc, id), sh };
+    return { q: si.q, block: sh.block, by: si.by, reach: reach(s, sh), sweep: b.sweep, w: b.w, pressed: b.pressed, oneT, free: isFree(s, sc, id), sh, style: sh.style, auto: pk.style, why: pk.why, fav: b.fav };
   }
-  /* Bereitet einen Schuss vor.
-     Dein Schuss: Der Goalie steht fast in der Mitte (keeper.x). block und by: Druck des nächsten Gegners.
-     Schuss des Gegners: Ziel, Härte und Streuung stehen sofort fest, damit die Flugbahn ehrlich gezeigt werden kann.
-     window ist die Zeit in ms, bis der Ball im Tor ist. Deine Verteidiger (Block) geben dir mehr Zeit. */
+  /* Bereitet einen Schuss vor. opt: Lage aus shotInfo (lane, tight, bk, px, by), dazu oneT (Direktschuss) und press (Störung in ms).
+     Dein Schuss: Die empfohlene Schussart ist eingestellt (auto, why), sie lässt sich bis zum Abschluss ändern. Der Goalie
+     steht fast in der Mitte (keeper.x), nach einem Querpass oder beim Zugschuss noch daneben. block und by: Druck des nächsten Gegners.
+     Schuss des Gegners: Schussart, Ziel, Härte und Streuung stehen sofort fest, damit die Flugbahn ehrlich gezeigt werden
+     kann. window ist die Zeit in ms, bis der Ball im Tor ist. Deine Verteidiger (Block) geben dir mehr Zeit. Beim Zugschuss
+     zieht der Ball zuerst zur falschen Seite: feint { land: dorthin, ms: so lange }. */
   function setShot(s, rng, side, x, q, ctx, opt) {
     const c = s.cfg, X = card(s, side, x), sh = { side, x, q, ctx }, o = opt || {};
+    const lay = { q, lane: o.lane || 0, tight: o.tight || 0, bk: o.bk || 0, oneT: o.oneT || 0 };
+    if (o.block && !o.bk) { lay.lane = o.block; lay.bk = 1; }                             // ältere Aufrufe kennen nur den Druck insgesamt
     if (side === 'home') {
       const w = {}; ZONES.forEach(z => { w[z] = 0.11; }); w[favZone(x)] = 0.45;
       const zc = ZC[sample(w, rng)], power = c.aiPowMin + rng() * (0.95 - c.aiPowMin), target = [zc[0] + (rng() - 0.5) * 0.24, zc[1] + (rng() - 0.5) * 0.2];
-      const off = inDisc(rng, spread(s, X, q) * (has(X, 'kanone') ? c.traitShot : 1));
+      // Schussart: meist die, die zur Lage passt, manchmal der Lieblingsschuss oder etwas Überraschendes
+      const pk = pickStyle(c, X, lay), u = rng(), style = ctx === 'so' ? (u < 0.5 ? 'drag' : u < 0.8 ? 'wrist' : 'slap')
+        : pk.why === 'lane' ? (u < 0.55 ? 'drag' : u < 0.85 ? 'wrist' : 'slap') : u < 0.15 ? favStyle(X) : u < 0.22 ? STYLES[Math.floor(u * 1000) % 3] : pk.style, st = c.styles[style], fav = favStyle(X) === style;
+      const off = inDisc(rng, spread(s, X, q) * (has(X, 'kanone') ? c.traitShot : 1) * st.sd * (fav ? c.favSd : 1));
       const land = [target[0] + off[0], Math.max(0.03, target[1] + off[1])];
       drain(X, c.enShot);
       const defs = players(s, 'you').filter(d => d.role === 'LD' || d.role === 'RD'), dv = ctx === 'so' ? 93 : defs.reduce((a, d) => a + stanceVal(d, 'block'), 0) / defs.length;
-      sh.power = power; sh.land = land; sh.miss = missOf(c, land); sh.zone = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])); sh.dv = dv;
-      sh.window = Math.round(clamp(c.rxBase - c.rxPow * (power - 0.5) - (shotVal(X) - 88) * c.rxVal + (dv - 93) * c.rxVal + c.rxDist * (1 - q)
-        - (ctx === 'counter' ? c.rxCounter : 0) - (has(X, 'kanone') ? c.rxTrait : 0) + (o.press || 0), c.rxMin, c.rxMax));
-      if (o.oneT) { sh.oneT = o.oneT; sh.window = Math.round(clamp(sh.window - c.rxOneT * Math.abs(o.oneT), c.rxMin, c.rxMax)); }      // Direktschuss: weniger Zeit
+      sh.style = style; sh.fav = fav; sh.power = power; sh.land = land; sh.miss = missOf(c, land); sh.zone = zoneOf(clamp(land[0], -0.99, 0.99), Math.min(0.99, land[1])); sh.dv = dv;
+      const base = c.rxBase - c.rxPow * (power - 0.5) - (shotVal(X) - 88) * c.rxVal + (dv - 93) * c.rxVal + c.rxDist * (1 - q) - (ctx === 'counter' ? c.rxCounter : 0) - (has(X, 'kanone') ? c.rxTrait : 0);
+      sh.oneT = (o.oneT || 0) * st.one;                                                   // Direktschuss: weniger Zeit
+      sh.window = Math.round(clamp(base * st.rx + (o.press || 0) * st.gain - c.rxOneT * Math.abs(sh.oneT), c.rxMin, c.rxMax));
+      if (style === 'drag') { const side0 = Math.abs(land[0]) >= 0.34 ? -Math.sign(land[0]) : power < 0.5 ? -1 : 1; sh.feint = { land: [side0 * clamp(Math.abs(land[0]), 0.55, 0.9), Math.min(0.95, land[1])], ms: Math.round(clamp(sh.window * c.feint, c.feintMin, c.feintMax)) }; sh.window += sh.feint.ms; }
       sh.press = o.press || 0; sh.empty = !!(s.fx && s.fx.you.empty);                    // dein Goalie ist draussen: jeder Schuss aufs Tor ist drin
     } else {
-      sh.block = o.block || 0; sh.by = o.by || null; sh.start = rng();
-      sh.oneT = o.oneT || 0;
-      sh.keeper = { x: sh.oneT ? clamp(-sh.oneT * c.kOneT + (rng() * 2 - 1) * 0.05, -0.6, 0.6) : (rng() * 2 - 1) * c.kOff };
+      sh.by = o.by || null; sh.start = rng(); sh.oneT = o.oneT || 0; sh.kr = rng() * 2 - 1;
+      sh.lane = lay.lane; sh.tight = lay.tight; sh.bk = lay.bk; sh.pull = pullDir(o.px, sh.kr);
       if (s.fx) { sh.calm = s.fx.you.calm > 0; if (sh.calm) s.fx.you.calm--; sh.empty = s.fx.home.empty; }
+      const pk = pickStyle(c, X, Object.assign({ empty: sh.empty }, lay)); sh.auto = pk.style; sh.why = pk.why;
+      setStyle(c, sh, pk.style);
     }
     s.shot = sh; s.phase = 'aim';
   }
@@ -779,7 +860,7 @@
     if (side === 'you') { sc.boost = (play ? c.fxPlay : 1) * (fm.empty ? c.fxEmptyAtt : 1) * (fo.press > 0 ? c.fxPressAi : 1); if (fo.press > 0) { fo.press--; sc.pressed = true; } }
     else { sc.dboost = play ? c.fxPlayAi : 1; if (fo.press > 0) { fo.press--; sc.pressing = true; } }
     sc.open = quiet ? [] : openPlay(s, rng, side, sc.carrier);
-    if (kind === 'solo') setShot(s, rng, side, sc.carrier, Math.max(0.8, shotInfo(s, sc, sc.carrier).q), 'counter');
+    if (kind === 'solo') setShot(s, rng, side, sc.carrier, Math.max(0.8, shotInfo(s, sc, sc.carrier).q), 'counter', { px: P(sc, sc.carrier)[0] });
   }
   /* Lässt die Uhr laufen bis zur nächsten Chance oder bis zum Drittelsende. Die Zeit bis zur nächsten Chance ist zufällig,
      im Schnitt umso kürzer, je mehr Chancen beide Seiten nach Werten und Taktik haben. */
@@ -864,7 +945,7 @@
     if (a.type === 'shoot') {
       const sh = shotInfo(s, sc, X);
       ev.push({ t: 'shootStart', x: X, q: sh.q, block: sh.block, by: sh.by, av: shotVal(me), dv: stanceVal(D, 'block'), trait: has(me, 'kanone') ? 'kanone' : null, btrait: has(D, 'wand') ? 'wand' : null });
-      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', { block: sh.block, by: sh.by, oneT: oneTimer(sc, X) }); return;
+      setShot(s, rng, 'you', X, sh.q, sc.counter ? 'counter' : 'attack', Object.assign({}, sh, { oneT: oneTimer(sc, X) })); return;
     }
     if (a.type === 'pass') {
       s.stats.passes++; drain(me, s.cfg.enPass); drain(card(s, 'you', a.to), s.cfg.enRecv);
@@ -911,7 +992,7 @@
       s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id, kind });
       closeChance(s, null); startChance(s, rng, 'you', kind, D.id, true); return;
     }
-    if (it.kind === 'shoot') { setShot(s, rng, 'home', X.id, shotInfo(s, sc, X.id).q, 'attack', { press: sc.press, oneT: oneTimer(sc, X.id) }); return; }
+    if (it.kind === 'shoot') { const si = shotInfo(s, sc, X.id); setShot(s, rng, 'home', X.id, si.q, 'attack', Object.assign({}, si, { press: sc.press, oneT: oneTimer(sc, X.id) })); return; }
     const tight = g === 'good' ? 1 : g === 'near' ? 0.5 : 0;      // gestört: Empfänger enger gedeckt, weniger Raumgewinn
     if (it.kind === 'pass') { const m = sc.mark[it.to], lat = passInfo(s, sc, X.id, it.to).lat; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3 + 0.55 * tight); sc.carrier = it.to; sc.last = { type: 'pass', to: it.to, lat: tight >= 1 ? 0 : lat }; }
     else {
@@ -935,7 +1016,7 @@
       tally(s, v.grade); drain(X, c.enShot);
       // Unter Druck und klar daneben: der Gegner blockt den Schuss
       if (v.blocked) {
-        ev.push({ t: 'shot', side: 'you', x: sh.x, ctx: sh.ctx, q: sh.q, result: 'blocked', grade: v.grade, dir: v.dir, by: sh.by, target: v.target, kx: v.kx });
+        ev.push({ t: 'shot', side: 'you', x: sh.x, ctx: sh.ctx, q: sh.q, style: sh.style, pull: sh.pull, result: 'blocked', grade: v.grade, dir: v.dir, by: sh.by, target: v.target, kx: v.kx });
         s.stats.shots++; s.shot = null; s.phase = 'decide';
         if (sh.ctx === 'so') { const P_ = s.pen; P_.shots.you++; P_.results.push({ side: 'you', goal: false }); s.phase = 'done'; return; }
         return lost(s, rng, ev, sh.by, v.grade === 'gross' || s.fx.you.empty);
@@ -948,7 +1029,7 @@
     }
     const goal = r.result === 'goal';
     if (sh.side === 'you') { s.stats.shots++; if (goal) s.stats.goals++; } else { s.stats.faced++; if (r.result === 'save' || r.result === 'catch') s.stats.saved++; if (!sh.miss) s.stats.onGoal++; }
-    ev.push(Object.assign({ t: 'shot', side: sh.side, x: sh.x, ctx: sh.ctx, q: sh.q }, r));
+    ev.push(Object.assign({ t: 'shot', side: sh.side, x: sh.x, ctx: sh.ctx, q: sh.q, style: sh.style, pull: sh.pull || 0, feint: sh.feint || null, fav: sh.side === 'you' ? favStyle(X) === sh.style : !!sh.fav }, r));
     s.shot = null;
     if (sh.ctx === 'so') { const P_ = s.pen; if (goal) P_[sh.side]++; P_.shots[sh.side]++; P_.results.push({ side: sh.side, goal }); s.phase = 'done'; return; }
     if (goal) { s.score[sh.side]++; s.cur.goal = sh.side; ['you', 'home'].forEach(sd => { if (s.fx[sd].empty) { s.fx[sd].empty = false; ev.push({ t: 'fx', side: sd, id: 'empty', on: false }); } }); }      // nach einem Tor steht der Goalie wieder drin
@@ -978,7 +1059,8 @@
                run: der Lauf durch den Dribbling-Parcours, pro Schritt die gewischte Richtung x und y in Hundertsteln,
                siehe dribCourse, dribTick und dribRun
      Abwehr:   { type: 'defend', hit }
-     Schuss:   { type: 'aim', target: [x, y], hit, t } eigener Schuss: Ziel im Tor, Stelle des Strichs auf dem Schuss-Balken,
+     Schuss:   { type: 'style', value: 'slap' | 'wrist' | 'drag' } Schussart für den eigenen Schuss wählen (vor dem Abschluss)
+               { type: 'aim', target: [x, y], hit, t } eigener Schuss: Ziel im Tor, Stelle des Strichs auf dem Schuss-Balken,
                Zeit in ms seit dem Setzen des Ziels
                { type: 'aim', zone, rt } Parade, rt in ms seit dem Abschluss des Gegners
      Taktik:   { type: 'tactic', value: 'def' | 'bal' | 'off' } jederzeit, gilt ab der nächsten Chance
@@ -994,11 +1076,12 @@
     else if (s.phase === 'decide' && s.cur.type === 'att' && a.type === 'live') ok = liveAction(s, rng, ev, a) !== false;
     else if (s.phase === 'decide' && s.cur.type === 'att' && ['shoot', 'pass', 'dribble'].indexOf(a.type) !== -1) ok = attAction(s, rng, ev, a) !== false;
     else if (s.phase === 'decide' && s.cur.type === 'def' && a.type === 'defend') ok = defAction(s, rng, ev, a) !== false;
+    else if (s.phase === 'aim' && a.type === 'style') { if (s.shot && s.shot.side === 'you' && s.cfg.styles[a.value]) setStyle(s.cfg, s.shot, a.value); else ok = false; }
     else if (s.phase === 'aim' && a.type === 'aim') ok = shoot(s, rng, ev, a) !== false;
     else if ((s.phase === 'done' || s.phase === 'break') && a.type === 'next') next(s, rng, ev);
     else ok = false;
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, liveInit, liveTick, liveRun, liveLane, liveShot, spotOf, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { STYLES, STYLE, favStyle, pickStyle, styleBlock, setStyle, TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, liveInit, liveTick, liveRun, liveLane, liveShot, spotOf, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

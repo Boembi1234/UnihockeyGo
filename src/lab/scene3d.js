@@ -153,11 +153,31 @@
       const k = clamp(P.speed / 4.6, 0.4, 1.1), s = runLegs(P, g, k);
       if (P.ball) { stick(g, -0.04, 0.62, 0.26, 58 + s * 9, null); g[BROW] = 0.5; } else stick(g, -0.02, 0.64, 0.24, 32, -40);
     } else if (a === 'shot') {
-      g[PY] = kf(u, SU, [0.43, 0.385, 0.42, 0.49], SE); g[PZ] = kf(u, SU, [0, -0.07, 0.07, 0.14], SE); g[LEAN] = kf(u, SU, [0.36, 0.44, 0.4, 0.16], SE);
-      g[TW] = kf(u, SU, [0.3, 1.05, -0.05, -0.85], SE); g[HIPY] = kf(u, SU, [0.25, 0.6, 0.05, -0.35], SE); g[HX] = -0.26; g[HY] = -g[TW] * 0.7; g[SQ] = kf(u, SU, [1, 0.9, 1.1, 1], SE);
-      const fol = seg(u, REL, 1); setv(g, FN, -0.12, ANK, 0.18); setv(g, FP, 0.17 - fol * 0.03, ANK + fol * 0.05, -0.16 + fol * 0.11); g[PP] = fol * 0.6;
-      stick(g, kf(u, SU, [-0.03, 0.1, -0.08, -0.13], SE), kf(u, SU, [0.6, 0.58, 0.58, 0.74], SE), kf(u, SU, [0.24, 0.16, 0.3, 0.28], SE), kf(u, SU, [25, -55, 38, 95], SE), u < REL ? null : lerp(floorEps(0.58), 16, out(fol)));
-      g[BROW] = 1 - fol; g[MOUTH] = u < REL ? 0.2 : 0.2 + fol * 0.5; g[BRY] = fol * 0.6;
+      const st = P.style || 'wrist', fol = seg(u, REL, 1);
+      if (st === 'slap') {
+        // Schlagschuss: weit ausholen (Stock hinter dem Körper bis Hüfthöhe), auf den Ball schlagen, hoch ausschwingen
+        g[PY] = kf(u, SU, [0.43, 0.41, 0.39, 0.5], SE); g[PZ] = kf(u, SU, [0, -0.1, 0.1, 0.18], SE); g[LEAN] = kf(u, SU, [0.36, 0.3, 0.48, 0.12], SE);
+        g[TW] = kf(u, SU, [0.3, 1.45, -0.15, -1.1], SE); g[HIPY] = kf(u, SU, [0.25, 0.8, 0, -0.45], SE); g[HX] = -0.26; g[HY] = -g[TW] * 0.62; g[SQ] = kf(u, SU, [1, 0.86, 1.15, 1], SE);
+        setv(g, FN, -0.13, ANK, 0.23); setv(g, FP, 0.18 - fol * 0.04, ANK + fol * 0.1, -0.21 + fol * 0.18); g[PP] = fol * 0.8;
+        // die Schaufel trifft den Ball dort, wo er vor dem Ausholen lag (Stützstelle 2 ist die Grundhaltung)
+        stick(g, kf(u, SU, [-0.03, 0.17, -0.03, -0.16], SE), kf(u, SU, [0.6, 0.7, 0.6, 0.8], SE), kf(u, SU, [0.24, 0.08, 0.24, 0.3], SE), kf(u, SU, [25, -82, 25, 108], SE),
+          u < SU[1] ? lerp(floorEps(0.6), 16, ease(u / SU[1])) : u < REL ? lerp(16, floorEps(0.6), snap(seg(u, SU[1], REL))) : lerp(floorEps(0.6), 26, out(fol)));
+        g[BROW] = 1 - fol * 0.5; g[MOUTH] = u < SU[1] ? 0.1 : u < REL ? 1 : 1 - fol * 0.5; g[BRY] = fol * 0.7;
+      } else if (st === 'drag') {
+        // Zugschuss: Der Ball liegt weit aussen an der Schaufel, wird am Körper vorbei nach innen gezogen und dann aus dem Handgelenk geschossen
+        g[PX] = kf(u, SU, [0.1, -0.12, -0.13, -0.1], SE); g[PY] = kf(u, SU, [0.42, 0.39, 0.41, 0.48], SE); g[PZ] = kf(u, SU, [0, 0.02, 0.08, 0.13], SE); g[LEAN] = kf(u, SU, [0.4, 0.46, 0.42, 0.2], SE);
+        g[TW] = kf(u, SU, [-0.35, 0.6, -0.05, -0.7], SE); g[HIPY] = kf(u, SU, [-0.15, 0.35, 0.05, -0.3], SE); g[SIDE] = kf(u, SU, [-0.2, 0.14, 0.04, 0], SE); g[HX] = -0.3; g[HY] = -g[TW] * 0.6; g[SQ] = kf(u, SU, [1, 0.93, 1.08, 1], SE);
+        const stp = Math.sin(Math.PI * seg(u, 0.04, SU[1])); setv(g, FN, kf(u, SU, [-0.15, -0.34, -0.34, -0.3], SE), ANK + stp * 0.07, 0.12); g[PN] = stp * 0.3; setv(g, FP, 0.19 - fol * 0.05, ANK + fol * 0.05, -0.12 + fol * 0.1); g[PP] = fol * 0.5;
+        stick(g, kf(u, SU, [0.12, -0.08, -0.14, -0.16], SE), kf(u, SU, [0.6, 0.58, 0.58, 0.7], SE), kf(u, SU, [0.24, 0.24, 0.34, 0.32], SE), kf(u, SU, [20, 72, 98, 114], SE), u < REL ? null : lerp(floorEps(0.58), 4, out(fol)));
+        g[BROW] = 0.6 - fol * 0.6; g[MOUTH] = u < SU[1] ? 0 : 0.3 + fol * 0.4; g[BRY] = seg(u, 0, SU[1]) * 0.5 + fol * 0.3;
+      } else {
+        // Handgelenkschuss: kaum ausholen, die Schaufel bleibt am Boden und schnappt nach vorn
+        g[PY] = kf(u, SU, [0.43, 0.395, 0.42, 0.48], SE); g[PZ] = kf(u, SU, [0, -0.04, 0.07, 0.12], SE); g[LEAN] = kf(u, SU, [0.36, 0.44, 0.4, 0.2], SE);
+        g[TW] = kf(u, SU, [0.3, 0.8, -0.05, -0.7], SE); g[HIPY] = kf(u, SU, [0.25, 0.45, 0.05, -0.3], SE); g[HX] = -0.26; g[HY] = -g[TW] * 0.7; g[SQ] = kf(u, SU, [1, 0.92, 1.08, 1], SE);
+        setv(g, FN, -0.12, ANK, 0.18); setv(g, FP, 0.17 - fol * 0.03, ANK + fol * 0.05, -0.16 + fol * 0.11); g[PP] = fol * 0.6;
+        stick(g, kf(u, SU, [-0.03, 0.07, -0.08, -0.13], SE), kf(u, SU, [0.6, 0.58, 0.58, 0.7], SE), kf(u, SU, [0.24, 0.19, 0.3, 0.28], SE), kf(u, SU, [25, -28, 40, 92], SE), u < REL ? null : lerp(floorEps(0.58), 8, out(fol)));
+        g[BROW] = 1 - fol; g[MOUTH] = u < REL ? 0.2 : 0.2 + fol * 0.5; g[BRY] = fol * 0.6;
+      }
     } else if (a === 'pass') {
       const PU = [0, 0.36, 0.62, 1];
       g[TW] = kf(u, PU, [0.25, 0.6, 0, -0.3], SE); g[HIPY] = g[TW] * 0.4; g[PZ] = kf(u, PU, [0, -0.04, 0.05, 0.08], SE); g[HY] = -g[TW] * 0.7; g[SQ] = kf(u, PU, [1, 0.95, 1.05, 1], SE);
@@ -261,7 +281,7 @@
     reset(P);
   }
   // Zustand einer Figur zurück auf «steht bereit»
-  function reset(P) { P.anim = 'idle'; P.speed = 0; P.ball = false; P.fresh = true; P.stay = false; P.dir = 0; P.pitch = 0; P.twirl = 0; P.gaze = true; P.actor = false; P.label.visible = false; }
+  function reset(P) { if (P.hand0) { P.hand = P.hand0; P.hand0 = 0; } P.style = null; P.poof = 0; P.anim = 'idle'; P.speed = 0; P.ball = false; P.fresh = true; P.stay = false; P.dir = 0; P.pitch = 0; P.twirl = 0; P.gaze = true; P.actor = false; P.label.visible = false; }
   // Szenenraum → Halle: gespiegelt, wenn der Gegner angreift
   const toW = (v, o) => (D.flip ? o.set(-v.x, v.y, RL - v.z) : o.copy(v));
   // Rechnet die Haltung für diesen Augenblick und stellt die Gelenke. dt glättet den Übergang zwischen zwei Bewegungen.
@@ -300,7 +320,7 @@
     const pt = P.anim === 'fall' ? 1.36 * bounce(clamp((t - P.t0) / (P.dur || 0.6), 0, 1)) : 0; P.pitch += (pt - P.pitch) * (P.anim === 'fall' ? 1 : 1 - Math.exp(-dt * 8));
     toW(P.pos, P.root.position); P.root.position.y = Math.sin(P.pitch) * 0.2; P.root.rotation.set(P.pitch, P.face + P.twirl + (D.flip ? Math.PI : 0), 0); P.blob.visible = P.pitch < 0.3;
     // In der Übersicht des laufenden Spiels stehen die Figuren etwas grösser da, damit man sie erkennt
-    P.big += ((D.mode === 'live' ? 1.32 : 1) - P.big) * (1 - Math.exp(-dt * 6)); P.root.scale.setScalar(P.big);
+    P.big += ((D.mode === 'live' ? 1.32 : 1) - P.big) * (1 - Math.exp(-dt * 6)); P.root.scale.setScalar(P.big); if (P.poof) P.root.scale.set(P.big * (1 + 0.35 * P.poof), P.big * Math.max(0.02, 1 - P.poof), P.big * (1 + 0.35 * P.poof));
   }
   // Wo der Ball an der Schaufel liegt (im Szenenraum)
   function bladePos(P, v) {
@@ -554,7 +574,7 @@
       const a = N.mesh.geometry.attributes.position, b = N.base;
       for (let i = 0; i < a.count; i++) {
         let dz = 0;
-        if (live) { const dt = time - hit.t; if (dt >= 0) { const dx = b[i * 3] - hit.x, dy = b[i * 3 + 1] - hit.y, d2 = dx * dx + dy * dy, ex = Math.min(1, (GW - Math.abs(b[i * 3])) / 0.2) * Math.min(1, (R.slope / 2 - Math.abs(b[i * 3 + 1])) / 0.2); dz = -Math.exp(-dt / 0.55) * Math.cos(dt * 18) * (0.36 * Math.exp(-d2 / 0.16) + 0.12 * Math.exp(-d2 / 1.1) * Math.cos(dt * 18 - Math.sqrt(d2) * 4)) * Math.max(0, ex); } }
+        if (live) { const dt = time - hit.t; if (dt >= 0) { const dx = b[i * 3] - hit.x, dy = b[i * 3 + 1] - hit.y, d2 = dx * dx + dy * dy, ex = Math.min(1, (GW - Math.abs(b[i * 3])) / 0.2) * Math.min(1, (R.slope / 2 - Math.abs(b[i * 3 + 1])) / 0.2); dz = -(hit.amp || 1) * Math.exp(-dt / 0.55) * Math.cos(dt * 18) * (0.36 * Math.exp(-d2 / 0.16) + 0.12 * Math.exp(-d2 / 1.1) * Math.cos(dt * 18 - Math.sqrt(d2) * 4)) * Math.max(0, ex); } }
         a.setZ(i, b[i * 3 + 2] + dz);
       }
       a.needsUpdate = true; N.still = !live; if (!live) N.hit = null;
@@ -601,6 +621,10 @@
     R.marks.gate.position.set(0, 0, D.flip ? RL : 0); R.marks.gate.rotation.y = D.flip ? Math.PI : 0;
     return { by, K, list: Object.keys(by).map(id => by[id]) };
   }
+  // Schussarten in der Szene: Dauer der Bewegung (sd), Flugzeit mal (fly), Bogen der Flugbahn mal (arc), Wucht im Netz (net)
+  const STY3 = { slap: { sd: 1.08, fly: 0.7, arc: 0.45, net: 1.6 }, wrist: { sd: 0.66, fly: 1, arc: 1, net: 1 }, drag: { sd: 1.02, fly: 1.05, arc: 0.8, net: 0.9 } };
+  // Zugschuss: Der Ball wird von der Stockseite weg gezogen. Passt die Stockseite nicht zur Richtung (pull im Szenenraum), wechselt die Figur für diesen Schuss die Seite.
+  function handFor(P, pull, face) { const want = pull * Math.cos(face) > 0 ? -1 : 1; if (want !== P.hand) { P.hand0 = P.hand0 || P.hand; P.hand = want; P.fresh = true; } }
   function play(spec, opt) {
     if (!ok() || !R) return null;
     try { return startCut(spec, opt || {}); } catch (e) { fail(e); return null; }
@@ -616,7 +640,7 @@
     const anim = (P, name, t, d, extra) => { P.anim = name; P.t0 = t; P.dur = d || 1; Object.assign(P, extra || {}); };
     // Läuft Richtung Ziel und dreht sich dorthin; cycle treibt die Beine. Gibt true zurück, solange er unterwegs ist.
     const moveTo = (P, x, z, sp, dt, keep) => { const dx = x - P.pos.x, dz = z - P.pos.z, d = Math.hypot(dx, dz), stp = sp * dt; if (d > 0.04) { P.faceTo = Math.atan2(dx, dz); const k = Math.min(1, stp / d); P.pos.x += dx * k; P.pos.z += dz * k; if (!keep) P.anim = 'run'; P.speed = sp; P.cycle += stp * 7; return true; } P.speed = 0; if (P.anim === 'run') P.anim = 'idle'; return false; };
-    let step, dur, mood = 'idle', tt = 0, led = 0, shakeT = -9, impactDone = false, resImpact, resDone, carrier = null, focus = 0;
+    let step, dur, mood = 'idle', tt = 0, led = 0, shakeT = -9, shakeAmp = 0.05, impactDone = false, resImpact, resDone, carrier = null, focus = 0;
     const impact = new Promise(r => { resImpact = r; }), done = new Promise(r => { resDone = r; });
     const fire = () => { if (!impactDone) { impactDone = true; resImpact(true); } };
     const ballAt = P => { carrier = P; }, actors = ids => ids.forEach(id => { if (by[id]) { by[id].label.visible = true; by[id].actor = true; } });
@@ -624,7 +648,10 @@
     if (spec.kind === 'shot') {
       const Sh = by[spec.by], p0 = Sh.pos.clone(), dist = Math.max(1.5, Math.hypot(p0.x, p0.z)), dir = V(-p0.x, 0, -p0.z).normalize(), res = spec.result, goal = res === 'goal', tight = !!spec.tight;
       const lx = clamp((spec.land ? spec.land[0] : 0) * GW, -GW * 1.7, GW * 1.7), ly = clamp((spec.land ? spec.land[1] : 0.4) * GH, 0.08, GH * 1.6);
-      const sd = spec.quick ? 0.7 : 0.85, t0 = cont ? -sd * REL : spec.quick ? 0.05 : 0.22, tRel = t0 + sd * REL, fly = cont ? clamp(spec.fly || 0.2, 0.1, 1.2) : (0.3 + dist * 0.028) * (tight ? 1.7 : 1);
+      // Schussart: Der Schlagschuss holt lange aus und fliegt schnell, das Handgelenk schnappt kurz, der Zug zieht den Ball erst zur Seite
+      const sty = STY3[spec.style] ? spec.style : 'wrist', SY = STY3[sty], pullW = sty === 'drag' ? (spec.pull || (p0.x > 0 ? -1 : 1)) : 0;
+      const sd = SY.sd * (spec.quick ? 0.85 : 1), t0 = cont ? -sd * REL : spec.quick ? 0.05 : 0.22, tRel = t0 + sd * REL, fly = cont ? clamp(spec.fly || 0.2, 0.1, 1.2) : (0.3 + dist * 0.028) * SY.fly * (tight ? 1.7 : 1);
+      Sh.style = sty; if (pullW) { handFor(Sh, pullW, Math.atan2(-p0.x, -p0.z)); if (cont) Sh.pos.x = p0.x + pullW * 0.75; }      // nach dem Anlauf (cont) steht er schon zur Seite gerückt
       const Bl = res === 'blocked' ? by[spec.blocker] || list.filter(P => P.side !== spec.atk).sort((a, b) => a.pos.distanceTo(p0) - b.pos.distanceTo(p0))[0] || null : null;
       const end = V(lx, ly, 0.36), from = V();
       if (goal) end.set(lx, ly, -GD * (1 - ly / GH) * 0.8 - 0.03);
@@ -644,14 +671,18 @@
       const S_ = { shot: cont, from: cont ? ball0 : null, hit: false, block: false, spin: 0, cutDone: false };
       step = (t, dt) => {
         if (t >= t0 && Sh.anim === 'idle' && !S_.shot) { S_.shot = true; anim(Sh, 'shot', t0, sd); }
+        if (pullW && !cont) Sh.pos.x = p0.x + pullW * 0.75 * ease(seg(t, t0, t0 + sd * SU[1]));      // Zugschuss: Er geht mit dem Ball zur Seite
+        if (sty === 'slap' && !S_.kick && t >= tRel) { S_.kick = true; shakeT = t; shakeAmp = 0.022; }      // der Schlag: ein kurzer Ruck
         carrier = null;
-        if (t < tRel) ballAt(Sh);
-        else if (t < tEnd) { if (!S_.from) { S_.from = from.copy(ballV).clone(); Sh.ball = false; } const u = (t - tRel) / (tEnd - tRel), k = tight ? ease(u) * 0.3 + u * 0.7 : u; ballV.lerpVectors(S_.from, end, k); ballV.y += Math.sin(Math.PI * k) * Math.min(0.45, dist * 0.03) * (cont ? 0.3 : 1); }
+        // Schlagschuss: Der Ball bleibt liegen, während der Stock ausholt
+        if (t < tRel && sty === 'slap' && S_.shot && !cont) { if (!S_.rest) S_.rest = bladePos(Sh, V()); ballV.copy(S_.rest); }
+        else if (t < tRel) ballAt(Sh);
+        else if (t < tEnd) { if (!S_.from) { S_.from = from.copy(ballV).clone(); Sh.ball = false; } const u = (t - tRel) / (tEnd - tRel), k = tight ? ease(u) * 0.3 + u * 0.7 : u; ballV.lerpVectors(S_.from, end, k); ballV.y += Math.sin(Math.PI * k) * Math.min(0.45, dist * 0.03) * (cont ? 0.3 : SY.arc); }
         else {
           const a = t - tEnd;
           if (!S_.hit) {
             S_.hit = true; fire();
-            if (goal) { (D.flip ? R.nets[1] : R.nets[0]).hit = { t: D.t, x: lx, y: (ly - GH / 2) * R.slope / GH }; mood = 'cheer'; led = t; shakeT = t; K.mood = -1; Sh.gaze = false; anim(Sh, 'cheer', t, 9); list.forEach(P => { if (P !== Sh && P.side !== spec.atk) anim(P, 'sad', t + 0.2, 9); }); }
+            if (goal) { (D.flip ? R.nets[1] : R.nets[0]).hit = { t: D.t, x: lx, y: (ly - GH / 2) * R.slope / GH, amp: SY.net }; mood = 'cheer'; led = t; shakeT = t; shakeAmp = 0.05 * SY.net; K.mood = -1; Sh.gaze = false; anim(Sh, 'cheer', t, 9); list.forEach(P => { if (P !== Sh && P.side !== spec.atk) anim(P, 'sad', t + 0.2, 9); }); }
             else { mood = res === 'blocked' ? 'idle' : 'groan'; if (res === 'miss' && spec.miss === 'post') shakeT = t; if (res === 'save' || res === 'catch') K.mood = 1; anim(Sh, 'sad', t + 0.3, 9); }
           }
           if (goal) ballV.set(end.x * (1 - Math.min(1, a * 1.4) * 0.2), Math.max(0.08, end.y - a * a * 3.4), Math.min(-0.12, end.z + a * 0.25));
@@ -682,7 +713,7 @@
           const k = cont ? 1 : ease(seg(t, tRel - 0.08, tEnd + 0.12)), pre = ease(seg(t, 0, tRel));
           // Geblockt: von der Seite, damit man Schütze und Blocker sieht
           if (Bl) { camP.copy(p0).addScaledVector(dir, 0.75).addScaledVector(stickSide, 3.5 - pre * 0.4).setY(1.15); camL.copy(p0).addScaledVector(dir, 0.75).setY(0.65); camAt(camP, camL, 46); focus = 3.4; return; }
-          camP.lerpVectors(c0, c1, k).addScaledVector(dir, pre * (over ? 0.45 : 0.2)); if (over) { const arc = Math.sin(Math.PI * k); camP.y += arc * 0.55; camP.addScaledVector(stickSide, arc * 1.5); } camL.lerpVectors(l0, l1, k);
+          camP.lerpVectors(c0, c1, k).addScaledVector(dir, pre * (over ? 0.45 : 0.2)); if (pullW) camP.x += (Sh.pos.x - p0.x) * (1 - k); if (over) { const arc = Math.sin(Math.PI * k); camP.y += arc * 0.55; camP.addScaledVector(stickSide, arc * 1.5); } camL.lerpVectors(l0, l1, k); if (pullW) camL.x += (Sh.pos.x - p0.x) * (1 - k) * 0.6;
           camAt(camP, camL, 46); focus = lerp(camP.distanceTo(p0), camP.distanceTo(l1), k);
         }
       };
@@ -754,7 +785,7 @@
         fans(D.t, spec.atk, mood);
         R.leds.forEach((L, i) => { const on = led && i === (D.flip ? 1 : 0), m = L.material; if (on) { if (m.map !== R.ledGoal) m.map = R.ledGoal; m.color.setScalar(0.7 + 0.3 * Math.abs(Math.sin((tt - led) * 9))); } else if (m.map !== R.ledIdle) { m.map = R.ledIdle; m.color.setScalar(1); } });
         if (led) R.ledGoal.offset.x = tt * 0.35;
-        const sh = tt - shakeT; R.shake = sh >= 0 && sh < 0.35 ? (1 - sh / 0.35) * 0.05 : 0; R.shakeT = sh;
+        const sh = tt - shakeT; R.shake = sh >= 0 && sh < 0.35 ? (1 - sh / 0.35) * shakeAmp : 0; R.shakeT = sh;
         if (tt >= dur) { me.end(); if (!o.linger || tt > dur + 20) me.kill(); }
       },
       end() { if (ended) return; ended = true; fire(); resDone(true); },
@@ -839,18 +870,28 @@
       if (D.cut) D.cut.kill(); if (D.mode !== 'live') unflip();
       const st = stage(spec), Sh = st.by[spec.by], K = st.K; hideMarks(); blendCam(0.5); D.mode = 'aim'; R.trailNew = true;
       st.list.forEach(P => { P.faceTo = P.side === spec.atk ? Math.atan2(-P.pos.x, -P.pos.z) : Math.atan2(Sh.pos.x - P.pos.x, Sh.pos.z - P.pos.z); P.face = P.faceTo; });
-      Sh.ball = true; K.pos.x = clamp((spec.kx || 0) * GW, -GW * 0.72, GW * 0.72);
+      Sh.ball = true; K.pos.x = clamp((spec.kx || 0) * GW, -GW * 0.72, GW * 0.72); Sh.style = STY3[spec.style] ? spec.style : 'wrist';
       st.list.forEach(P => { P.root.visible = false; });      // nur Tor und Goalie: Wer davor steht, würde es verdecken
       const p0 = Sh.pos, dist = Math.max(2.5, Math.hypot(p0.x, p0.z)), dx = p0.x / dist, dz = p0.z / dist, cd = dist + 2.8, frac = 0.5 + 0.3 * clamp(spec.q == null ? 0.5 : spec.q, 0, 1);
       const hf = 2 * Math.atan(2 * GW * Math.max(0.55, dz) / frac / (2 * cd)), vf = 2 * Math.atan(Math.tan(hf / 2) / (R.w / R.h)) / RAD;
-      D.aim = { list: st.list, Sh, K, cam: new T.Vector3(dx * cd, 2.25, dz * cd), look: new T.Vector3(0, 0.54, 0), fov: clamp(vf, 7, 48), dist: cd, fly: null, atk: spec.atk };
+      const off = spec.style === 'drag' && spec.pull ? spec.pull * 0.9 : 0;
+      D.aim = { list: st.list, Sh, K, cam: new T.Vector3(dx * cd, 2.25, dz * cd), look: new T.Vector3(0, 0.54, 0), fov: clamp(vf, 7, 48), dist: cd, fly: null, atk: spec.atk, kx: K.pos.x, off, offTo: off, p0: Sh.pos.clone(), wind: null, camV: new T.Vector3(), lookV: new T.Vector3() };
       return true;
     } catch (e) { fail(e); return false; }
   }
   // Zielmarke im Tor (g in Torkoordinaten) oder weg
   function aimTarget(g) { const m = R && R.marks.aim; if (!m) return; m.visible = !!g; if (g) m.position.set(g[0] * GW, g[1] * GH, 0.04); }
   // Reichweite des Goalies: Ellipse um ihn (kx, ky Mitte, r waagrecht, kys Stauchung nach oben), hot: er rückt
-  function aimReach(o) { const M = R && R.marks; if (!M) return; M.reach.visible = M.reachEdge.visible = !!o; if (!o) return; [M.reach, M.reachEdge].forEach(m => { m.position.set(o.kx * GW, o.ky * GH, 0.03); m.scale.set(o.r * GW, o.r / o.kys * GH, 1); }); M.reachEdge.material.color.set(o.hot ? '#f7d774' : '#ffffff'); M.reach.material.opacity = o.hot ? 0.6 : 0.5; if (D.aim) D.aim.K.pos.x = clamp(o.kx * GW, -GW * 0.8, GW * 0.8); }
+  function aimReach(o) { const M = R && R.marks; if (!M) return; M.reach.visible = M.reachEdge.visible = !!o; if (!o) return; [M.reach, M.reachEdge].forEach(m => { m.position.set(o.kx * GW, o.ky * GH, 0.03); m.scale.set(o.r * GW, o.r / o.kys * GH, 1); }); M.reachEdge.material.color.set(o.hot ? '#f7d774' : '#ffffff'); M.reach.material.opacity = o.hot ? 0.6 : 0.5; if (D.aim) D.aim.kx = clamp(o.kx * GW, -GW * 0.8, GW * 0.8); }
+  // Andere Schussart beim Zielen: Beim Zugschuss rückt die Kamera mit dem Ball zur Seite (pull: -1 links, 1 rechts), sonst zurück
+  function aimStyle(style, pull) { const A = D.aim; if (!A) return; A.Sh.style = STY3[style] ? style : 'wrist'; A.offTo = style === 'drag' && pull ? pull * 0.9 : 0; }
+  /* Anlauf des Gegners vor seinem Schuss: Der Schütze ist von hinten zu sehen und holt in seiner Schussart aus; nach ms
+     Millisekunden ist der Ball weg. Die Kamera fährt dabei von der Totale aufs Tor. So lässt sich die Schussart lesen. */
+  function windup(style, ms) {
+    const A = D.aim; if (!A) return; const Sh = A.Sh, d = Math.max(0.3, ms / 1000), sty = STY3[style] ? style : 'wrist', sd = Math.min(STY3[sty].sd, d / REL), pull = sty === 'drag' ? (A.p0.x > 0 ? -1 : 1) : 0;
+    Sh.style = sty; Sh.root.visible = true; Sh.poof = 0; Sh.anim = 'idle'; Sh.fresh = true; Sh.pos.copy(A.p0); if (pull) handFor(Sh, pull, Sh.faceTo);
+    A.wind = { t0: D.t, rel: D.t + d, sd, start: D.t + d - sd * REL, pull, gone: 0 };
+  }
   // Wo im Tor liegt der Finger? Gibt Torkoordinaten zurück (x -1 bis 1 zwischen den Pfosten, y 0 Boden bis 1 Latte).
   function pickGoal(cx, cy) {
     if (!R) return [0, 0.5]; const r = R.host.getBoundingClientRect(), v = R.v1.set((cx - r.left) / r.width * 2 - 1, 1 - (cy - r.top) / r.height * 2, 0.5).unproject(R.cam), o = R.cam.position, dzr = v.z - o.z, gz = D.flip ? RL : 0;
@@ -858,16 +899,47 @@
     return [(D.flip ? -x : x) / GW, y / GH];
   }
   // Parade: Der Ball fliegt in ms Millisekunden zum Punkt land (Torkoordinaten), dort blinkt ein Ring; die Zonen sind eingeblendet
-  function react(land, ms, zones) { const A = D.aim; if (!A) return; const M = R.marks, from = bladePos(A.Sh, new T.Vector3()); A.Sh.ball = false; A.Sh.anim = 'shot'; A.Sh.t0 = D.t - 0.7 * REL; A.Sh.dur = 0.7; A.fly = { from, to: new T.Vector3(land[0] * GW, Math.max(0.08, land[1] * GH), 0.1), t0: D.t, dur: Math.max(0.1, ms / 1000) }; M.land.visible = zones !== false; M.land.position.set(clamp(land[0], -1.2, 1.2) * GW, clamp(land[1], 0.05, 1.2) * GH, 0.05); M.zones.visible = zones !== false; Object.keys(M.zone).forEach(z => { M.zone[z].visible = false; }); }
+  /* feint { land, ms }: Zugschuss. Der Ball fliegt zuerst Richtung land der Finte, der Ring steht dort; nach ms springt der Ring
+     an den echten Landepunkt, und der Ball zieht in einem Bogen dorthin. */
+  function react(land, ms, zones, feint) {
+    const A = D.aim; if (!A) return; const M = R.marks, Sh = A.Sh, W = A.wind, from = W && W.rest ? W.rest.clone() : bladePos(Sh, new T.Vector3()), dur = Math.max(0.1, ms / 1000), V = (x, y) => new T.Vector3(x * GW, Math.max(0.08, y * GH), 0.1);
+    Sh.ball = false; if (!W || Sh.anim !== 'shot') { Sh.anim = 'shot'; Sh.t0 = D.t - 0.7 * REL; Sh.dur = 0.7; }
+    if (W) W.gone = D.t;                                                               // der Schütze macht Platz für den Blick aufs Tor
+    A.fly = { from, to: V(land[0], land[1]), t0: D.t, dur };
+    const at = l => M.land.position.set(clamp(l[0], -1.2, 1.2) * GW, clamp(l[1], 0.05, 1.2) * GH, 0.05);
+    if (feint && feint.ms > 0 && feint.ms < ms) { const F = A.fly, f = feint.ms / ms, dec = V(feint.land[0], feint.land[1]); F.f = f; F.mid = new T.Vector3().lerpVectors(from, dec, f); F.ctl = F.mid.clone().addScaledVector(dec.clone().sub(from), (1 - f) * 0.5); F.land = land; at(feint.land); } else at(land);
+    M.land.visible = zones !== false; M.zones.visible = zones !== false; Object.keys(M.zone).forEach(z => { M.zone[z].visible = false; });
+  }
   function reactPick(z) { const M = R && R.marks; if (M && M.zone[z]) M.zone[z].visible = true; }
   // Wie lange der Ball in der Parade-Szene noch fliegt (Sekunden)
   function flyLeft() { const f = D.aim && D.aim.fly; return f ? Math.max(0, f.t0 + f.dur - D.t) : 0; }
   function aimTick(dt) {
-    const A = D.aim, t = D.t, tmp = R.v2;
+    const A = D.aim, t = D.t, tmp = R.v2, W = A.wind, Sh = A.Sh;
+    if (W) {
+      // Anlauf: erst ruhig am Ball, dann die Bewegung, die genau beim Abschluss den Ball trifft; beim Zug geht er mit zur Seite
+      if (t >= W.start && Sh.anim !== 'shot' && !W.gone) { Sh.anim = 'shot'; Sh.t0 = W.start; Sh.dur = W.sd; if (Sh.style === 'slap') W.rest = bladePos(Sh, new T.Vector3()); }
+      if (W.pull) Sh.pos.x = A.p0.x + W.pull * 0.75 * ease(seg(t, W.start, W.start + W.sd * SU[1]));
+      if (W.gone) { Sh.poof = clamp((t - W.gone) / 0.12, 0, 1); if (Sh.poof >= 1) { Sh.root.visible = false; Sh.poof = 0; W.gone = 0; W.done = true; } }
+    }
     A.list.forEach(P => { if (P.anim !== 'shot') { P.anim = 'idle'; P.speed = 0; } pose(P, t, dt); });
-    if (A.fly) { const u = clamp((t - A.fly.t0) / A.fly.dur, 0, 1); tmp.lerpVectors(A.fly.from, A.fly.to, u); tmp.y += Math.sin(Math.PI * u) * 0.25; R.marks.land.scale.setScalar(1 + Math.sin(t * 20) * 0.18); } else bladePos(A.Sh, tmp);
+    if (A.fly) {
+      const F = A.fly, u = clamp((t - F.t0) / F.dur, 0, 1);
+      if (F.f && u < F.f) tmp.lerpVectors(F.from, F.mid, u / F.f);
+      else if (F.f) { const k = (u - F.f) / (1 - F.f), a = (1 - k) * (1 - k), b = 2 * (1 - k) * k, c = k * k; tmp.set(a * F.mid.x + b * F.ctl.x + c * F.to.x, a * F.mid.y + b * F.ctl.y + c * F.to.y, a * F.mid.z + b * F.ctl.z + c * F.to.z); if (F.land) { R.marks.land.position.set(clamp(F.land[0], -1.2, 1.2) * GW, clamp(F.land[1], 0.05, 1.2) * GH, 0.05); F.land = null; } }
+      else tmp.lerpVectors(F.from, F.to, u);
+      tmp.y += Math.sin(Math.PI * u) * 0.25; R.marks.land.scale.setScalar(1 + Math.sin(t * 20) * 0.18);
+    } else if (W && W.rest) tmp.copy(W.rest); else bladePos(Sh, tmp);
     setBall(tmp);
-    camAt(A.cam, A.look, A.fov); R.focus = A.dist; R.dof = [1.4, 5, 10];
+    // Goalie gleitet an seinen Platz; beim Zugschuss rückt die Kamera zur Seite
+    A.K.pos.x += (A.kx - A.K.pos.x) * (1 - Math.exp(-dt / 0.05)); A.off += (A.offTo - A.off) * (1 - Math.exp(-dt / 0.12));
+    A.camV.copy(A.cam); A.camV.x += A.off; A.lookV.copy(A.look); let fov = A.fov;
+    if (W && !W.done) {
+      // Totale schräg hinter dem Schützen: Man sieht ihn ausholen. Erst im Durchziehen fährt die Kamera aufs Tor zu.
+      const k = ease(seg(t, W.rel - 0.36, W.rel - 0.04)), w = 1 - k, bx = A.p0.x - A.cam.x, bz = A.p0.z - A.cam.z, bl = Math.hypot(bx, bz) || 1, ux = bx / bl, uz = bz / bl;
+      A.camV.x += (-ux * 2.2 + uz * 1.15) * w; A.camV.z += (-uz * 2.2 - ux * 1.15) * w; A.camV.y += 0.75 * w;
+      A.lookV.set(lerp(A.p0.x * 0.7, A.look.x, k), lerp(0.6, A.look.y, k), lerp(A.p0.z * 0.7, A.look.z, k)); fov = lerp(clamp(A.fov * 1.5 + 22, 34, 56), A.fov, k);
+    }
+    camAt(A.camV, A.lookV, fov); R.focus = A.dist; R.dof = [1.4, 5, 10];
   }
 
   /* --- Dribbling-Parcours ---
@@ -976,5 +1048,5 @@
   // Zurück ins laufende Spiel (nach einer Szene, die nachläuft, oder nach dem Zielen)
   function resume() { if (!R) return; if (D.cut) D.cut.kill(); else if (D.mode !== 'live') { unflip(); blendCam(0.5); } }
 
-  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, aim, aimTarget, aimReach, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
+  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, aim, aimTarget, aimReach, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
 })();

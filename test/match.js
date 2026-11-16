@@ -10,6 +10,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
   // verlangt, dass das Match in 3D läuft; der Lauf mit reduzierter Bewegung bleibt in der Sicht von oben.
   const b = await chromium.launch(), bgl = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] }), N = +process.argv[2] || 1; let fail = 0;
   const RUNS = [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true }, { width: 375, shots: true, gl: true }].filter(r => !process.env.ONLY || (process.env.ONLY === 'gl') === !!r.gl);
+  const window_styles = ['slap', 'wrist', 'drag'];
   for (const run of RUNS) {
     const ctx = await (run.gl ? bgl : b).newContext({ viewport: { width: run.width, height: 900 }, deviceScaleFactor: 1, reducedMotion: run.reduce ? 'reduce' : 'no-preference' });
     const p = await ctx.newPage(), errors = [], taken = {}, res = [], seen = {}; let n = 0;
@@ -110,6 +111,16 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         }
         if (st === 'aim') {
           await p.waitForTimeout(200 + Math.random() * 300); await over('schuss'); n++; await snap('06-schuss');
+          // Schussart: drei Knöpfe, genau einer gewählt und genau einer als Tipp. Mal eine andere wählen: Knopf und Bühne müssen sie zeigen.
+          const sty0 = await p.evaluate(() => [document.querySelectorAll('#panel [data-sty]').length, document.querySelectorAll('#panel .sty.on').length, document.querySelectorAll('#panel .sty .tags .tr:not(.fav)').length, window.HKMatch.STYLES.indexOf(document.getElementById('stage').dataset.style) >= 0]);
+          if (sty0[0] !== 3 || sty0[1] !== 1 || sty0[2] !== 1 || !sty0[3]) { if (!taken.sty0) { taken.sty0 = 1; errors.push('Schussarten beim Zielen stimmen nicht (Knöpfe, gewählt, Tipp, Bühne): ' + JSON.stringify(sty0)); } }
+          else if (Math.random() < 0.6) {
+            const pick = await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-sty]')], b = l[Math.floor(Math.random() * 3)]; b.click(); return b.dataset.sty; });
+            await p.waitForTimeout(run.gl ? 450 : 120);
+            const got = await p.evaluate(() => { const on = document.querySelectorAll('#panel .sty.on'); return [on.length === 1 && on[0].dataset.sty, document.getElementById('stage').dataset.style, document.getElementById('hist').textContent.slice(0, 40)]; });
+            if (got[0] !== pick || got[1] !== pick) errors.push('Schussart nicht umgestellt: gewählt ' + pick + ', gezeigt ' + JSON.stringify(got));
+            seen['sty-' + pick] = 1; await snap('06-schussart-' + pick); await over('schussart');
+          }
           // Ziel setzen: meist in eine Ecke, mal irgendwohin; mal tippen, mal schieben. Danach läuft der Schuss-Balken.
           const r = Math.random();
           if (await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) {
@@ -129,7 +140,12 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           await p.waitForTimeout(60); continue;
         }
         if (st === 'react') {
-          await snap('08-parade'); n++;
+          n++;
+          // Die Schussart des Gegners ist angesagt; beim Zugschuss gibt es eine Finte. In einem Zug gelesen: Die Parade kann jeden Augenblick vorbei sein.
+          const tell = await p.evaluate(() => { const e = document.getElementById('tell'), s = document.getElementById('stage'), sd = s.dataset, on = s.classList.contains('live3d') ? sd.react === '1' : document.getElementById('zones').classList.contains('armed'); return [on, !e.hidden && e.textContent, sd.style, sd.feint]; });
+          if (tell[0] && (!tell[1] || window_styles.indexOf(tell[2]) < 0)) { if (!taken.tell) { taken.tell = 1; errors.push('Ansage der Schussart fehlt bei der Parade: ' + JSON.stringify(tell)); } }
+          else if (tell[0]) { seen['opp-' + tell[2]] = 1; if ((tell[2] === 'drag') !== !!tell[3]) errors.push('Finte passt nicht zur Schussart: ' + JSON.stringify(tell)); }
+          await snap('08-parade'); if (tell[0] && tell[3]) await snap('08-parade-finte');
           // Mal dorthin, wo der Ring ist, mal zufällig, mal gar nicht
           const r = Math.random();
           if (await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) {
@@ -164,7 +180,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
+    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty-slap', 'sty-wrist', 'sty-drag', 'opp-slap', 'opp-wrist', 'opp-drag'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
     if (run.reduce && seen.live3) errors.push('bei reduzierter Bewegung lief das Match in 3D'); if ((seen.missTap || 0) > 2 && !seen.tap3) errors.push('Tippen auf eine Figur wählt den Pass nicht: ' + seen.missTap + ' Versuche'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;

@@ -106,6 +106,25 @@ Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je 
 - **Ohne 3D:** Fehlt WebGL oder ist am Gerät «Bewegung reduzieren» eingestellt, läuft alles wie vorher in der Sicht von oben und in der Torsicht von vorne. Die Sicht von oben bleibt im Hintergrund das Modell: Jede Bewegung wird dort gerechnet und an die 3D-Halle weitergereicht.
 - **Technik:** `src/lab/scene3d.js` (`HKScene3D`), dazu three.js r149 (`vendor/three.min.js`, MIT-Lizenz, 608 KB, gzip rund 150 KB), das neben der Match-Seite liegt und nachgeladen wird. Der Browser-Test spielt Matches in 3D durch (Tippen auf Figuren, Zielen im Tor, Parade, Parcours) und prüft, dass Tippen ins Tor die richtige Stelle trifft. Die Testumgebung rechnet 3D ohne Grafikkarte und darum sehr langsam; wie flüssig es auf einem echten Telefon läuft, ist nicht gemessen.
 
+**Schussarten.** Jeder Schuss ist ein Schlagschuss, ein Handgelenkschuss oder ein Zugschuss. Es bleibt bei einem Ziel im Tor und einem Schuss-Balken; die Schussart verändert, wie breit das Feld ist, wie schnell der Strich läuft, wie weit der Goalie reicht, wo er steht und wie leicht ein Gegner blockt.
+
+| | Schlagschuss | Handgelenkschuss | Zugschuss |
+|---|---|---|---|
+| Idee | weit ausholen, hart | kurz und schnell | Ball zur Seite ziehen, dann schiessen |
+| Feld am Balken | schmal (mal 0.85), Strich schneller | breit (mal 1.15), Strich langsamer | normal |
+| Goalie | reicht weniger weit, vor allem aus der Distanz | reicht aus der Distanz weiter | steht noch auf der alten Seite, rutscht aber schnell zurück |
+| Gegner in der Schussbahn | blockt fast immer, schon bei «knapp daneben» | stört wie bisher | stört kaum: Der Ball geht am Stock vorbei |
+| Gegner am Mann | blockt | stört nur halb so stark | stört stärker: Für den Zug fehlt der Platz |
+| Direktschuss nach Querpass | voller Vorteil | 40 % davon | keiner: Der Zug braucht eine Annahme |
+
+- **Wann welche:** Aus der Distanz und beim Direktschuss schlagen. Aus der Nähe und mit einem Gegner am Mann aus dem Handgelenk. Steht ein Gegner in der Schussbahn, ziehen. Aus mittlerer Distanz und frei liegen alle drei gleichauf.
+- **Empfehlung:** Die Engine stellt die passende Art ein («Tipp») und nennt den Grund. Beim Zielen stehen die drei Arten als Knöpfe unter dem Feld; ein Tipp auf eine andere stellt Goalie, Reichweite und Balken sofort um. Die Zahl auf dem Knopf ist die Breite des grünen Felds in Prozent, «Block droht» warnt vor dem Gegner.
+- **Lieblingsschuss:** Jede Karte hat einen, abgeleitet aus ihren Werten (Abschluss: Schlag, Clutch: Handgelenk, Form: Zug; gemessen an der Mitte aller Karten, sodass jede Art bei etwa einem Drittel der Stürmer vorkommt). Kanone schlägt immer, Dribbelkönig zieht immer. Im Lieblingsschuss ist das Feld 15 % breiter. Er steht im Kartenblatt (Karte antippen) und beim Zielen als «Liebling» am Knopf. Auf den Karten stehen keine neuen Zahlen.
+- **Schuss des Gegners:** Seine Schussart ist angesagt, bevor der Ball fliegt, und in 3D sieht man ihn von hinten ausholen. Schlagschuss: Er holt lange aus, danach bleibt 16 % weniger Zeit für die Parade. Handgelenk: kommt ohne Ansatz. Zugschuss: Der Ball zieht zuerst zur falschen Seite, der Ring steht dort; nach 110 bis 220 ms springt der Ring an den echten Landepunkt. Wer wartet, hat danach so viel Zeit wie beim Handgelenk; wer die Finte kennt, tippt gleich auf die andere Seite. Deine Störung in der Abwehr wirkt gegen den Schlagschuss stärker, gegen das Handgelenk schwächer.
+- **In 3D:** Beim Schlagschuss bleibt der Ball liegen, der Stock holt bis Hüfthöhe aus, der Ball fliegt flach und schnell, das Netz beult stärker aus. Das Handgelenk ist ein kurzes Schnappen. Beim Zugschuss geht der Schütze mit dem Ball zur Seite, die Kamera rückt mit.
+- **Balance:** `test/styles.test.js` rechnet für einen gedachten Spieler (80 ms Streuung am Balken, bestes Ziel im Tor) die Torchance jeder Art in jeder Lage und spielt 200 ganze Matches. In den Schusslagen dieser Matches ist die empfohlene Art in rund 90 % die beste; immer dieselbe Art zu nehmen kostet je nach Art 3 bis 11 Punkte Torchance pro Schuss. Mit der Empfehlung fallen etwa gleich viele Tore wie vor den Schussarten. Die Werte sind gerechnet, nicht mit echten Spielern gemessen.
+- **Noch nicht drin:** Heber, Aufsetzer und Rückhand; Gesten statt Knöpfe.
+
 **Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
 
 **Können und Karten statt Würfel.** Im Match wird nichts mehr gewürfelt, was der User selbst entscheiden kann:
@@ -197,6 +216,10 @@ node test/engine.test.js
 
 ```bash
 node test/world.test.js
+```
+
+```bash
+node test/styles.test.js
 ```
 
 ```bash

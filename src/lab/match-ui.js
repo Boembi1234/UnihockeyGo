@@ -20,9 +20,20 @@
     press: '<svg viewBox="0 0 40 40"><path d="M4 20 H16 M11 14.5 L16.5 20 L11 25.5 M36 20 H24 M29 14.5 L23.5 20 L29 25.5"/></svg>',
     block: '<svg viewBox="0 0 40 40"><path d="M7 12 H33 V30 H7 Z M7 21 H33 M15 12 V21 M25 12 V21 M20 21 V30"/></svg>',
     lane: '<svg viewBox="0 0 40 40"><path d="M5 31 L35 9" stroke-dasharray="3.5 4.5"/><path d="M13.5 13.5 L26.5 26.5 M26.5 13.5 L13.5 26.5"/></svg>',
+    slap: '<svg viewBox="0 0 40 40"><circle class="f" cx="10" cy="30" r="4.2"/><path d="M17 24 L33 8 M26 8 H33 V15 M18 32 H28 M12 20 L16 16"/></svg>',
+    wrist: '<svg viewBox="0 0 40 40"><circle class="f" cx="10" cy="30" r="4.2"/><path d="M16 26 C 21 18, 27 14, 34 13 M28.5 8.5 L34.5 13 L29.5 18"/></svg>',
+    drag: '<svg viewBox="0 0 40 40"><circle class="f" cx="8" cy="31" r="4.2"/><path d="M14 31 H27 M27 31 V9 M21.5 14.5 L27 8.5 L32.5 14.5"/></svg>',
     goal: z => `<svg viewBox="0 0 30 22"><path d="M3 20 V3 H27 V20"/><circle class="f" cx="${{ l: 9, m: 15, r: 21 }[z[1]]}" cy="${z[0] === 't' ? 8 : 15}" r="3.2"/></svg>`
   };
   const ic = (k, a) => `<span class="ic">${typeof ICON[k] === 'function' ? ICON[k](a) : ICON[k]}</span>`;
+  /* Schussarten: Stichwort für den Knopf, Erklärung für den gewählten Schuss, Ansage beim Schuss des Gegners.
+     WHY: warum die Engine diese Art empfiehlt (siehe pickStyle). */
+  const STY = {
+    slap: { tag: 'hart', does: 'Hart: Der Goalie reicht weniger weit. Dafür ist das Feld schmal, der Strich schnell, und wer ausholt, wird leicht geblockt.', per: 'per Schlagschuss' },
+    wrist: { tag: 'schnell, genau', does: 'Schnell und genau: breites Feld, auch mit einem Gegner am Mann. Aus der Distanz zu schwach.', per: 'aus dem Handgelenk' },
+    drag: { tag: 'am Stock vorbei', does: 'Der Ball wird am Stock des Gegners vorbeigezogen: kaum zu blocken, und der Goalie steht noch auf der alten Seite. Danach schnell abziehen, er rutscht zurück.', per: 'per Zugschuss' }
+  };
+  const WHY = { direct: 'Direktschuss, und niemand steht im Weg', tight: 'ein Gegner ist am Mann', lane: 'ein Gegner steht in der Schussbahn', far: 'aus der Distanz hilft nur Härte', near: 'aus der Nähe zählt Genauigkeit', fav: 'freie Bahn für seinen Lieblingsschuss', empty: 'das Tor ist leer' };
   const ZNAME = { tl: 'oben links', tm: 'oben Mitte', tr: 'oben rechts', bl: 'unten links', bm: 'unten Mitte', br: 'unten rechts' };
   const ROLE = { LD: 'Vert. links', RD: 'Vert. rechts', LW: 'Flügel links', C: 'Center', RW: 'Flügel rechts' };
 
@@ -385,7 +396,7 @@
     const anyFree = !last && G.teams.you.cards.some(c => c.id !== X.id && M.isFree(G, sc, c.id));
     say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.'));
     let h = `<div class="actions2">
-<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
+<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)} · <em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
 <button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>${co ? `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · ` : ''}${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
     if (!last) {
       // Pässe: freie Mitspieler zuerst, dann nach Lage. Dazu, was der Pass bringt: Direktschuss nach Querpass oder sicherer Rückpass.
@@ -880,7 +891,7 @@
     [gv, $('keeper'), $('ball')].forEach(fresh);
     gv.hidden = true; $('pitch').style.visibility = ''; $('stage').classList.remove('goalmode');
     $('shooter').hidden = true; $('tell').hidden = true; $('power').hidden = true; $('zones').className = 'zones off'; $('aim').toggleAttribute('hidden', true);
-    clearTimeout(rx.timer); hideReach(); $('mark').hidden = true; drag = null; target = null;
+    clearTimeout(rx.timer); hideReach(); $('mark').hidden = true; drag = null; target = null; delete $('stage').dataset.style;
     netRest(); crowdSet('you'); gv.dataset.aim = '0';
   }
   const shotLabel = v => (v >= 95 ? 'sehr stark' : v >= 88 ? 'stark' : v >= 80 ? 'mittel' : 'schwach');
@@ -1017,7 +1028,7 @@
     if (L3) {
       // 3D: Die Kamera schaut von hinter dem Schützen aufs Tor; Penaltys schiesst der Schütze allein
       const alone = sh.ctx === 'so' || !G.cur || !G.cur.pos[sh.x];
-      S3.aim({ kind: 'shot', atk: sh.side, by: sh.x, players: alone ? [{ id: sh.x, side: sh.side, x: 180, y: 190, name: X.last, no: X.no }] : specPlayers(G.cur), kx: mine && sh.keeper ? sh.keeper.x : 0, empty: !!sh.empty, q: sh.q });
+      S3.aim({ kind: 'shot', atk: sh.side, by: sh.x, players: alone ? [{ id: sh.x, side: sh.side, x: 180, y: 190, name: X.last, no: X.no }] : specPlayers(G.cur), kx: mine && sh.keeper ? sh.keeper.x : 0, empty: !!sh.empty, q: sh.q, style: sh.style, pull: mine ? sh.pull : 0 });
       if (!L3) { rx.tok--; return toGoal(); }      // 3D ist ausgefallen: weiter in der Torsicht von vorne
       S3.aimTarget(null); $('stage').dataset.react = '0';
     } else {
@@ -1046,40 +1057,51 @@
       return;
     }
     // Schuss des Gegners: erst ein kurzer, unterschiedlich langer Anlauf, dann fliegt der Ball. Die Flugzeit ist dein Zeitfenster.
-    say(sh.empty ? `${X.last} schiesst aufs leere Tor.` : `${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`);
-    $('hist').innerHTML = sh.empty ? '<em>Dein Goalie ist draussen: Nur ein Fehlschuss rettet dich.</em>' : `<em>${sh.oneT ? 'Direktschuss nach einem Querpass: Du hast weniger Zeit. ' : ''}${sh.press > 0 ? 'Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? 'Freie Bahn für den Schützen: du hast weniger Zeit.' : 'Der goldene Ring zeigt, wo der Ball hinfliegt.'}</em>`;
+    /* Die Schussart ist angesagt, bevor der Ball fliegt. Schlagschuss: Er holt weit aus, das dauert, dafür bleibt wenig Zeit.
+       Handgelenk: kommt ohne Ansatz. Zugschuss: Der Ball zieht zuerst zur falschen Seite, erst der zweite Ring gilt. */
+    const TELL = {
+      slap: [`${X.last} holt weit aus: Schlagschuss! Der Ball kommt hart, du hast wenig Zeit.`, 'Schlagschuss: lange ausgeholt, dann sehr schnell. Halte den Finger bereit.'],
+      wrist: [`${X.last} zieht aus dem Handgelenk ab. Tippe die Ecke an, in die der Ball fliegt.`, 'Handgelenkschuss: kommt ohne Ansatz. Der goldene Ring zeigt, wo der Ball hinfliegt.'],
+      drag: [`${X.last} zieht den Ball zur Seite: Zugschuss! Achtung, Finte.`, 'Zugschuss: Der Ball zieht zuerst zur falschen Seite. Tippe erst, wenn der Ring springt, oder gleich auf die andere Seite.']
+    }[sh.style] || [`${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`, 'Der goldene Ring zeigt, wo der Ball hinfliegt.'];
+    say(sh.empty ? `${X.last} schiesst aufs leere Tor.` : TELL[0]);
+    $('hist').innerHTML = sh.empty ? '<em>Dein Goalie ist draussen: Nur ein Fehlschuss rettet dich.</em>' : `<em>${TELL[1]}${sh.oneT ? ' Direktschuss nach einem Querpass: noch weniger Zeit.' : ''}${sh.press > 0 ? ' Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? ' Freie Bahn für den Schützen: du hast weniger Zeit.' : ''}</em>`;
+    if (!sh.empty && M.STYLE[sh.style]) { const tl = $('tell'); tl.innerHTML = ic(sh.style) + M.STYLE[sh.style].name; tl.className = 'tell sty-' + sh.style; tl.hidden = false; $('stage').dataset.style = sh.style; }
     phase = 'wait';
     let pulse = null;
     if (!L3) { kpr.idle(); pulse = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf([START[0], START[1] + 5], 2.3) }], { duration: 300, iterations: Infinity, direction: 'alternate' }); }
     clearTimeout(rx.timer);
-    rx.timer = setTimeout(() => { if (pulse) pulse.cancel(); if (rx.tok === tok && phase === 'wait' && G.shot) react(G.shot); }, 650 + Math.random() * 900);
+    const windup = sh.style === 'slap' ? 1150 + Math.random() * 250 : sh.style === 'drag' ? 800 + Math.random() * 500 : sh.style === 'wrist' ? 450 + Math.random() * 650 : 650 + Math.random() * 900;
+    if (L3) S3.windup(sh.style, windup);
+    rx.timer = setTimeout(() => { if (pulse) pulse.cancel(); if (rx.tok === tok && phase === 'wait' && G.shot) react(G.shot); }, windup);
   }
   // Endpunkt des Balls in der Ebene: bei Pfosten und Latte am Gestänge
   const postPt = (g, L) => (Math.abs(g[0]) >= 1 ? [g[0] > 0 ? 282 : 78, Math.max(92, Math.min(232, L[1]))] : [Math.max(82, Math.min(278, L[0])), 88]);
   function react(sh) {
     if (L3) {
       // 3D: Der Ball fliegt aufs Tor, ein Ring zeigt den Landepunkt; getippt wird ins Tor
-      phase = 'react'; rx.t0 = performance.now(); rx.flight = null; $('stage').dataset.react = sh.empty ? '0' : '1'; $('stage').dataset.land = sh.land.join(',');
-      S3.react(sh.land, sh.window, !sh.empty);
+      phase = 'react'; rx.t0 = performance.now(); rx.flight = null; $('stage').dataset.react = sh.empty ? '0' : '1'; $('stage').dataset.land = sh.land.join(','); $('stage').dataset.feint = sh.feint ? sh.feint.ms : '';
+      S3.react(sh.land, sh.window, !sh.empty, sh.feint);
       if (!sh.empty) say('Jetzt! Tippe die Ecke.');
       clearTimeout(rx.timer); const tok3 = rx.tok;
       rx.timer = setTimeout(() => { if (phase === 'react' && rx.tok === tok3) aimAt({ zone: null, rt: sh.window + 500 }); }, sh.window + 30);
       if (sh.empty) { clearTimeout(rx.timer); aimAt({ zone: null, rt: sh.window + 500 }); }
       return;
     }
-    const ball = $('ball'), mk = $('mark'), L = toScene(sh.land), endL = sh.miss === 'post' ? postPt(sh.land, L) : L, end = toView(endL);
-    rx.end = end; phase = 'react'; rx.t0 = performance.now();
+    const ball = $('ball'), mk = $('mark'), L = toScene(sh.land), endL = sh.miss === 'post' ? postPt(sh.land, L) : L, end = toView(endL), ft = sh.feint, tok = rx.tok;
+    rx.end = end; phase = 'react'; rx.t0 = performance.now(); $('stage').dataset.land = sh.land.join(','); $('stage').dataset.feint = ft ? ft.ms : '';
     if (!sh.empty) {
       $('zones').className = 'zones armed';
-      placeAt(mk, endL, 11); mk.hidden = false; fresh(mk);
+      // Zugschuss: Der Ring steht zuerst auf der falschen Seite und springt dann an den echten Landepunkt
+      placeAt(mk, ft ? toScene(ft.land) : endL, 11); mk.hidden = false; fresh(mk);
       mk.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 160, iterations: Infinity, direction: 'alternate' });
+      if (ft) setTimeout(() => { if (rx.tok === tok && !mk.hidden) placeAt(mk, endL, 11); }, ft.ms);
       say('Jetzt! Tippe die Ecke.');
     }
-    // Die Flugzeit ist das Zeitfenster: echte Dauer, auch bei reduzierter Bewegung
-    const mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24];
-    rx.flight = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf(mid, 1.5), offset: 0.5 }, { transform: ballTf(end, 0.95 * gz.s) }], { duration: sh.window, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
+    // Die Flugzeit ist das Zeitfenster: echte Dauer, auch bei reduzierter Bewegung. Beim Zugschuss fliegt der Ball zuerst Richtung Finte.
+    const mid = [(START[0] + end[0]) / 2, (START[1] + end[1]) / 2 - 24], fo = ft ? ft.ms / sh.window : 0, fv = ft ? toView(toScene(ft.land)) : null, fp = ft ? [START[0] + (fv[0] - START[0]) * fo * 1.5, START[1] + (fv[1] - START[1]) * fo * 1.5] : null;
+    rx.flight = ball.animate(ft ? [{ transform: ballTf(START, 2.1) }, { transform: ballTf(fp, 2.1 - 1.15 * fo), offset: fo }, { transform: ballTf(end, 0.95 * gz.s) }] : [{ transform: ballTf(START, 2.1) }, { transform: ballTf(mid, 1.5), offset: 0.5 }, { transform: ballTf(end, 0.95 * gz.s) }], { duration: sh.window, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
     clearTimeout(rx.timer);
-    const tok = rx.tok;
     rx.timer = setTimeout(() => { if (phase === 'react' && rx.tok === tok) aimAt({ zone: null, rt: sh.window + 500 }); }, sh.window + 30);
     if (sh.empty) { clearTimeout(rx.timer); aimAt({ zone: null, rt: sh.window + 500 }); }      // leeres Tor: niemand kann reagieren
   }
@@ -1094,14 +1116,14 @@
     const mine = e.side === 'you', sc = before && before.cur, alone = e.ctx === 'so' || !sc || !sc.pos[e.x], X = card(e.side, e.x);
     return { kind: 'shot', atk: e.side, by: e.x, players: alone ? [{ id: e.x, side: e.side, x: 180, y: 190, name: X.last, no: X.no }] : specPlayers(sc),
       land: e.land || e.target || [0, 0.4], result: e.result, miss: e.miss, kx: mine ? e.kx || 0 : 0, blocker: e.result === 'blocked' ? e.by : null, tight: !!tight, empty: !!e.empty,
-      dive: mine ? undefined : e.guess ? M.ZC[e.guess] : null, quick: !mine, live: !mine && L3 && S3.mode() === 'aim', fly: L3 ? S3.flyLeft() : 0 };
+      dive: mine ? undefined : e.guess ? M.ZC[e.guess] : null, quick: !mine, live: !mine && L3 && S3.mode() === 'aim', fly: L3 ? S3.flyLeft() : 0, style: e.style, pull: e.pull || 0 };
   }
   async function shotSeq(e, before) {
     const mine = e.side === 'you', ball = $('ball'), X = card(e.side, e.x), bs = 0.95 * gz.s, dirT = e.dir < 0 ? 'links' : 'rechts';
     if (e.result === 'blocked') {
       // Unter Druck klar neben dem Feld gestoppt: der Gegner wirft sich in den Schuss
       const B = card('home', e.by), stop = [START[0] + e.target[0] * 34, START[1] - 78];
-      $('shooter').hidden = true; hideReach(); $('aim').toggleAttribute('hidden', true);
+      $('shooter').hidden = true; $('tell').hidden = true; hideReach(); $('aim').toggleAttribute('hidden', true);
       say(`${X.last} schiesst.`);
       const s3 = scene3(shotSpec(e, before), { linger: true });
       if (s3) await s3.impact;
@@ -1109,7 +1131,7 @@
         await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(stop, 1.8) }], { duration: 170, easing: 'ease-out' });
         anim(ball, [{ transform: ballTf(stop, 1.8), opacity: 1 }, { transform: ballTf([stop[0] + (e.target[0] < 0 ? 70 : -70), START[1] + 4], 2.2), opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
       }
-      stamp('Geblockt', `Strich zu weit ${dirT}: ${B.last} wirft sich in den Schuss.`, 'bad', 'top');
+      stamp('Geblockt', e.style === 'slap' && e.grade === 'near' ? `Zu lange ausgeholt: ${B.last} wirft sich in den Schlagschuss.` : `Strich zu weit ${dirT}: ${B.last} wirft sich in den Schuss.`, 'bad', 'top');
       addTick(`${X.last} schiesst, ${B.last} blockt.`);
       if (s3) await s3.done; else await hold(1400);
       return;
@@ -1120,7 +1142,7 @@
     else if (e.result === 'miss' && e.miss === 'post') { endL = postPt(e.land, L); outL = [endL[0] + (endL[0] < 180 ? -60 : 60), 252]; }
     else if (e.result === 'miss') { outL = [L[0] + (L[0] - 180) * 0.35, L[1] - 30]; fadeOut = true; }
     const end = toView(endL), out = outL && toView(outL);
-    $('shooter').hidden = true; hideReach();
+    $('shooter').hidden = true; $('tell').hidden = true; hideReach();
     // Knapp am Goalie vorbei oder gerade noch gehalten: Der Flug läuft langsamer aus, damit man es sieht
     const tight = mine && !e.miss && Math.abs(e.kd - e.reach) < 0.14, flyMs = Math.round((330 + 240 * (1 - e.q)) * (tight ? 1.55 : 1));
     const goal = e.result === 'goal', saved = e.result === 'save' || e.result === 'catch';
@@ -1168,11 +1190,12 @@
       if (goal) { main = 'Tor'; sub = e.empty ? 'Ins leere Tor.' : corner ? 'Ins Lattenkreuz!' : tight ? 'Knapp an den Fingerspitzen vorbei.' : e.grade === 'perfect' ? 'Perfekt gestoppt: genau ins Ziel.' : 'Der Goalie kommt nicht hin.'; }
       else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = inReach0 ? 'Dein Ziel lag in seiner Reichweite.' : inReach ? 'Zu lange gewartet: Der Goalie war schon in der Ecke.' : off ? `Strich zu weit ${dirT}: der Ball kam dem Goalie zu nah.` : 'Er kommt gerade noch mit den Fingerspitzen hin.'; }
       else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = aimedOut ? 'Dein Ziel lag neben dem Tor.' : `Strich zu weit ${dirT}: der Ball zog am Tor vorbei.`; }
-    } else if (goal) { main = 'Tor'; sub = e.empty ? 'Ins leere Tor: Dein Goalie war draussen.' : !e.guess ? 'Zu spät: der Ball war schon drin.' : !e.inTime ? `Zu spät um ${Math.max(1, Math.round((e.rt - e.window) / 10) * 10)} ms.` : 'Falsche Ecke.'; }
+    } else if (goal) { main = 'Tor'; sub = e.empty ? 'Ins leere Tor: Dein Goalie war draussen.' : !e.guess ? 'Zu spät: der Ball war schon drin.' : !e.inTime ? `Zu spät um ${Math.max(1, Math.round((e.rt - e.window) / 10) * 10)} ms.` : e.feint && e.rt < e.feint.ms + 60 && M.inZone(e.feint.land, e.guess, G.cfg.rxEdge) ? 'Auf die Finte hereingefallen: Beim Zugschuss gilt erst der zweite Ring.' : 'Falsche Ecke.'; }
     else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = `Reagiert in ${e.rt} ms, Zeit waren ${e.window} ms.`; }
     else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = 'Der Schuss ging nicht aufs Tor.'; }
     stamp(main, sub, mine === goal ? 'good' : 'bad', 'top');
-    if (e.ctx !== 'so') addTick(goal ? (mine ? `Tor! ${X.last} trifft zum ${disp.you}:${disp.home}.` : `Tor ${HOME}: ${X.last}, ${disp.you}:${disp.home}.`) : `${X.last} schiesst: ${main}.`, goal);
+    const per = STY[e.style] ? ' ' + STY[e.style].per : '';
+    if (e.ctx !== 'so') addTick(goal ? (mine ? `Tor! ${X.last} trifft${per} zum ${disp.you}:${disp.home}.` : `Tor ${HOME}: ${X.last}${per}, ${disp.you}:${disp.home}.`) : `${X.last} schiesst${per}: ${main}.`, goal);
     else addTick(`Penalty ${X.last}: ${goal ? 'Tor' : main}.`, goal);
     if (s3) { await s3.done; return; }
     if (e.result === 'catch') crowdGroan();
@@ -1199,11 +1222,31 @@
   function reAim() {
     target = null; drag = null; phase = 'aim'; $('goalview').dataset.aim = '1'; $('stage').dataset.aim = '1';      // Zielphase (auch für den Browser-Test erkennbar)
     if (L3) S3.aimTarget(null);
-    $('aim').toggleAttribute('hidden', true); $('panel').hidden = true;
-    say('Tippe ins Tor: Wohin soll der Schuss?');
-    if (G.shot.empty) { $('hist').innerHTML = '<em>Der Goalie ist draussen: Das Tor ist leer. Triff einfach das Tor.</em>'; return; }
-    if (G.shot.oneT) { say('Direktschuss! Tippe schnell auf die offene Seite.'); $('hist').innerHTML = '<em>Der Goalie steht noch auf der Seite, von der der Pass kam, und rutscht schon herüber. Je schneller du abziehst, desto mehr ist offen.</em>'; return; }
-    $('hist').innerHTML = `<em>Im dunklen Bereich hält der Goalie. ${G.shot.q < 0.45 ? 'Aus der Distanz bleiben nur die Ecken.' : G.shot.q < 0.75 ? 'Frei sind die Ecken, am meisten oben.' : 'Aus der Nähe kommt er nicht weit: weg von ihm reicht.'}</em>`;
+    $('aim').toggleAttribute('hidden', true);
+    renderStyles();
+  }
+  /* Schussarten: drei Knöpfe unter dem Feld, die empfohlene ist eingestellt («Tipp»). Die Zahl ist die Breite des grünen
+     Felds mit dieser Art. Ein Wechsel stellt Goalie und Reichweite sofort um: so sieht man, was die Art bringt. */
+  function renderStyles() {
+    const sh = G.shot, X = card('you', sh.x), panel = $('panel'), fav = M.favStyle(X), one = Math.abs(sh.oneT || 0) >= 0.25 && G.cfg.styles[sh.style].one > 0;
+    const tip = sh.style === sh.auto ? ` <b class="tr">Tipp</b> ${WHY[sh.why]}.` : '', mine = sh.style === fav ? ` <b class="tr fav">Liebling</b> ${esc(X.last)}s Lieblingsschuss: breiteres Feld.` : '';
+    panel.innerHTML = '<p class="passes-head">Schussart wählen, dann ins Tor tippen</p><div class="styles">' + M.STYLES.map(st => {
+      const b = M.shotBar(st === sh.style ? G : M.act(G, { type: 'style', value: st }, rng).state);
+      return `<button type="button" class="sty${st === sh.style ? ' on' : ''}" data-sty="${st}" aria-pressed="${st === sh.style}"><span class="top">${ic(st)}<span class="pct" title="Breite des grünen Felds in Prozent">${Math.round(b.w * 100)}</span></span><b>${M.STYLE[st].short}</b><small>${STY[st].tag}${b.pressed ? ' · <em class="bad">Block droht</em>' : ''}</small><span class="tags">${st === sh.auto ? '<i class="tr">Tipp</i>' : ''}${st === fav ? '<i class="tr fav">Liebling</i>' : ''}</span></button>`;
+    }).join('') + `</div><p class="sty-note"><b>${M.STYLE[sh.style].name}.</b> ${STY[sh.style].does}${tip}${mine}</p>`;
+    panel.hidden = false; $('stage').dataset.style = sh.style;
+    setTag(sh.ctx === 'so' ? 'Penalty' : one ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : 'Schuss', 'you');
+    say(sh.empty ? 'Das Tor ist leer: Tippe ins Tor.' : one ? 'Direktschuss! Tippe schnell auf die offene Seite.' : sh.style === 'drag' ? 'Zugschuss: Tippe auf die offene Seite, dann schnell abziehen.' : 'Tippe ins Tor: Wohin soll der Schuss?');
+    $('hist').innerHTML = `<em>${sh.empty ? 'Der Goalie ist draussen: Triff einfach das Tor.' : one ? 'Der Goalie steht noch auf der Seite, von der der Pass kam, und rutscht schon herüber.' : sh.style === 'drag' ? 'Der Goalie steht noch dort, wo der Ball vor dem Zug lag.' : `Im dunklen Bereich hält der Goalie. ${sh.q < 0.45 ? 'Aus der Distanz bleiben nur die Ecken.' : sh.q < 0.75 ? 'Frei sind die Ecken, am meisten oben.' : 'Aus der Nähe kommt er nicht weit: weg von ihm reicht.'}`}</em>`;
+  }
+  // Andere Schussart: Die Engine stellt Druck und Goalie um, hier wird es gezeigt
+  function setStyle(st) {
+    if (phase !== 'aim' || !G.shot || G.shot.side !== 'you' || target || st === G.shot.style) return;
+    const r = M.act(G, { type: 'style', value: st }, rng); if (!r.ok) return;
+    G = r.state; const sh = G.shot;
+    if (!sh.empty) { if (!L3 && kpr) { const k = kpr; k.to(KP.ready(180 + sh.keeper.x * 102), 220, () => { if (kpr === k && phase === 'aim') k.idle(); }); } showReach(sh.keeper.x); }
+    if (L3) S3.aimStyle(sh.style, sh.pull);
+    buzz(10); renderStyles();
   }
   // Ziel steht (g in Torkoordinaten): Jetzt läuft der Schuss-Balken. Schwacher oder müder Schütze: der Strich läuft schneller.
   function setTarget(g) {
@@ -1211,9 +1254,10 @@
     const sh = G.shot, X = card('you', sh.x), b = M.shotBar(G), by = b.pressed && sh.by ? card('home', sh.by) : null;
     target = [Math.max(-1.15, Math.min(1.15, g[0])), Math.max(0.04, Math.min(1.15, g[1]))]; drag = null; $('goalview').dataset.aim = '0'; $('stage').dataset.aim = '0';
     aimDraw(toView(toScene(target))); if (L3) S3.aimTarget(target);
-    say(by ? `${by.last} ist nah: Stoppe den Strich im Feld, sonst blockt er.` : sh.empty ? 'Stoppe den Strich im Feld: Das Tor ist leer.' : sh.oneT ? 'Schnell stoppen: Der Goalie kommt herüber!' : 'Stoppe den Strich in der Mitte. Nicht zu lange warten!');
-    $('hist').innerHTML = '<em>Genau in der Mitte geht der Ball genau ins Ziel, daneben weicht er nach links oder rechts ab. Der Goalie ahnt die Ecke: Wartest du zu lange, rückt er hin.</em>';
-    openBar({ type: 'aim', target }, { c: b, shot: true, at: L3 ? 'bot' : 'top', title: `Schuss ${esc(X.last)} ${r0(M.shotVal(X))}${trChip(X.id, 'kanone')}`, sub: `Strich ${tempoTxt(b.sweep)}${sh.calm ? ' (kaltblütig)' : ''} · Energie ${Math.round(X.en)} %${by ? ` · Block ${esc(by.last)}` : ''}`, back: false });
+    const quick = (Math.abs(sh.oneT || 0) > 0 && G.cfg.styles[sh.style].one > 0) || sh.style === 'drag';
+    say(by ? `${by.last} ist nah: Stoppe den Strich im Feld, sonst blockt er.` : sh.empty ? 'Stoppe den Strich im Feld: Das Tor ist leer.' : quick ? 'Schnell stoppen: Der Goalie kommt herüber!' : 'Stoppe den Strich in der Mitte. Nicht zu lange warten!');
+    $('hist').innerHTML = `<em>Genau in der Mitte geht der Ball genau ins Ziel, daneben weicht er nach links oder rechts ab. ${by && sh.style === 'slap' ? 'Schlagschuss unter Druck: Schon knapp neben dem Feld wird er geblockt.' : quick ? 'Der Goalie rutscht schon herüber: je schneller, desto mehr ist offen.' : 'Der Goalie ahnt die Ecke: Wartest du zu lange, rückt er hin.'}</em>`;
+    openBar({ type: 'aim', target }, { c: b, shot: true, at: L3 ? 'bot' : 'top', title: `${M.STYLE[sh.style].name} ${esc(X.last)} ${r0(M.shotVal(X))}${trChip(X.id, 'kanone')}${b.fav ? '<i class="tr fav">Liebling</i>' : ''}`, sub: `Strich ${tempoTxt(b.sweep)}${sh.calm ? ' (kaltblütig)' : ''} · Energie ${Math.round(X.en)} %${by ? ` · Block ${esc(by.last)}` : ''}`, back: false });
     if (!sh.empty) startCreep(bar.t0);
   }
   function aimAt(input) {
@@ -1343,6 +1387,7 @@
     const b = e.target.closest('button'); if (!b || b.disabled) return;
     if (b.id === 'drib-back') { if (phase === 'drib' && db && !db.started) { closeDribble(); phase = 'decide'; renderDecision(); } return; }
     if (b.id === 'tb-back') { if (phase === 'bar') { const shot = bar && bar.shot; closeBar(); if (shot) reAim(); else renderDecision(); } return; }
+    if (b.dataset.sty) { setStyle(b.dataset.sty); return; }
     if (phase !== 'decide') return;
     if (b.dataset.a) choose({ type: b.dataset.a }); else if (b.dataset.to) choose({ type: 'pass', to: b.dataset.to });
   });

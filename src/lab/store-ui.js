@@ -169,6 +169,12 @@
     badges();
   }
 
+  const FAVICON = {
+    slap: '<svg viewBox="0 0 40 40"><circle class="f" cx="10" cy="30" r="4.2"/><path d="M17 24 L33 8 M26 8 H33 V15 M18 32 H28 M12 20 L16 16"/></svg>',
+    wrist: '<svg viewBox="0 0 40 40"><circle class="f" cx="10" cy="30" r="4.2"/><path d="M16 26 C 21 18, 27 14, 34 13 M28.5 8.5 L34.5 13 L29.5 18"/></svg>',
+    drag: '<svg viewBox="0 0 40 40"><circle class="f" cx="8" cy="31" r="4.2"/><path d="M14 31 H27 M27 31 V9 M21.5 14.5 L27 8.5 L32.5 14.5"/></svg>'
+  };
+  const FAVTXT = { slap: 'schlägt: hart, am besten aus der Distanz und direkt nach einem Querpass', wrist: 'aus dem Handgelenk schiesst: schnell und genau, am besten aus der Nähe', drag: 'den Ball zieht: am Stock eines Gegners vorbei, der Goalie steht noch falsch' };
   // --- Kartenblatt ---
   let sheetId = null, sheetStop = null;
   function openSheet(id) {
@@ -182,6 +188,8 @@
     $('sheet-bars').innerHTML = '<li class="bars-h">Angriff</li><li class="bars-h">Abwehr</li>' + stats(c).map(row).join('');
     $('sheet-trait').hidden = !ts;
     if (ts) $('sheet-trait').innerHTML = `${ICON[ts.icon]}<span><b>${esc(M.TRAITS[t].name)}</b><br>${esc(c.last)} ${ts.does}.</span>`;
+    // Lieblingsschuss: im Match ist das Feld mit dieser Schussart breiter
+    const fav = M.favStyle(c); $('sheet-fav').innerHTML = `${FAVICON[fav]}<span><b>Lieblingsschuss: ${M.STYLE[fav].name}</b><br>${esc(c.last)} hat im Match ein breiteres Feld, wenn er ${FAVTXT[fav]}.</span>`;
     const btn = $('sheet-do'); btn.hidden = !own; btn.disabled = inLine;
     btn.textContent = inLine ? `Spielt in deiner ${lineOf(id)}. Linie` : 'Aufstellen';
     $('sheet').hidden = false; lock(true);
