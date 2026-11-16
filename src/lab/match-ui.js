@@ -55,10 +55,31 @@
   const S3 = window.HKScene3D;
   let L3 = false, skip3 = false;      // L3: die Bühne läuft in 3D. skip3: das Dribbling lief schon im Parcours, keine Szene mehr dazu
   const use3d = () => !!S3 && !reduce && S3.ok();
-  function stage3(on) { L3 = !!on; $('stage').classList.toggle('live3d', L3); $('view3d').hidden = !L3; if (!L3 && S3) S3.unmount(); }
+  function stage3(on) { L3 = !!on; $('stage').classList.toggle('live3d', L3); $('screen-match').classList.toggle('g3d', L3); $('view3d').hidden = !L3; if (!L3 && S3) S3.unmount(); layout(); }
+  /* Vollbild: Die Anzeige oben (hud) und der Bereich mit den Knöpfen unten (dock) liegen in 3D über der Halle. Ihre Höhen
+     gehen als --hud und --dock an die Seite (für Balken, Stempel, Ansagen) und an die 3D-Halle: Sie legt das Geschehen in
+     das Fenster zwischen der Anzeige und einem festen Rand unten (so gross wie der Bereich der Knöpfe meistens ist), damit
+     das Bild nicht bei jedem Wechsel der Knöpfe wandert. */
+  function layout() {
+    const sec = $('screen-match'); if (sec.hidden) return;
+    const hud = $('hud').offsetHeight, dock = $('dock').offsetHeight, h = sec.clientHeight;
+    sec.style.setProperty('--hud', hud + 'px'); sec.style.setProperty('--dock', dock + 'px');
+    if (L3 && S3) S3.inset(hud, Math.round(Math.max(220, Math.min(320, h * 0.38))));
+  }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(() => layout()); ro.observe($('hud')); ro.observe($('dock')); }
+  window.addEventListener('resize', layout);
+  // Echtes Vollbild, wo das Gerät es kann (Telefone und Tablets mit Android; das iPhone erlaubt es Webseiten nicht)
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  function fullscreen(on) {
+    const d = document, el = d.documentElement;
+    try {
+      if (on && coarse && !d.fullscreenElement && el.requestFullscreen) { const r = el.requestFullscreen({ navigationUI: 'hide' }); if (r && r.catch) r.catch(() => {}); }
+      else if (!on && d.fullscreenElement && d.exitFullscreen) { const r = d.exitFullscreen(); if (r && r.catch) r.catch(() => {}); }
+    } catch (e) { /* nicht erlaubt: Die Seite füllt trotzdem das Fenster */ }
+  }
   // Wer auf dem Feld steht, an die 3D-Halle melden
   function sync3() { if (L3) { const li = side => G.teams[side].cards.map(c => ({ id: c.id, name: c.last, no: c.no })); S3.teams({ you: li('you'), home: li('home') }); } }
-  if (S3) S3.onFail = () => { L3 = false; $('stage').classList.remove('live3d'); $('view3d').hidden = true; if (G && (phase === 'aim' || phase === 'wait' || phase === 'react') && G.phase === 'aim') toGoal(); };
+  if (S3) S3.onFail = () => { L3 = false; $('stage').classList.remove('live3d'); $('screen-match').classList.remove('g3d'); $('view3d').hidden = true; layout(); if (G && (phase === 'aim' || phase === 'wait' || phase === 'react') && G.phase === 'aim') toGoal(); };
   // Alle Feldspieler einer Szene mit ihren Plätzen, so wie die Engine rechnet (der Angriff spielt aufs Tor bei y 40)
   const specPlayers = sc => Object.keys(sc.pos).map(id => { const side = sideOf(id), c = card(side, id); return { id, side, x: sc.pos[id][0], y: sc.pos[id][1], name: c.last, no: c.no }; });
   // Startet eine Szene. Gibt null zurück, wenn es keine 3D-Darstellung gibt, sonst { impact, done }.
@@ -321,9 +342,12 @@
       b.className = (on ? 'on' : '') + (next ? ' next' : ''); b.setAttribute('aria-pressed', i === T.want);
       b.innerHTML = `<b>${i + 1}. Linie${next ? ' kommt' : ''}</b><span><i class="en ${enLvl(en)}"><u style="width:${en}%"></u></i>${en}</span>`;
     });
+    { const en = Math.round(M.avgEn(lineCards('you', T.line))), ask = $('lines').classList.contains('ask');
+      $('btn-coach').innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg><b>${M.TACTICS[G.tactic.you].name}</b>${T.bench ? `<span>${T.want !== T.line ? `${T.want + 1}. Linie kommt` : `${T.line + 1}. Linie`} <i class="en ${enLvl(en)}"><u style="width:${en}%"></u></i></span>` : ''}`;
+      $('btn-coach').classList.toggle('ask', ask); $('btn-coach').setAttribute('aria-label', 'Trainer: Taktik, Linien und Ticker'); }
     $('tcards').innerHTML = G.tac.you.map(t => {
       const act = !t.used ? 0 : fxOn('you', t.id);
-      return `<button type="button" class="tcb${t.used ? (act ? ' act' : ' used') : ''}${infoCard === t.id ? ' sel' : ''}" data-card="${t.id}"${t.used ? ' disabled' : ''}><span class="tc-i">${S.TICON[t.id]}</span><b>${esc(M.CARDS[t.id].name)}</b>${act ? `<i>${FXTXT[t.id](act)}</i>` : t.used ? '<i>gespielt</i>' : ''}</button>`;
+      return `<button type="button" class="tcb${t.used ? (act ? ' act' : ' used') : ''}${infoCard === t.id ? ' sel' : ''}" data-card="${t.id}" title="${esc(M.CARDS[t.id].name)}"${t.used ? ' disabled' : ''}><span class="tc-i">${S.TICON[t.id]}</span><b>${esc(M.CARDS[t.id].name)}</b>${act ? `<i>${FXTXT[t.id](act)}</i>` : t.used ? '<i>gespielt</i>' : ''}</button>`;
     }).join('') || '<span class="note">Keine Taktikkarten dabei.</span>';
     const info = $('tcinfo'), ic = infoCard && G.tac.you.some(t => t.id === infoCard && !t.used) ? infoCard : null;
     info.hidden = !ic; if (ic) info.innerHTML = `<p><b>${esc(M.CARDS[ic].name)}</b>${esc(M.CARDS[ic].text)}</p><button type="button" class="useb" data-use="${ic}">Einsetzen</button><button type="button" class="link" data-use="">Zurück</button>`;
@@ -398,7 +422,7 @@
     const lane = (pv.shade || []).filter(o => o.x + o.w > -1 && o.x - o.w < 1), shut = pv.why === 'shut';
     say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : shut && lane.length ? ' Die Schussbahn ist zu: passen oder dribbeln.' : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.'));
     let h = `<div class="actions2">
-<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)} · <em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${shut ? ` · <em class="bad">${lane.length ? 'Schussbahn zu' : 'kaum eine Chance'}</em>` : lane.length ? ` · <em class="bad">${lane.length} im Weg</em>` : ''}${pv.scr && pv.scr.length ? ' · <em>Sichtschutz</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
+<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>${shut ? `<em class="bad">${lane.length ? 'Schussbahn zu' : 'kaum eine Chance'}</em> · ` : lane.length ? `<em class="bad">${lane.length} im Weg</em> · ` : ''}<em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.scr && pv.scr.length ? ' · <em>Sichtschutz</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''} · Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
 <button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>${co ? `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · ` : ''}${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
     if (!last) {
       // Pässe: freie Mitspieler zuerst, dann nach Lage. Dazu, was der Pass bringt: Direktschuss nach Querpass oder sicherer Rückpass.
@@ -625,7 +649,7 @@
     const c = o.c || M.contest(G, action), panel = $('panel'), box = $('tbov');
     phase = 'bar'; panel.hidden = false; $('hint').hidden = true;
     // Der Balken liegt über dem Feld (im Angriff unten, in der Abwehr oben), getippt wird irgendwo: so verdeckt kein Finger den Strich
-    box.className = 'tbov ' + (o.at || (G.cur.type === 'att' ? 'bot' : 'top')) + (o.shot ? ' shot' : ''); box.hidden = false;
+    box.className = 'tbov ' + (o.at || (G.cur.type === 'att' ? 'bot' : 'top')) + (o.shot ? ' shot' : ''); box.hidden = false; $('stage').classList.toggle('barshot', !!o.shot);
     box.innerHTML = `<p class="tb-t"><b>${o.title}</b><span>${o.sub}</span></p>
 <div class="tb-bar" id="tbb"><i class="tb-z" style="left:${((c.pos - c.w / 2) * 100).toFixed(2)}%;width:${(c.w * 100).toFixed(2)}%"><u style="width:${(G.cfg.barCore * 100).toFixed(0)}%"></u></i><em class="tb-m" id="tb-m"></em></div>`;
     panel.innerHTML = `<div class="tb"><button type="button" class="tb-pad" id="tb">Tippen<small id="tb-h">${o.shot ? 'wenn der Strich genau in der Mitte ist' : 'wenn der Strich im grünen Feld ist'}</small></button>${o.back ? `<button type="button" class="link" id="tb-back">${o.back === true ? 'Andere Aktion' : o.back}</button>` : ''}</div>`;
@@ -635,7 +659,7 @@
     (function loop(t) { if (!bar || bar.done) return; m.style.left = (barX(t) * 100).toFixed(2) + '%'; bar.raf = requestAnimationFrame(loop); })(now);
     $('tb').focus({ preventScroll: true });
   }
-  function closeBar() { if (bar) { bar.done = true; cancelAnimationFrame(bar.raf); bar = null; } $('tbov').hidden = true; }
+  function closeBar() { if (bar) { bar.done = true; cancelAnimationFrame(bar.raf); bar = null; } $('tbov').hidden = true; $('stage').classList.remove('barshot'); }
   function tapBar(ts) {
     if (phase !== 'bar' || !bar || bar.done) return;
     const now = performance.now(), t = ts && ts <= now && now - ts < 250 ? ts : now;
@@ -646,7 +670,7 @@
     $('tb-m').style.left = (x * 100).toFixed(2) + '%'; $('tbb').classList.add('g-' + g); $('tb').classList.add('g-' + g); $('tb').firstChild.textContent = b.shot && g !== 'perfect' && g !== 'good' ? (x < b.c.pos ? 'Zu weit links' : 'Zu weit rechts') : GRADE[g]; $('tb-h').textContent = '';
     phase = 'barhold';
     if (b.shot) buzz(15);
-    setTimeout(() => { bar = null; $('tbov').hidden = true; phase = b.shot ? 'aim' : 'decide'; run(Object.assign({ hit: x }, b.action, b.shot ? { t: t - b.t0 } : {})); }, reduce ? 160 : b.shot ? 240 : 360);
+    setTimeout(() => { bar = null; $('tbov').hidden = true; $('stage').classList.remove('barshot'); phase = b.shot ? 'aim' : 'decide'; run(Object.assign({ hit: x }, b.action, b.shot ? { t: t - b.t0 } : {})); }, reduce ? 160 : b.shot ? 240 : 360);
   }
   async function run(action) {
     if (phase !== 'decide' && phase !== 'aim') return;
@@ -811,10 +835,10 @@
     if (G.pen) { stamp('Penaltys', `${sc} nach 60 Minuten. Je drei Schüsse, dann sudden death.`, 'warn'); addTick('Unentschieden, es gibt Penaltys.'); await hold(1700); await toGoal(); return; }
     stamp(`Ende ${G.period + 1}. Drittel`, `Zwischenstand ${sc}. Alle erholen sich etwas. Jetzt kannst du Taktik und Linie ändern.`, 'warn'); addTick(`Ende ${G.period + 1}. Drittel, ${sc}.`);
     phase = 'pause'; fast = false; renderCoach(); renderEnergy();
-    $('tac').classList.add('ask'); $('lines').classList.add('ask');
+    $('tac').classList.add('ask'); $('lines').classList.add('ask'); $('btn-coach').classList.add('ask');
     showHint('Taktik und Linie wählen, dann tippen für das nächste Drittel', 6000);
     await hold(6000);
-    $('tac').classList.remove('ask'); $('lines').classList.remove('ask');
+    $('tac').classList.remove('ask'); $('lines').classList.remove('ask'); $('btn-coach').classList.remove('ask');
     next();
   }
 
@@ -1373,13 +1397,13 @@
     HOME = W.club(opp).short;
     G = M.newMatch(setup(opp), rng);
     disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; lastMinute = 0; infoCard = null;
-    show('match'); stage3(use3d() && S3.mount($('view3d'))); buildPlayers();
+    show('match'); fullscreen(true); drawer(false); stage3(use3d() && S3.mount($('view3d'))); buildPlayers();
     G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400], true); camSet(190);
     addTick(`Anpfiff. Du spielst ${M.TACTICS[G.tactic.you].name.toLowerCase()}.`);
     flow([]);
   }
   function finish() {
-    phase = 'end'; leaveGoal(); stage3(false);
+    phase = 'end'; leaveGoal(); stage3(false); fullscreen(false);
     const won = G.outcome === 'win' || G.outcome === 'penwin', st = G.stats, y = G.score.you, o = G.score.home;
     $('res-title').textContent = (won ? 'Sieg' : 'Niederlage') + (G.pen ? ' nach Penaltys' : '');
     $('res-title').className = 'res-title ' + (won ? 'win' : 'loss');
@@ -1418,7 +1442,18 @@
     if (b.dataset.a) choose({ type: b.dataset.a }); else if (b.dataset.to) choose({ type: 'pass', to: b.dataset.to });
   });
   // Timing-Balken: getippt wird irgendwo auf dem Bildschirm (ausser auf «Andere Aktion»), auch mit Leertaste oder Enter
-  document.addEventListener('pointerdown', e => { if (phase === 'bar' && !e.target.closest('#tb-back, .coach, #tac')) { e.preventDefault(); tapBar(e.timeStamp); } });
+  // Trainer-Blatt auf und zu; ein Tipp daneben schliesst es
+  const drawer = on => { $('drawer').hidden = !on; $('btn-coach').setAttribute('aria-expanded', on ? 'true' : 'false'); };
+  $('btn-coach').addEventListener('click', () => drawer($('drawer').hidden));
+  $('drawer-x').addEventListener('click', () => drawer(false));
+  // Ein Tipp neben das offene Blatt schliesst es nur: Er löst nichts aus, was darunter liegt
+  let eat = 0;
+  document.addEventListener('pointerdown', e => { if (!$('drawer').hidden && !e.target.closest('#drawer, #btn-coach')) { drawer(false); eat = performance.now(); e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('click', e => { if (eat && performance.now() - eat < 700) { eat = 0; e.stopPropagation(); e.preventDefault(); } else eat = 0; }, true);
+  // Lange Erklärung unter der Ansage: antippen klappt sie auf
+  $('hist').addEventListener('click', () => $('hist').classList.toggle('open'));
+  $('panel').addEventListener('click', e => { const n = e.target.closest('.sty-note'); if (n) n.classList.toggle('open'); });
+  document.addEventListener('pointerdown', e => { if (phase === 'bar' && !e.target.closest('#tb-back, .coach, #tac, #btn-coach')) { e.preventDefault(); tapBar(e.timeStamp); } });
   document.addEventListener('keydown', e => { if (phase === 'bar' && (e.key === ' ' || e.key === 'Enter') && e.target.id !== 'tb-back') { e.preventDefault(); tapBar(e.timeStamp); } });
   $('pls').addEventListener('click', e => {
     const g = e.target.closest('.pl'); if (!g || phase !== 'decide' || !g.classList.contains('pick')) return;

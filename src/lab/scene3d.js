@@ -66,6 +66,8 @@
 
   // Slot vor dem oberen Tor, in Feldeinheiten (wie in der Sicht von oben)
   const SLOT = [[140, 102], [220, 102], [238, 150], [212, 196], [148, 196], [122, 150]];
+  // Für dieses Bildformat (Breite zu Höhe) sind die Brennweiten der Kamera gewählt
+  const REFA = 0.857;
   // Hallenboden mit Linien, wie im Match von oben: das ganze Feld, 360 x 800
   function floorTex() {
     return canvasTex(1024, 2048, (g, w, h) => {
@@ -558,7 +560,8 @@
   }
   function resize() {
     const w = R.host.clientWidth || 343, h = R.host.clientHeight || 400; if (w === R.w && h === R.h) return;
-    R.w = w; R.h = h; R.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [2, 1.5, 1.15, 0.4][R.q])); R.renderer.setSize(w, h, false); R.cam.aspect = w / h; R.cam.updateProjectionMatrix();
+    // Im Vollbild ist das Bild fast doppelt so gross wie früher: Die Auflösung geht mit der Fläche etwas zurück
+    R.w = w; R.h = h; R.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [2, 1.5, 1.15, 0.4][R.q]) * Math.min(1, Math.sqrt(230000 / (w * h)))); R.renderer.setSize(w, h, false); R.cam.aspect = w / h; R.proj = true; R.cam.updateProjectionMatrix();
     if (R.post) { const s = R.renderer.getDrawingBufferSize(new T.Vector2()); R.post.rt.setSize(s.x, s.y); R.post.m.uniforms.px.value.set(1 / s.x, 1 / s.y); }
   }
   // Fans stellen. mood 'cheer': Die Fans der Seite side springen mit erhobenen Armen. all: einmal alle stellen.
@@ -597,7 +600,12 @@
   }
   // Kamera (Szenenraum). Nach einem Wechsel der Betriebsart gleitet sie vom alten Bild ins neue (blendCam).
   function camAt(p, l, fov) { R.camP.copy(p); R.camL.copy(l); if (fov) R.camFov = fov; }
-  function blendCam(sec) { R.from.p.copy(R.cam.position); R.from.l.copy(R.look); R.from.fov = R.cam.fov; D.blend = 1; D.blendT = sec || 0.45; }
+  function blendCam(sec) { R.from.p.copy(R.cam.position); R.from.l.copy(R.look); R.from.fov = R.fovD || R.cam.fov; D.blend = 1; D.blendT = sec || 0.45; }
+  /* Fenster im Bild: Oben und unten liegen Anzeigen über der Halle (top und bottom in Bildpunkten). Die Kamera legt, was
+     sie zeigen will, in das Fenster dazwischen; darüber und darunter läuft das Bild einfach weiter. */
+  function inset(top, bottom) { if (!R) { D.in0 = [top, bottom]; return; } if (R.inTop === top && R.inBot === bottom) return; R.inTop = Math.max(0, top || 0); R.inBot = Math.max(0, bottom || 0); R.proj = true; }
+  // Höhe des Fensters und sein Seitenverhältnis (danach richten sich die Brennweiten)
+  const winH = () => Math.max(80, R.h - (R.inTop || 0) - (R.inBot || 0)), winAsp = () => R.w / winH();
   const figOf = id => { for (let i = 0; i < R.figs.length; i++) if (R.figs[i].used && R.figs[i].id === id) return R.figs[i]; return null; };
   // Aus dem Szenenraum zurück in die Halle: Figuren und Ball behalten ihren Ort, die Spiegelung fällt weg
   function unflip() {
@@ -884,7 +892,7 @@
       Sh.ball = true; K.pos.x = clamp((spec.kx || 0) * GW, -GW * 0.72, GW * 0.72); Sh.style = STY3[spec.style] ? spec.style : 'wrist';
       st.list.forEach(P => { P.root.visible = false; });      // nur Tor und Goalie: Wer davor steht, würde es verdecken
       const p0 = Sh.pos, dist = Math.max(2.5, Math.hypot(p0.x, p0.z)), dx = p0.x / dist, dz = p0.z / dist, cd = dist + 2.8, frac = 0.5 + 0.3 * clamp(spec.q == null ? 0.5 : spec.q, 0, 1);
-      const hf = 2 * Math.atan(2 * GW * Math.max(0.55, dz) / frac / (2 * cd)), vf = 2 * Math.atan(Math.tan(hf / 2) / (R.w / R.h)) / RAD;
+      const hf = 2 * Math.atan(2 * GW * Math.max(0.55, dz) / frac / (2 * cd)), vf = 2 * Math.atan(Math.tan(hf / 2) / winAsp()) / RAD;
       const off = spec.style === 'drag' && spec.pull ? spec.pull * 0.9 : 0;
       D.aim = { list: st.list, Sh, K, cam: new T.Vector3(dx * cd, 2.25, dz * cd), look: new T.Vector3(0, 0.54, 0), fov: clamp(vf, 7, 48), dist: cd, fly: null, atk: spec.atk, kx: K.pos.x, off, offTo: off, p0: Sh.pos.clone(), wind: null, camV: new T.Vector3(), lookV: new T.Vector3() };
       return true;
@@ -1029,7 +1037,15 @@
     const p = toW(R.camP, R.v1), l = toW(R.camL, R.v2); let fov = R.camFov;
     if (D.blend > 0) { const k = ease(1 - D.blend); p.lerpVectors(R.from.p, p, k); l.lerpVectors(R.from.l, l, k); fov = lerp(R.from.fov, fov, k); }
     if (R.shake) { p.x += Math.sin(R.shakeT * 70) * R.shake; p.y += Math.cos(R.shakeT * 55) * R.shake * 0.7; }
-    R.cam.position.copy(p); R.look.copy(l); R.cam.lookAt(l); if (Math.abs(R.cam.fov - fov) > 0.01) { R.cam.fov = fov; R.cam.updateProjectionMatrix(); } R.cam.updateMatrixWorld();
+    /* fov gilt für das Fenster zwischen den Anzeigen. Die Brennweiten sind für ein Bild im Format REFA gewählt: Ist das
+       Fenster schmaler, wird der Winkel grösser, damit links und rechts nichts fehlt (beim Zielen steht er schon passend).
+       Für das ganze Bild wird er umgerechnet, und die Bildmitte rückt in die Mitte des Fensters. */
+    R.fovD = fov;
+    const hv = winH(), kT = D.mode === 'aim' ? 1 : Math.max(1, REFA / (R.w / hv)); R.kf = R.kf ? R.kf + (kT - R.kf) * 0.18 : kT;
+    const full = 2 * Math.atan(Math.tan(fov * RAD / 2) * R.kf * R.h / hv) / RAD, off = ((R.inBot || 0) - (R.inTop || 0)) / 2;
+    R.cam.position.copy(p); R.look.copy(l); R.cam.lookAt(l);
+    if (R.proj || Math.abs(R.cam.fov - full) > 0.01) { R.proj = false; R.cam.fov = full; if (off) R.cam.setViewOffset(R.w, R.h, 0, off, R.w, R.h); else { R.cam.clearViewOffset(); R.cam.updateProjectionMatrix(); } }
+    R.cam.updateMatrixWorld();
     // Lampe von der Kameraseite, Streiflicht von gegenüber
     const fx = l.x - p.x, fz = l.z - p.z, fl = Math.hypot(fx, fz) || 1, ux = fx / fl, uz = fz / fl;
     R.sun.target.position.set(l.x, 0, l.z); R.sun.position.set(l.x - ux * 7 + uz * 4, 12, l.z - uz * 7 - ux * 4); R.rim.target.position.copy(R.sun.target.position); R.rim.position.set(l.x + ux * 9 - uz * 3, 6, l.z + uz * 9 + ux * 3);
@@ -1053,7 +1069,7 @@
   function mount(host, opt) {
     if (!ok()) return false;
     try {
-      if (!R) { build(host); if (D.q0 != null) quality(D.q0); }
+      if (!R) { build(host); if (D.q0 != null) quality(D.q0); if (D.in0) inset(D.in0[0], D.in0[1]); }
       R.host.hidden = false; R.w = 0; resize(); if (D.cut) D.cut.kill(); if (D.mode !== 'live') unflip(); D.blend = 0;
       if (!(opt && opt.manual) && !D.loop) { D.loop = true; D.last = D.since = performance.now() / 1000; R.slow = 0; D.raf = requestAnimationFrame(frame); }
       return true;
@@ -1071,5 +1087,5 @@
   // Zurück ins laufende Spiel (nach einer Szene, die nachläuft, oder nach dem Zielen)
   function resume() { if (!R) return; if (D.cut) D.cut.kill(); else if (D.mode !== 'live') { unflip(); blendCam(0.5); } }
 
-  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
+  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, inset, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
 })();

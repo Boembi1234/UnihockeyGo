@@ -16,8 +16,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
   await p.waitForFunction(() => !!window.THREE && !!window.HKScene3D && window.HKScene3D.ok(), null, { timeout: 20000 });
   await p.click('#tabs [data-tab="play"]'); await p.click('#btn-start');
   const until = (f, arg, ms) => p.waitForFunction(f, arg, { timeout: ms || 60000, polling: 50 });
-  // warten, bis das Match auf eine Eingabe wartet (dann läuft kein Ablauf mehr); dabei aufs Feld tippen, das spult vor
-  const idle = async () => { for (let i = 0; i < 900; i++) { if (await p.evaluate(() => ['decide', 'bar'].indexOf(window.HKMatchTest.phase()) >= 0)) return; await p.evaluate(() => document.getElementById('stage').click()); await p.waitForTimeout(150); } throw new Error('das Match wartet nie auf eine Eingabe'); };
+  // warten, bis das Match auf eine Eingabe wartet (Entscheidung, Balken oder eigener Schuss: dann läuft kein Ablauf mehr); dabei aufs Feld tippen, das spult vor
+  const idle = async () => { for (let i = 0; i < 900; i++) { if (await p.evaluate(() => ['decide', 'bar'].indexOf(window.HKMatchTest.phase()) >= 0 || (window.HKMatchTest.phase() === 'aim' && document.getElementById('stage').dataset.aim === '1'))) return; await p.evaluate(() => document.getElementById('stage').click()); await p.waitForTimeout(150); } throw new Error('das Match wartet nie auf eine Eingabe'); };
   await idle();
   const snap = n => p.screenshot({ path: path.join(OUT, 'verkehr-' + n + '.png') });
   // Stellt eine eigene Angriffsszene: wer wo steht. at: { Rolle: [x, y] } für dich und den Gegner (nach Rolle des Gegenspielers)

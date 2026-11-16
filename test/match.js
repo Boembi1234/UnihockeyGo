@@ -52,11 +52,13 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att') {
           await snap('01-angriff'); await over('angriff'); n++;
+          const fit = await p.evaluate(() => { const b = document.querySelector('#panel [data-a]').getBoundingClientRect(), d = document.documentElement; return [d.scrollHeight - innerHeight, Math.round(b.bottom), innerHeight]; });
+          if ((fit[0] > 0 || fit[1] > fit[2]) && !taken.fit) { taken.fit = 1; errors.push('Vollbild: Die Seite scrollt oder der Schuss-Knopf liegt nicht im Bild: ' + JSON.stringify(fit)); }
           const live3 = await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'));
           if (live3) { seen.live3 = 1; await p.waitForTimeout(taken['01-angriff-3d'] ? 0 : 700); await snap('01-angriff-3d'); }
           if (Math.random() < 0.25) {
             // direkt auf dem Feld: in 3D dorthin tippen, wo die Figur steht
-            const at = live3 ? await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (!l.length) return null; return window.HKScene3D.screen(l[Math.floor(Math.random() * l.length)].getAttribute('data-id')); }) : null;
+            const at = live3 ? await p.evaluate(() => { const top = document.getElementById('hud').getBoundingClientRect().bottom, bot = document.getElementById('dock').getBoundingClientRect().top, l = [...document.querySelectorAll('#pls .pl.pick')].map(e => window.HKScene3D.screen(e.getAttribute('data-id'))).filter(a => a && a[1] > top + 6 && a[1] < bot - 6); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }) : null;
             if (at) { await p.mouse.click(at[0], at[1]); await p.waitForTimeout(60); if (await p.evaluate(() => !!document.querySelector('#panel [data-a]:not(:disabled)'))) seen.missTap = (seen.missTap || 0) + 1; else seen.tap3 = 1; }
             else await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
           }
@@ -131,8 +133,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) {
             await p.waitForTimeout(500); await snap('06-schuss-3d');
             const g3 = r < 0.7 ? [Math.random() < 0.5 ? -0.8 : 0.8, Math.random() < 0.7 ? 0.86 : 0.15] : [(Math.random() - 0.5) * 2.6, Math.random() * 1.3], to3 = await p.evaluate(g => window.HKScene3D.goalAt(g), g3), c3 = await p.evaluate(() => window.HKScene3D.goalAt([0, 0.3]));
-            const back = await p.evaluate(a => { const b = document.getElementById('stage').getBoundingClientRect(), g = window.HKScene3D.pickGoal(a[0], a[1]); return [g, a[0] >= b.left && a[0] <= b.right && a[1] >= b.top && a[1] <= b.bottom]; }, to3);
-            if (r < 0.7 && !back[1]) errors.push('Tor liegt beim Zielen nicht ganz im Bild: ' + JSON.stringify(g3));
+            const back = await p.evaluate(a => { const b = document.getElementById('stage').getBoundingClientRect(), top = document.getElementById('hud').getBoundingClientRect().bottom, bot = document.getElementById('dock').getBoundingClientRect().top, g = window.HKScene3D.pickGoal(a[0], a[1]), el = document.elementFromPoint(a[0], a[1]); return [g, a[0] >= b.left && a[0] <= b.right && a[1] >= top && a[1] <= bot && !!el && !!el.closest('#stage'), [Math.round(top), Math.round(bot)]]; }, to3);
+            if (r < 0.7 && !back[1]) { if (!taken.goalwin) { taken.goalwin = 1; errors.push('Tor liegt beim Zielen nicht frei zwischen Anzeige und Knöpfen: ' + JSON.stringify([g3, to3.map(Math.round), back[2]])); } }
             if (Math.hypot(back[0][0] - g3[0], back[0][1] - g3[1]) > 0.06) errors.push('Tippen ins Tor trifft nicht: ' + JSON.stringify([g3, back[0]]));
             if (r > 0.5) await p.mouse.click(to3[0], to3[1]); else { await p.mouse.move(c3[0], c3[1]); await p.mouse.down(); await p.mouse.move(to3[0], to3[1], { steps: 5 }); await p.waitForTimeout(60); await snap('06-schuss-3d-ziel'); await p.mouse.up(); }
             await p.waitForTimeout(60); continue;

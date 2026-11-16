@@ -23,7 +23,7 @@
   function show(name) {
     document.querySelectorAll('#app > section.screen').forEach(s => { s.hidden = s.id !== 'screen-' + name; });
     const tab = TABS[name] || null, nav = $('tabs');
-    nav.hidden = !tab; document.body.classList.toggle('has-tabs', !!tab);
+    nav.hidden = !tab; document.body.classList.toggle('has-tabs', !!tab); document.body.classList.toggle('in-match', name === 'match');      // im Match füllt das Spiel den Bildschirm, die Seite scrollt nicht
     nav.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
     window.scrollTo(0, 0);
   }
