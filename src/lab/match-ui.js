@@ -33,7 +33,7 @@
     wrist: { tag: 'schnell, genau', does: 'Schnell und genau: breites Feld, auch mit einem Gegner am Mann. Aus der Distanz zu schwach.', per: 'aus dem Handgelenk' },
     drag: { tag: 'am Stock vorbei', does: 'Der Ball wird am Stock des Gegners vorbeigezogen: kaum zu blocken, und der Goalie steht noch auf der alten Seite. Danach schnell abziehen, er rutscht zurück.', per: 'per Zugschuss' }
   };
-  const WHY = { direct: 'Direktschuss, und niemand steht im Weg', tight: 'ein Gegner ist am Mann', lane: 'ein Gegner steht in der Schussbahn', far: 'aus der Distanz hilft nur Härte', near: 'aus der Nähe zählt Genauigkeit', fav: 'freie Bahn für seinen Lieblingsschuss', empty: 'das Tor ist leer' };
+  const WHY = { direct: 'Direktschuss: Der Goalie steht noch falsch', tight: 'ein Gegner ist am Mann', lane: 'ein Gegner steht in der Schussbahn, der Zug öffnet ein Fenster', far: 'aus der Distanz hilft nur Härte', power: 'der harte Schuss kommt am ehesten durch', near: 'aus der Nähe zählt Genauigkeit', acc: 'hier zählt Genauigkeit', goalie: 'der Zug lässt den Goalie falsch stehen', fav: 'sein Lieblingsschuss', shut: 'die Schussbahn ist zu, besser passen oder dribbeln', empty: 'das Tor ist leer', rebound: 'Abpraller' };
   const ZNAME = { tl: 'oben links', tm: 'oben Mitte', tr: 'oben rechts', bl: 'unten links', bm: 'unten Mitte', br: 'unten rechts' };
   const ROLE = { LD: 'Vert. links', RD: 'Vert. rechts', LW: 'Flügel links', C: 'Center', RW: 'Flügel rechts' };
 
@@ -394,9 +394,11 @@
     setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
     const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), di = M.dribInfo(G, sc, X.id), co = last ? null : M.dribCourse(G), mk = card('home', cd.by), bl = card('home', pv.by), direct = Math.abs(pv.oneT) >= 0.25;
     const anyFree = !last && G.teams.you.cards.some(c => c.id !== X.id && M.isFree(G, sc, c.id));
-    say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.'));
+    // Verkehr vor dem Tor: Gegner, deren Schatten im Tor liegt; zu ist die Schussbahn, wenn keine Schussart eine Chance hat
+    const lane = (pv.shade || []).filter(o => o.x + o.w > -1 && o.x - o.w < 1), shut = pv.why === 'shut';
+    say(`${X.last} hat den Ball.` + (last ? ' Letzte Aktion: Abschluss.' : shut && lane.length ? ' Die Schussbahn ist zu: passen oder dribbeln.' : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.'));
     let h = `<div class="actions2">
-<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)} · <em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
+<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)} · <em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${shut ? ` · <em class="bad">${lane.length ? 'Schussbahn zu' : 'kaum eine Chance'}</em>` : lane.length ? ` · <em class="bad">${lane.length} im Weg</em>` : ''}${pv.scr && pv.scr.length ? ' · <em>Sichtschutz</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
 <button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>${co ? `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · ` : ''}${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button></div>`;
     if (!last) {
       // Pässe: freie Mitspieler zuerst, dann nach Lage. Dazu, was der Pass bringt: Direktschuss nach Querpass oder sicherer Rückpass.
@@ -913,7 +915,14 @@
   let drag = null, target = null;
   const rx = { timer: 0, t0: 0, flight: null, end: null, tok: 0 };   // tok: laufende Nummer des Schusses (der Zustand wird bei jeder Eingabe kopiert)
   const creep = { raf: 0, k0: 0 };
-  function hideReach() { $('kzone').setAttribute('visibility', 'hidden'); $('kreach').classList.remove('hot'); cancelAnimationFrame(creep.raf); if (L3) S3.aimReach(null); }
+  function hideReach() { $('kzone').setAttribute('visibility', 'hidden'); $('kreach').classList.remove('hot'); cancelAnimationFrame(creep.raf); if (L3) S3.aimReach(null); showShade(null); }
+  /* Schatten der Blocker im Tor: Jeder Gegner zwischen Ball und Tor deckt einen Teil ab (rot schraffiert). Was dorthin
+     fliegt, ist geblockt. list: [{ x, w, top }] in Torkoordinaten, wie die Engine sie rechnet (shot.shade). */
+  function showShade(list) {
+    const g = $('kblock'); g.textContent = '';
+    (list || []).forEach(o => { const x0 = 180 + (o.x - o.w) * 102, x1 = 180 + (o.x + o.w) * 102, y = 236 - Math.min(1.05, o.top) * 148; svg('rect', { x: x0.toFixed(1), y: y.toFixed(1), width: Math.max(2, x1 - x0).toFixed(1), height: (236 - y).toFixed(1), fill: 'url(#blockhatch)', stroke: '#ffb4b4', 'stroke-width': 1.6 }, g); });
+    if (L3) S3.aimShade(list || []);
+  }
   function showReach(kx, hot) {
     const sh = G.shot, R = M.reach(G, sh), c = G.cfg, el = $('kreach');
     if (L3) S3.aimReach({ kx, ky: c.kY, r: R, kys: c.kYs, hot: !!hot });
@@ -1046,13 +1055,14 @@
     hideReach(); $('tell').hidden = true;
     const sco = Math.round(M.shotVal(X)), far = sh.q < 0.4 ? 'aus der Distanz' : sh.q < 0.75 ? 'aus mittlerer Distanz' : 'aus der Nähe';
     $('shooter').innerHTML = `<b>${sco}</b><span>${esc(X.last)}<i>Schuss ${shotLabel(sco)}, ${far}</i></span>`; $('shooter').hidden = false;
-    setTag(sh.ctx === 'so' ? 'Penalty' : sh.oneT ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
+    setTag(sh.ctx === 'so' ? 'Penalty' : sh.reb ? 'Abpraller' : sh.oneT ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : (mine ? 'Schuss' : 'Dein Goalie'), mine ? 'you' : 'home');
     $('aim').toggleAttribute('hidden', true); $('power').hidden = true; $('hint').hidden = true;
     const z = $('zones'); [...z.children].forEach(b => { b.classList.remove('sel'); b.setAttribute('aria-label', (mine ? 'Schuss nach ' : 'Parade ') + ZNAME[b.getAttribute('data-z')]); });
     z.className = 'zones off';
     if (mine) {
       if (!L3) { kpr.set(KP.ready(180 + sh.keeper.x * 102)); kpr.idle(); }
       if (!sh.empty) showReach(sh.keeper.x);
+      showShade(sh.shade);
       phase = 'aim'; reAim();
       return;
     }
@@ -1064,14 +1074,15 @@
       wrist: [`${X.last} zieht aus dem Handgelenk ab. Tippe die Ecke an, in die der Ball fliegt.`, 'Handgelenkschuss: kommt ohne Ansatz. Der goldene Ring zeigt, wo der Ball hinfliegt.'],
       drag: [`${X.last} zieht den Ball zur Seite: Zugschuss! Achtung, Finte.`, 'Zugschuss: Der Ball zieht zuerst zur falschen Seite. Tippe erst, wenn der Ring springt, oder gleich auf die andere Seite.']
     }[sh.style] || [`${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`, 'Der goldene Ring zeigt, wo der Ball hinfliegt.'];
+    if (sh.reb) { TELL[0] = `Abpraller! ${X.last} schiesst sofort nach.`; TELL[1] = 'Dein Goalie hat den Ball nicht festgehalten. Der Nachschuss kommt aus der Nähe: Du hast wenig Zeit.'; }
     say(sh.empty ? `${X.last} schiesst aufs leere Tor.` : TELL[0]);
     $('hist').innerHTML = sh.empty ? '<em>Dein Goalie ist draussen: Nur ein Fehlschuss rettet dich.</em>' : `<em>${TELL[1]}${sh.oneT ? ' Direktschuss nach einem Querpass: noch weniger Zeit.' : ''}${sh.press > 0 ? ' Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? ' Freie Bahn für den Schützen: du hast weniger Zeit.' : ''}</em>`;
-    if (!sh.empty && M.STYLE[sh.style]) { const tl = $('tell'); tl.innerHTML = ic(sh.style) + M.STYLE[sh.style].name; tl.className = 'tell sty-' + sh.style; tl.hidden = false; $('stage').dataset.style = sh.style; }
+    if (!sh.empty && M.STYLE[sh.style]) { const tl = $('tell'); tl.innerHTML = ic(sh.style) + (sh.reb ? 'Abpraller' : M.STYLE[sh.style].name); tl.className = 'tell sty-' + sh.style; tl.hidden = false; $('stage').dataset.style = sh.style; }
     phase = 'wait';
     let pulse = null;
     if (!L3) { kpr.idle(); pulse = ball.animate([{ transform: ballTf(START, 2.1) }, { transform: ballTf([START[0], START[1] + 5], 2.3) }], { duration: 300, iterations: Infinity, direction: 'alternate' }); }
     clearTimeout(rx.timer);
-    const windup = sh.style === 'slap' ? 1150 + Math.random() * 250 : sh.style === 'drag' ? 800 + Math.random() * 500 : sh.style === 'wrist' ? 450 + Math.random() * 650 : 650 + Math.random() * 900;
+    const windup = sh.reb ? 380 + Math.random() * 220 : sh.style === 'slap' ? 1150 + Math.random() * 250 : sh.style === 'drag' ? 800 + Math.random() * 500 : sh.style === 'wrist' ? 450 + Math.random() * 650 : 650 + Math.random() * 900;
     if (L3) S3.windup(sh.style, windup);
     rx.timer = setTimeout(() => { if (pulse) pulse.cancel(); if (rx.tok === tok && phase === 'wait' && G.shot) react(G.shot); }, windup);
   }
@@ -1115,7 +1126,7 @@
   function shotSpec(e, before, tight) {
     const mine = e.side === 'you', sc = before && before.cur, alone = e.ctx === 'so' || !sc || !sc.pos[e.x], X = card(e.side, e.x);
     return { kind: 'shot', atk: e.side, by: e.x, players: alone ? [{ id: e.x, side: e.side, x: 180, y: 190, name: X.last, no: X.no }] : specPlayers(sc),
-      land: e.land || e.target || [0, 0.4], result: e.result, miss: e.miss, kx: mine ? e.kx || 0 : 0, blocker: e.result === 'blocked' ? e.by : null, tight: !!tight, empty: !!e.empty,
+      land: e.land || e.target || [0, 0.4], result: e.result, miss: e.miss, kx: mine ? e.kx || 0 : 0, blocker: e.result === 'blocked' ? e.by : null, how: e.how || null, rebound: !!e.rebound, tight: !!tight, empty: !!e.empty,
       dive: mine ? undefined : e.guess ? M.ZC[e.guess] : null, quick: !mine, live: !mine && L3 && S3.mode() === 'aim', fly: L3 ? S3.flyLeft() : 0, style: e.style, pull: e.pull || 0 };
   }
   async function shotSeq(e, before) {
@@ -1131,8 +1142,10 @@
         await anim(ball, [{ transform: ballTf(START, 2.1) }, { transform: ballTf(stop, 1.8) }], { duration: 170, easing: 'ease-out' });
         anim(ball, [{ transform: ballTf(stop, 1.8), opacity: 1 }, { transform: ballTf([stop[0] + (e.target[0] < 0 ? 70 : -70), START[1] + 4], 2.2), opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
       }
-      stamp('Geblockt', e.style === 'slap' && e.grade === 'near' ? `Zu lange ausgeholt: ${B.last} wirft sich in den Schlagschuss.` : `Strich zu weit ${dirT}: ${B.last} wirft sich in den Schuss.`, 'bad', 'top');
-      addTick(`${X.last} schiesst, ${B.last} blockt.`);
+      // In der Schussbahn geblockt: Ziel im Schatten (so gewollt oder nicht gesehen) oder der Ball ist hineingezogen
+      const inShade = e.how === 'lane' && (e.grade === 'perfect' || e.grade === 'good');
+      stamp(e.how === 'lane' ? 'In den Block' : 'Geblockt', e.how === 'lane' ? (inShade ? `${B.last} steht in der Schussbahn und blockt.` : `Strich zu weit ${dirT}: Der Ball fliegt ${B.last} an den Körper.`) : e.style === 'slap' && e.grade === 'near' ? `Zu lange ausgeholt: ${B.last} wirft sich in den Schlagschuss.` : `Strich zu weit ${dirT}: ${B.last} wirft sich in den Schuss.`, 'bad', 'top');
+      addTick(e.how === 'lane' ? `${X.last} schiesst${STY[e.style] ? ' ' + STY[e.style].per : ''} in den Block: ${B.last} steht im Weg.` : `${X.last} schiesst, ${B.last} blockt.`);
       if (s3) await s3.done; else await hold(1400);
       return;
     }
@@ -1188,18 +1201,20 @@
       const off = e.grade !== 'perfect' && e.grade !== 'good', aimedOut = Math.abs(e.target[0]) >= 1 || e.target[1] >= 1, c = G.cfg;
       const inReach0 = M.kDist(c, creep.k0, e.target) <= e.reach, inReach = M.kDist(c, e.kx, e.target) <= e.reach, corner = Math.abs(e.land[0]) > 0.7 && e.land[1] > 0.7;
       if (goal) { main = 'Tor'; sub = e.empty ? 'Ins leere Tor.' : corner ? 'Ins Lattenkreuz!' : tight ? 'Knapp an den Fingerspitzen vorbei.' : e.grade === 'perfect' ? 'Perfekt gestoppt: genau ins Ziel.' : 'Der Goalie kommt nicht hin.'; }
+      else if (saved && e.rebound) { main = 'Abpraller'; sub = `Der Goalie hält, aber ${card('you', e.rebound).last} ist zuerst am Ball!`; }
       else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = inReach0 ? 'Dein Ziel lag in seiner Reichweite.' : inReach ? 'Zu lange gewartet: Der Goalie war schon in der Ecke.' : off ? `Strich zu weit ${dirT}: der Ball kam dem Goalie zu nah.` : 'Er kommt gerade noch mit den Fingerspitzen hin.'; }
       else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = aimedOut ? 'Dein Ziel lag neben dem Tor.' : `Strich zu weit ${dirT}: der Ball zog am Tor vorbei.`; }
     } else if (goal) { main = 'Tor'; sub = e.empty ? 'Ins leere Tor: Dein Goalie war draussen.' : !e.guess ? 'Zu spät: der Ball war schon drin.' : !e.inTime ? `Zu spät um ${Math.max(1, Math.round((e.rt - e.window) / 10) * 10)} ms.` : e.feint && e.rt < e.feint.ms + 60 && M.inZone(e.feint.land, e.guess, G.cfg.rxEdge) ? 'Auf die Finte hereingefallen: Beim Zugschuss gilt erst der zweite Ring.' : 'Falsche Ecke.'; }
-    else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = `Reagiert in ${e.rt} ms, Zeit waren ${e.window} ms.`; }
+    else if (saved) { main = e.result === 'catch' ? 'Gefangen' : 'Parade'; sub = e.rebound ? `Nicht festgehalten: ${card('home', e.rebound).last} kommt an den Abpraller!` : e.result === 'catch' ? `Reagiert in ${e.rt} ms: festgehalten, kein Abpraller.` : `Reagiert in ${e.rt} ms, Zeit waren ${e.window} ms.`; }
     else { main = { wide: 'Daneben', post: 'Pfosten', high: 'Drüber' }[e.miss]; sub = 'Der Schuss ging nicht aufs Tor.'; }
-    stamp(main, sub, mine === goal ? 'good' : 'bad', 'top');
-    const per = STY[e.style] ? ' ' + STY[e.style].per : '';
+    stamp(main, sub, e.rebound ? (mine ? 'warn' : 'bad') : mine === goal ? 'good' : 'bad', 'top');
+    const per = e.ctx === 'rebound' ? ' im Nachschuss' : STY[e.style] ? ' ' + STY[e.style].per : '';
     if (e.ctx !== 'so') addTick(goal ? (mine ? `Tor! ${X.last} trifft${per} zum ${disp.you}:${disp.home}.` : `Tor ${HOME}: ${X.last}${per}, ${disp.you}:${disp.home}.`) : `${X.last} schiesst${per}: ${main}.`, goal);
     else addTick(`Penalty ${X.last}: ${goal ? 'Tor' : main}.`, goal);
+    if (e.rebound) addTick(mine ? `Abpraller: ${card('you', e.rebound).last} schiesst nach.` : `Abpraller: ${card('home', e.rebound).last} schiesst nach.`);
     if (s3) { await s3.done; return; }
     if (e.result === 'catch') crowdGroan();
-    await hold(goal ? 2700 : 1400);
+    await hold(goal ? 2700 : e.rebound ? 700 : 1400);
   }
 
   /* --- Eingaben in der Torsicht ---
@@ -1229,21 +1244,32 @@
      Felds mit dieser Art. Ein Wechsel stellt Goalie und Reichweite sofort um: so sieht man, was die Art bringt. */
   function renderStyles() {
     const sh = G.shot, X = card('you', sh.x), panel = $('panel'), fav = M.favStyle(X), one = Math.abs(sh.oneT || 0) >= 0.25 && G.cfg.styles[sh.style].one > 0;
+    $('stage').dataset.style = sh.style; panel.hidden = false;
+    if (sh.reb) {
+      // Abpraller: keine Wahl, nur schnell sein
+      panel.innerHTML = `<p class="sty-note reb"><b>Abpraller: Handgelenkschuss.</b> Für mehr bleibt keine Zeit. Der Goalie liegt noch dort, wo er gehalten hat, und kommt schnell wieder hoch.</p>`;
+      setTag('Abpraller', 'you'); say('Abpraller! Tippe schnell auf die offene Seite.'); $('hist').innerHTML = '<em>Im dunklen Bereich hält der Goalie.</em>'; return;
+    }
     const tip = sh.style === sh.auto ? ` <b class="tr">Tipp</b> ${WHY[sh.why]}.` : '', mine = sh.style === fav ? ` <b class="tr fav">Liebling</b> ${esc(X.last)}s Lieblingsschuss: breiteres Feld.` : '';
     panel.innerHTML = '<p class="passes-head">Schussart wählen, dann ins Tor tippen</p><div class="styles">' + M.STYLES.map(st => {
-      const b = M.shotBar(st === sh.style ? G : M.act(G, { type: 'style', value: st }, rng).state);
-      return `<button type="button" class="sty${st === sh.style ? ' on' : ''}" data-sty="${st}" aria-pressed="${st === sh.style}"><span class="top">${ic(st)}<span class="pct" title="Breite des grünen Felds in Prozent">${Math.round(b.w * 100)}</span></span><b>${M.STYLE[st].short}</b><small>${STY[st].tag}${b.pressed ? ' · <em class="bad">Block droht</em>' : ''}</small><span class="tags">${st === sh.auto ? '<i class="tr">Tipp</i>' : ''}${st === fav ? '<i class="tr fav">Liebling</i>' : ''}</span></button>`;
+      const g2 = st === sh.style ? G : M.act(G, { type: 'style', value: st }, rng).state, b = M.shotBar(g2), none = sh.ch && sh.ch[st] <= 0.001 && !sh.empty, shut = (g2.shot.shade || []).some(o => o.x - o.w <= -0.98 && o.x + o.w >= 0.98 && o.top >= 1);
+      return `<button type="button" class="sty${st === sh.style ? ' on' : ''}" data-sty="${st}" aria-pressed="${st === sh.style}"><span class="top">${ic(st)}<span class="pct" title="Breite des grünen Felds in Prozent">${Math.round(b.w * 100)}</span></span><b>${M.STYLE[st].short}</b><small>${shut ? '<em class="bad">geht in den Block</em>' : none ? '<em class="bad">kaum eine Chance</em>' : STY[st].tag}${b.pressed ? ' · <em class="bad">Block droht</em>' : ''}</small><span class="tags">${st === sh.auto ? '<i class="tr">Tipp</i>' : ''}${st === fav ? '<i class="tr fav">Liebling</i>' : ''}</span></button>`;
     }).join('') + `</div><p class="sty-note"><b>${M.STYLE[sh.style].name}.</b> ${STY[sh.style].does}${tip}${mine}</p>`;
-    panel.hidden = false; $('stage').dataset.style = sh.style;
     setTag(sh.ctx === 'so' ? 'Penalty' : one ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : 'Schuss', 'you');
-    say(sh.empty ? 'Das Tor ist leer: Tippe ins Tor.' : one ? 'Direktschuss! Tippe schnell auf die offene Seite.' : sh.style === 'drag' ? 'Zugschuss: Tippe auf die offene Seite, dann schnell abziehen.' : 'Tippe ins Tor: Wohin soll der Schuss?');
-    $('hist').innerHTML = `<em>${sh.empty ? 'Der Goalie ist draussen: Triff einfach das Tor.' : one ? 'Der Goalie steht noch auf der Seite, von der der Pass kam, und rutscht schon herüber.' : sh.style === 'drag' ? 'Der Goalie steht noch dort, wo der Ball vor dem Zug lag.' : `Im dunklen Bereich hält der Goalie. ${sh.q < 0.45 ? 'Aus der Distanz bleiben nur die Ecken.' : sh.q < 0.75 ? 'Frei sind die Ecken, am meisten oben.' : 'Aus der Nähe kommt er nicht weit: weg von ihm reicht.'}`}</em>`;
+    // Verkehr vor dem Tor: Wer blockt, wer nimmt dem Goalie die Sicht
+    const sd = (sh.shade || []).filter(o => o.x + o.w > -1 && o.x - o.w < 1), full = sd.some(o => o.x - o.w <= -1 && o.x + o.w >= 1 && o.top >= 1), names = l => l.map(id => esc(card(sideOf(id), id).last)).join(' und ');
+    const dragOpen = sh.style !== 'drag' && !!sh.ch && sh.ch.drag > 0.001;
+    const blockTxt = !sd.length ? '' : full ? `<b class="t-bad">${names([sd.sort((a, b) => b.w - a.w)[0].id])} steht in der Schussbahn: Das Tor ist zu.</b> ${dragOpen ? 'Ein Zugschuss öffnet ein Fenster. ' : 'Hier hilft keine Schussart: Beim nächsten Mal vorher passen oder dribbeln. '}` : `<b class="t-bad">Rot schraffiert:</b> Dort blockt ${names(sd.map(o => o.id).filter((id, i, l) => l.indexOf(id) === i).slice(0, 2))}. Ziele daran vorbei. `;
+    const scrTxt = sh.scr && sh.scr.length ? `<b class="t-good">Sichtschutz:</b> ${names(sh.scr)} steht dem Goalie im Weg, er reicht weniger weit. ` : '';
+    say(sh.empty ? 'Das Tor ist leer: Tippe ins Tor.' : full && sh.style !== 'drag' ? 'Die Schussbahn ist zu: So geht der Schuss in den Block.' : one ? 'Direktschuss! Tippe schnell auf die offene Seite.' : sh.style === 'drag' ? 'Zugschuss: Tippe auf die offene Seite, dann schnell abziehen.' : sd.length ? 'Tippe ins Tor: am Block vorbei.' : 'Tippe ins Tor: Wohin soll der Schuss?');
+    $('hist').innerHTML = `<em>${blockTxt}${scrTxt}${sh.empty ? 'Der Goalie ist draussen: Triff einfach das Tor.' : one ? 'Der Goalie steht noch auf der Seite, von der der Pass kam, und rutscht schon herüber.' : sh.style === 'drag' ? 'Der Goalie steht noch dort, wo der Ball vor dem Zug lag.' : `Im dunklen Bereich hält der Goalie. ${sd.length ? '' : sh.q < 0.45 ? 'Aus der Distanz bleiben nur die Ecken.' : sh.q < 0.75 ? 'Frei sind die Ecken, am meisten oben.' : 'Aus der Nähe kommt er nicht weit: weg von ihm reicht.'}`}</em>`;
   }
   // Andere Schussart: Die Engine stellt Druck und Goalie um, hier wird es gezeigt
   function setStyle(st) {
     if (phase !== 'aim' || !G.shot || G.shot.side !== 'you' || target || st === G.shot.style) return;
     const r = M.act(G, { type: 'style', value: st }, rng); if (!r.ok) return;
     G = r.state; const sh = G.shot;
+    showShade(sh.shade);
     if (!sh.empty) { if (!L3 && kpr) { const k = kpr; k.to(KP.ready(180 + sh.keeper.x * 102), 220, () => { if (kpr === k && phase === 'aim') k.idle(); }); } showReach(sh.keeper.x); }
     if (L3) S3.aimStyle(sh.style, sh.pull);
     buzz(10); renderStyles();
@@ -1406,5 +1432,7 @@
   });
   $('hint').addEventListener('click', () => { if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake(); });
   S.onChange(() => { if (!$('screen-intro').hidden || phase === 'end' || phase === 'idle') renderIntro(); });
+  // Für Tests: den Zustand des laufenden Matchs lesen und einen gestellten Zustand laden (eine bestimmte Lage prüfen, ohne darauf zu warten)
+  window.HKMatchTest = { state: () => G, phase: () => phase, load(s) { closeBar(); G = s; phase = 'play'; return after(); } };
   renderIntro();
 })();

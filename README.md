@@ -113,17 +113,30 @@ Simulation mit dem mittleren Modell-Spieler bei gleichen Karten (400 Matches je 
 | Idee | weit ausholen, hart | kurz und schnell | Ball zur Seite ziehen, dann schiessen |
 | Feld am Balken | schmal (mal 0.85), Strich schneller | breit (mal 1.15), Strich langsamer | normal |
 | Goalie | reicht weniger weit, vor allem aus der Distanz | reicht aus der Distanz weiter | steht noch auf der alten Seite, rutscht aber schnell zurück |
-| Gegner in der Schussbahn | blockt fast immer, schon bei «knapp daneben» | stört wie bisher | stört kaum: Der Ball geht am Stock vorbei |
-| Gegner am Mann | blockt | stört nur halb so stark | stört stärker: Für den Zug fehlt der Platz |
+| Gegner in der Schussbahn (sein Schatten im Tor, siehe unten) | 30 % breiter: Er hat Zeit, sich breit zu machen | 25 % schmaler | wandert zur Seite: Es öffnet sich ein Fenster |
+| Gegner am Mann | blockt, schon bei «knapp daneben» | stört nur halb so stark | stört stärker: Für den Zug fehlt der Platz |
 | Direktschuss nach Querpass | voller Vorteil | 40 % davon | keiner: Der Zug braucht eine Annahme |
 
-- **Wann welche:** Aus der Distanz und beim Direktschuss schlagen. Aus der Nähe und mit einem Gegner am Mann aus dem Handgelenk. Steht ein Gegner in der Schussbahn, ziehen. Aus mittlerer Distanz und frei liegen alle drei gleichauf.
-- **Empfehlung:** Die Engine stellt die passende Art ein («Tipp») und nennt den Grund. Beim Zielen stehen die drei Arten als Knöpfe unter dem Feld; ein Tipp auf eine andere stellt Goalie, Reichweite und Balken sofort um. Die Zahl auf dem Knopf ist die Breite des grünen Felds in Prozent, «Block droht» warnt vor dem Gegner.
+- **Wann welche:** Aus der Distanz und beim Direktschuss schlagen. Aus der Nähe und mit einem Gegner am Mann aus dem Handgelenk. Steht der Gegenspieler direkt in der Schussbahn, ziehen. Aus mittlerer Distanz und frei liegen alle drei nah beisammen.
+- **Empfehlung:** Die Engine rechnet für jede Art die Torchance in genau dieser Lage (Blocker, Goalie, Druck), stellt die beste ein («Tipp») und nennt den Grund; liegt der Lieblingsschuss kaum dahinter, nimmt sie ihn. Beim Zielen stehen die drei Arten als Knöpfe unter dem Feld; ein Tipp auf eine andere stellt Goalie, Reichweite und Balken sofort um. Die Zahl auf dem Knopf ist die Breite des grünen Felds in Prozent, «Block droht» warnt vor dem Gegner.
 - **Lieblingsschuss:** Jede Karte hat einen, abgeleitet aus ihren Werten (Abschluss: Schlag, Clutch: Handgelenk, Form: Zug; gemessen an der Mitte aller Karten, sodass jede Art bei etwa einem Drittel der Stürmer vorkommt). Kanone schlägt immer, Dribbelkönig zieht immer. Im Lieblingsschuss ist das Feld 15 % breiter. Er steht im Kartenblatt (Karte antippen) und beim Zielen als «Liebling» am Knopf. Auf den Karten stehen keine neuen Zahlen.
 - **Schuss des Gegners:** Seine Schussart ist angesagt, bevor der Ball fliegt, und in 3D sieht man ihn von hinten ausholen. Schlagschuss: Er holt lange aus, danach bleibt 16 % weniger Zeit für die Parade. Handgelenk: kommt ohne Ansatz. Zugschuss: Der Ball zieht zuerst zur falschen Seite, der Ring steht dort; nach 110 bis 220 ms springt der Ring an den echten Landepunkt. Wer wartet, hat danach so viel Zeit wie beim Handgelenk; wer die Finte kennt, tippt gleich auf die andere Seite. Deine Störung in der Abwehr wirkt gegen den Schlagschuss stärker, gegen das Handgelenk schwächer.
 - **In 3D:** Beim Schlagschuss bleibt der Ball liegen, der Stock holt bis Hüfthöhe aus, der Ball fliegt flach und schnell, das Netz beult stärker aus. Das Handgelenk ist ein kurzes Schnappen. Beim Zugschuss geht der Schütze mit dem Ball zur Seite, die Kamera rückt mit.
-- **Balance:** `test/styles.test.js` rechnet für einen gedachten Spieler (80 ms Streuung am Balken, bestes Ziel im Tor) die Torchance jeder Art in jeder Lage und spielt 200 ganze Matches. In den Schusslagen dieser Matches ist die empfohlene Art in rund 90 % die beste; immer dieselbe Art zu nehmen kostet je nach Art 3 bis 11 Punkte Torchance pro Schuss. Mit der Empfehlung fallen etwa gleich viele Tore wie vor den Schussarten. Die Werte sind gerechnet, nicht mit echten Spielern gemessen.
+- **Balance:** `test/styles.test.js` rechnet für einen gedachten Spieler (80 ms Streuung am Balken, bestes Ziel im Tor) die Torchance jeder Art in jeder Lage und spielt 200 ganze Matches. In den Schusslagen dieser Matches ist die empfohlene Art in rund 80 % die beste, im Mittel fehlen 2 Punkte Torchance; immer dieselbe Art zu nehmen kostet je nach Art 6 bis 11 Punkte pro Schuss. Die Werte sind gerechnet, nicht mit echten Spielern gemessen.
 - **Noch nicht drin:** Heber, Aufsetzer und Rückhand; Gesten statt Knöpfe.
+
+**Verkehr vor dem Tor.** Ein Schuss fliegt nicht mehr durch die Gegner hindurch. Wer zwischen Ball und Tor steht, blockt; wer dem Goalie die Sicht nimmt, hilft dem Schützen; und was der Goalie nicht festhält, kann ein zweites Mal aufs Tor kommen.
+
+- **Block:** Jeder Gegner zwischen Ball und Tor wirft einen Schatten ins Tor, gerechnet vom Ball aus. Was in den Schatten fliegt, ist geblockt («In den Block»), auch wenn der Strich perfekt gestoppt war. Wer nah am Schützen steht, deckt fast das ganze Tor; wer vor dem Goalie steht, nur einen Streifen und nicht ganz bis zur Latte. Gute Blocker (Block-Wert, «Wand») sind breiter. Beim Zielen sind die Schatten rot schraffiert im Tor zu sehen, in 3D und in der Torsicht von vorne.
+- **Aus der Distanz:** Von hinten steht im Schnitt gut ein Gegner im Weg, im Mittel ist gut die Hälfte des Tors verdeckt. Wer trotzdem schlägt, schiesst oft in den Block: Im Testlauf war es etwa jeder dritte Distanzschuss. Der Weg zum Tor aus der Distanz ist der Pass quer nach hinten und der Direktschuss, bevor der Block steht (beim Direktschuss sind die Schatten bis zu 30 % schmaler).
+- **Gegenspieler direkt vor dem Schützen:** Sein Schatten deckt das ganze Tor, Schlag und Handgelenk gehen sicher in den Block. Der Zugschuss zieht den Ball 0.8 m zur Seite; der Gegenspieler geht nur zum Teil mit (je nach Zweikampf gegen Dribbling 30 bis 80 % des Wegs), und auf der Seite des Zugs öffnet sich ein Fenster. Sonst: passen oder dribbeln. Der Knopf «Schuss» warnt mit «Schussbahn zu».
+- **Sichtschutz:** Hat ein Verteidiger hinten den Ball, läuft der Center auf die Schussbahn, drei Meter vor das Tor. Steht ein Mitspieler dort, sieht der Goalie den Ball spät und reicht weniger weit (pro Mitspieler 0.07, höchstens zwei). Sein Gegenspieler steht dann allerdings auch in der Schussbahn.
+- **Abpraller:** Eine Parade, die den Ball nicht festhält, lässt ihn vor das Tor springen. Ist ein Angreifer zuerst dort, schiesst er sofort nach: nur aus dem Handgelenk, der Goalie liegt noch auf der Seite der Parade und reicht weniger weit. Höchstens ein Abpraller pro Chance. Das gilt für beide Seiten: Hält dein Goalie spät, kommt der Nachschuss mit 20 % weniger Zeit; wer schnell reagiert (in den ersten 60 % des Zeitfensters), fängt den Ball, und es gibt keinen Abpraller.
+- **Slot:** Die Zone vor dem Tor, aus der die meisten Tore fallen, ist am Boden hell und gestrichelt eingezeichnet, in 3D und in der Sicht von oben.
+- **Druck am Balken:** Ein Gegner in der Schussbahn macht das Feld am Balken nicht mehr schmaler; das tut nur noch ein Gegner direkt am Mann.
+- **Wirkung im Testlauf:** Derselbe gedachte Spieler (schiesst nur mit mindestens 30 % Torchance oder wenn kein Pass besser ist) erzielt mit diesen Regeln rund 1.6 Tore pro Match statt 1.1, weil er nicht mehr in zugestellte Schussbahnen schiesst und früher passt; der Gegner kommt auf rund 0.9 statt 0.7, der Unterschied sind seine Abpraller. Gerechnet, nicht mit echten Spielern gemessen.
+- **Tests:** `test/styles.test.js` prüft Schatten, Fenster beim Zugschuss, Sichtschutz und Abpraller in der Engine. `test/traffic.js` stellt drei Lagen im Browser in 3D (Schuss von hinten in den Block, eigener Abpraller, Abpraller des Gegners) und spielt sie durch; dafür gibt es `window.HKMatchTest` (Zustand lesen und laden).
+- **Noch nicht drin:** Schüsse des Gegners werden nicht von deinen Spielern in der Schussbahn geblockt (dafür gibt es weiter den Block am Timing-Balken); abgefälschte Schüsse; Mitspieler blocken nie.
 
 **Bild von oben.** Die Halle hat einen Boden mit Glanz, eine Bande mit runden Ecken, Torräume und Tore mit Netz. Die Spieler sind vorgebeugte Figuren mit Trikot im Licht, Hose, Rückennummer und Schatten. Der Ball zieht bei Pässen und Schüssen eine Leuchtspur. Bei einem Tor leuchtet eine Anzeigetafel aus Leuchtpunkten mit «TOR!» und Lichtstrahlen auf.
 
@@ -220,6 +233,10 @@ node test/world.test.js
 
 ```bash
 node test/styles.test.js
+```
+
+```bash
+node test/traffic.js
 ```
 
 ```bash

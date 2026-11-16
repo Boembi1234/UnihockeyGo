@@ -29,38 +29,88 @@ function matchWith(X) {
   const mates = fwd.filter(c => c.id !== X.id).slice(30, 35);
   return M.newMatch({ homeName: 'Test', you: { goalie: { val: 88 }, cards: [X].concat(mates.slice(0, 2), def.slice(10, 12)) }, home: { goalie: { val: 88 }, cards: mates.slice(2, 5).concat(def.slice(12, 14)) } }, E.makeRng(7));
 }
-function lay(o, X) {
-  const s = matchWith(X || shooter), out = {};
-  M.STYLES.forEach(st => { const sh = { side: 'you', x: (X || shooter).id, q: o.q, ctx: 'attack', by: s.teams.home.cards[3].id, start: 0, oneT: o.oneT || 0, kr: 0, lane: o.lane || 0, tight: o.tight || 0, bk: 0.65, pull: 1 }; M.setStyle(s.cfg, sh, st); s.shot = sh; out[st] = chance(s); });
-  out.pick = M.pickStyle(s.cfg, X || shooter, Object.assign({ bk: 0.65 }, o));
-  out.best = M.STYLES.reduce((a, k) => (out[k].g > out[a].g ? k : a), 'slap');
+/* Stellt eine Lage auf dem Feld: der Schütze bei at, Gegner bei defs (die übrigen weit hinten, wo sie nichts decken),
+   Mitspieler bei mates. o.one: Querbewegung des letzten Passes (Direktschuss). Gibt für jede Schussart die Torchance. */
+function lay(at, defs, o) {
+  o = o || {}; const X = o.X || shooter, s = matchWith(X), sc = s.cur, you = s.teams.you.cards, home = s.teams.home.cards, out = { s, sh: {} };
+  sc.type = 'att'; sc.kind = 'set'; sc.counter = false; sc.step = 1; sc.max = 4; sc.carrier = X.id; sc.reb = false; s.phase = 'decide'; s.shot = null;
+  you.forEach((c, i) => { sc.pos[c.id] = c.id === X.id ? at : (o.mates && o.mates[i - 1]) || [40 + i * 60, 370]; });
+  home.forEach((c, i) => { sc.pos[c.id] = (defs && defs[i]) || [40 + i * 60, 385]; sc.mark[you[i].id] = c.id; });
+  sc.last = o.one ? { type: 'pass', to: X.id, lat: o.one } : null;
+  M.STYLES.forEach(st => { const pv = M.shotPreview(s, X.id, null, st); out.sh[st] = pv.sh; out[st] = chance(Object.assign({}, s, { shot: pv.sh })); out.pick = { style: pv.auto, why: pv.why, ch: pv.ch }; });
+  out.best = M.STYLES.reduce((a, k) => (out[k].g > out[a].g ? k : a), 'slap'); out.home = home; out.you = you;
   out.txt = M.STYLES.map(k => `${M.STYLE[k].short} ${pc(out[k].g)}`).join(', ');
   return out;
 }
 const second = (r, st) => Math.max.apply(null, M.STYLES.filter(k => k !== st).map(k => r[k].g));
 
 // --- Jede Schussart hat ihre Lage ---
-let r = lay({ q: 0.25 });
+let r = lay([180, 300]);
 ok(r.best === 'slap' && r.slap.g - second(r, 'slap') >= 0.05 && r.pick.style === 'slap' && r.pick.why === 'far', 'aus der Distanz und frei ist der Schlagschuss klar am besten: ' + r.txt);
-r = lay({ q: 0.65, oneT: 0.8 });
+r = lay([180, 150], null, { one: 0.8 });
 ok(r.best === 'slap' && r.slap.g - second(r, 'slap') >= 0.08 && r.pick.style === 'slap' && r.pick.why === 'direct', 'Direktschuss nach Querpass: Schlagschuss klar am besten: ' + r.txt);
-r = lay({ q: 0.9 });
+r = lay([180, 80]);
 ok(r.best === 'wrist' && r.wrist.g - second(r, 'wrist') >= 0.02 && r.pick.style === 'wrist' && r.pick.why === 'near', 'aus der Nähe und frei ist das Handgelenk am besten: ' + r.txt);
-r = lay({ q: 0.85, tight: 0.7, lane: 0.3 });
-ok(r.best === 'wrist' && r.wrist.g - second(r, 'wrist') >= 0.08 && r.pick.style === 'wrist' && r.pick.why === 'tight', 'Gegner am Mann: Handgelenk klar am besten: ' + r.txt);
-r = lay({ q: 0.6, lane: 1 });
-ok(r.best === 'drag' && r.drag.g - second(r, 'drag') >= 0.08 && r.pick.style === 'drag' && r.pick.why === 'lane', 'Gegner in der Schussbahn: Zugschuss klar am besten: ' + r.txt);
-ok(r.slap.bl >= 0.5 && r.drag.bl <= 0.05 && r.wrist.bl > r.drag.bl, `in der Schussbahn wird der Schlagschuss meist geblockt (${pc(r.slap.bl)}), der Zug fast nie (${pc(r.drag.bl)})`);
-r = lay({ q: 0.85, lane: 0.9 });
-ok(r.best === 'drag' && r.pick.style === 'drag', 'auch aus der Nähe: Gegner in der Bahn heisst Zugschuss: ' + r.txt);
-r = lay({ q: 0.62 });
-ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.drag.g) <= 0.08 && r.pick.why === 'fav' && r.pick.style === M.favStyle(shooter), 'aus mittlerer Distanz und frei liegen alle nah beisammen, der Lieblingsschuss entscheidet: ' + r.txt);
+r = lay([180, 90], [[194, 96]]);
+ok(r.best === 'wrist' && r.wrist.g - second(r, 'wrist') >= 0.08 && r.pick.style === 'wrist' && r.pick.why === 'tight', 'Gegner am Mann (neben dem Schützen): Handgelenk klar am besten: ' + r.txt);
+r = lay([180, 160]);
+ok(Math.max(r.slap.g, r.wrist.g, r.drag.g) - Math.min(r.slap.g, r.wrist.g, r.drag.g) <= 0.1 && r.pick.style === M.favStyle(shooter) && r.pick.why === 'fav', 'aus mittlerer Distanz und frei liegen alle nah beisammen, der Lieblingsschuss entscheidet: ' + r.txt);
 // Lieblingsschuss: breiteres Feld
 {
-  const s = matchWith(shooter), mk = st => { const sh = { side: 'you', x: shooter.id, q: 0.62, ctx: 'attack', start: 0, oneT: 0, kr: 0, lane: 0, tight: 0, bk: 0, pull: 1 }; M.setStyle(s.cfg, sh, st); s.shot = sh; return M.shotBar(s); };
-  const a = mk('slap'), b = mk('wrist'), c = s.cfg;
+  const s = r.s, bar = st => M.shotBar(Object.assign({}, s, { shot: r.sh[st] })), a = bar('slap'), b = bar('wrist'), c = s.cfg;
   ok(a.fav && !b.fav && Math.abs(a.w / c.styles.slap.w - b.w / c.styles.wrist.w * c.favW) < 1e-9, 'im Lieblingsschuss ist das Feld um ' + pc(c.favW - 1) + ' breiter');
   ok(a.sweep < b.sweep, 'beim Schlagschuss läuft der Strich schneller als beim Handgelenk');
+}
+
+// --- Verkehr vor dem Tor: Blocker werfen Schatten ins Tor ---
+{
+  // Der Gegenspieler steht 34 Einheiten vor dem Schützen in der Schussbahn: Das Tor ist zu, nur der Zug öffnet ein Fenster
+  r = lay([180, 290], [[180, 256]]);
+  const sdS = r.sh.slap.shade, sdD = r.sh.drag.shade;
+  ok(sdS.length === 1 && sdS[0].x - sdS[0].w <= -1 && sdS[0].x + sdS[0].w >= 1 && sdS[0].top >= 1, 'Gegner direkt vor dem Schützen: Sein Schatten deckt das ganze Tor');
+  ok(r.slap.g === 0 && r.wrist.g === 0 && r.drag.g >= 0.05 && r.pick.style === 'drag' && r.pick.why === 'lane', 'Schlag und Handgelenk gehen in den Block, der Zugschuss öffnet ein Fenster: ' + r.txt);
+  const pull = r.sh.drag.pull, edge = pull > 0 ? sdD[0].x + sdD[0].w : sdD[0].x - sdD[0].w;
+  ok(pull * edge < 0.9 && pull * edge > -1, `das Fenster liegt auf der Seite, zu der gezogen wird (Schatten endet bei ${edge.toFixed(2)}, Zug nach ${pull > 0 ? 'rechts' : 'links'})`);
+  const sB = Object.assign({}, r.s, { shot: r.sh.slap }), v = M.evalShot(sB, [0.7, 0.8], 0.5, 300);
+  ok(v.blocked && v.how === 'lane' && v.blockBy === r.home[0].id, 'ein perfekt getimter Schlagschuss in den Schatten ist geblockt, vom Gegner in der Schussbahn');
+  const act = M.act(Object.assign(JSON.parse(JSON.stringify(r.s)), { shot: JSON.parse(JSON.stringify(r.sh.slap)), phase: 'aim' }), { type: 'aim', target: [0.7, 0.8], hit: 0.5, t: 300 }, E.makeRng(1)), e = act.events.find(x => x.t === 'shot');
+  ok(act.ok && e && e.result === 'blocked' && e.how === 'lane' && e.by === r.home[0].id && act.state.phase === 'done', 'als Eingabe: Schuss in den Block, der Ball ist weg');
+  // Gegner im Slot, weit weg vom Schützen: nur ein Streifen in der Mitte
+  r = lay([180, 300], [[180, 110]]);
+  const sl = r.sh.slap.shade[0], wr = r.sh.wrist.shade[0];
+  ok(sl && wr && sl.w < 0.8 && sl.w > wr.w * 1.5 && Math.abs(sl.x) < 0.05, `Gegner vor dem Goalie: ein Streifen in der Mitte, beim Schlagschuss breiter (${sl.w.toFixed(2)}) als beim Handgelenk (${wr.w.toFixed(2)})`);
+  const s1 = Object.assign({}, r.s, { shot: r.sh.slap });
+  ok(M.evalShot(s1, [0, 0.5], 0.5, 300).blocked && !M.evalShot(s1, [0.9, 0.85], 0.5, 300).blocked, 'in die Mitte: geblockt; in die Ecke: am Block vorbei');
+  ok(r.slap.g > 0.08 && r.pick.style === 'slap', 'aus der Distanz bleibt der Schlagschuss an einem Blocker vorbei möglich: ' + r.txt);
+  const near = lay([180, 300], [[180, 250]]).sh.wrist.shade[0], far = lay([180, 300], [[180, 80]]).sh.wrist.shade[0];
+  ok(near.w > far.w * 3 && far.top < 1 && near.top >= 1, `je näher am Schützen, desto grösser der Schatten (${near.w.toFixed(2)} gegen ${far.w.toFixed(2)}); wer am Tor steht, lässt die Latte frei`);
+  // Sichtschutz: ein Mitspieler auf der Schussbahn vor dem Goalie
+  const free = lay([180, 300]), scr = lay([180, 300], null, { mates: [[180, 96]] }), c = free.s.cfg;
+  ok(scr.sh.slap.scr.length === 1 && Math.abs(M.reach(free.s, free.sh.slap) - M.reach(scr.s, scr.sh.slap) - c.screenReach) < 1e-9 && scr.slap.g > free.slap.g, `Sichtschutz: Der Goalie reicht weniger weit, die Torchance steigt (${pc(free.slap.g)} auf ${pc(scr.slap.g)})`);
+  // Der Center läuft in die Sicht, wenn ein Verteidiger hinten den Ball hat
+  let seen = 0, n = 0; for (let i = 1; i <= 40; i++) { const s = M.newMatch({ homeName: 'T', you: { goalie: { val: 88 }, cards: fwd.slice(20, 23).concat(def.slice(5, 7)) }, home: { goalie: { val: 88 }, cards: fwd.slice(40, 43).concat(def.slice(20, 22)) } }, E.makeRng(i)), sc = s.cur, car = M.card(s, M.atkSide(sc), sc.carrier); if (sc.kind !== 'set' || ['LD', 'RD'].indexOf(car.role) < 0) continue; n++; const C_ = s.teams[M.atkSide(sc)].cards.find(x => x.role === 'C'), p = sc.pos[C_.id], a = sc.pos[car.id], dx = 180 - a[0], dy = 40 - a[1], d = Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / Math.hypot(dx, dy); if (d < 18 && M.dist(p, M.GOAL) < 105) seen++; }
+  ok(n >= 5 && seen >= n * 0.8, `hat ein Verteidiger hinten den Ball, steht der Center dem Goalie in der Sicht (${seen} von ${n} Szenen)`);
+}
+
+// --- Abpraller ---
+{
+  const mk = (defNear) => { const L = lay([180, 150], defNear ? [[150, 94]] : null, { mates: [[150, 100]] }), s = JSON.parse(JSON.stringify(L.s)); s.shot = JSON.parse(JSON.stringify(L.sh.wrist)); s.phase = 'aim'; return { s, L }; };
+  // Schuss auf den Goalie: gehalten, aber nicht gefangen (Abstand zwischen 40 % und 100 % der Reichweite)
+  const A = mk(false), R = M.reach(A.s, A.s.shot), tg = [-Math.min(0.9, R * 0.75), A.s.cfg.kY], x = M.act(A.s, { type: 'aim', target: tg, hit: 0.5, t: 0 }, E.makeRng(2)), e0 = x.events.find(e => e.t === 'shot'), e1 = x.events.find(e => e.t === 'rebound');
+  ok(x.ok && e0.result === 'save' && e1 && e1.x === A.L.you[1].id && e0.rebound === e1.x && x.state.phase === 'aim' && x.state.shot.reb && x.state.shot.x === e1.x && x.state.shot.style === 'wrist' && x.state.shot.why === 'rebound', 'Parade ohne Festhalten, ein Angreifer steht am nächsten: Abpraller, er schiesst sofort nach');
+  ok(!M.act(x.state, { type: 'style', value: 'slap' }, E.makeRng(1)).ok && Math.sign(x.state.shot.keeper.x) === Math.sign(tg[0]) && M.reach(x.state, x.state.shot) < R, 'beim Abpraller gibt es nur das Handgelenk; der Goalie liegt noch auf der Seite der Parade und reicht weniger weit');
+  const y = M.act(x.state, { type: 'aim', target: [x.state.shot.keeper.x, x.state.cfg.kY + 0.3], hit: 0.5, t: 0 }, E.makeRng(3)), f0 = y.events.find(e => e.t === 'shot');
+  ok(y.ok && f0.ctx === 'rebound' && !y.events.some(e => e.t === 'rebound') && y.state.phase === 'done', 'höchstens ein Abpraller pro Chance: Danach ist die Szene zu Ende (' + f0.result + ')');
+  const B = mk(true), z = M.act(B.s, { type: 'aim', target: tg, hit: 0.5, t: 0 }, E.makeRng(2));
+  ok(z.ok && z.events.find(e => e.t === 'shot').result === 'save' && !z.events.some(e => e.t === 'rebound') && z.state.phase === 'done', 'steht ein Verteidiger näher am Ball, klärt er: kein Abpraller');
+  // Schuss des Gegners: spät gehalten (kein Fangen) mit einem Angreifer vor dem Tor
+  const s = matchWith(shooter), sc = s.cur, rngH = E.makeRng(5); sc.type = 'def'; sc.kind = 'set'; sc.reb = false; sc.carrier = s.teams.home.cards[0].id;
+  s.teams.home.cards.forEach((c, i) => { sc.pos[c.id] = i === 0 ? [180, 160] : i === 1 ? [180, 96] : [40 + i * 60, 380]; }); s.teams.you.cards.forEach((c, i) => { sc.pos[c.id] = [40 + i * 60, 390]; });
+  let h = null, tries = 0; while (!h && tries++ < 40) { const s2 = JSON.parse(JSON.stringify(s)); M.setShot(s2, rngH, 'home', sc.carrier, 0.7, 'attack', {}); if (!s2.shot.miss && !s2.shot.feint) h = s2; }
+  const w = M.act(h, { type: 'aim', zone: h.shot.zone, rt: Math.round(h.shot.window * 0.8) }, E.makeRng(6)), g0 = w.events.find(e => e.t === 'shot'), g1 = w.events.find(e => e.t === 'rebound');
+  ok(w.ok && g0.result === 'save' && g1 && g1.side === 'home' && w.state.phase === 'aim' && w.state.shot.side === 'home' && w.state.shot.reb && w.state.shot.style === 'wrist', 'dein Goalie hält spät und lässt abprallen: Der Gegner schiesst nach');
+  const w2 = M.act(h, { type: 'aim', zone: h.shot.zone, rt: Math.round(h.shot.window * 0.3) }, E.makeRng(6));
+  ok(w2.events.find(e => e.t === 'shot').result === 'catch' && !w2.events.some(e => e.t === 'rebound') && w2.state.phase === 'done', 'wer schnell reagiert, fängt den Ball: kein Abpraller');
 }
 
 // --- Lieblingsschuss der Karten ---
@@ -100,7 +150,7 @@ function playMatch(seed, policy, on) {
     } else if (s.shot.side === 'you') {
       if (on && on.shot) on.shot(s);
       const st = policy === 'auto' ? s.shot.auto : policy === 'rand' ? M.STYLES[Math.floor(hr() * 3)] : policy;
-      if (st !== s.shot.style) act({ type: 'style', value: st });
+      if (st !== s.shot.style && !s.shot.reb) act({ type: 'style', value: st });
       const b = M.shotBar(s); act({ type: 'aim', target: bestTarget(s), hit: hit(b), t: 300 + hr() * b.sweep });
     } else {
       // Parade: Der Spieler wartet beim Zugschuss die Finte ab und reagiert dann wie sonst

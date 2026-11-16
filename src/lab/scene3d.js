@@ -64,6 +64,8 @@
     geo.computeVertexNormals(); return geo;
   }
 
+  // Slot vor dem oberen Tor, in Feldeinheiten (wie in der Sicht von oben)
+  const SLOT = [[140, 102], [220, 102], [238, 150], [212, 196], [148, 196], [122, 150]];
   // Hallenboden mit Linien, wie im Match von oben: das ganze Feld, 360 x 800
   function floorTex() {
     return canvasTex(1024, 2048, (g, w, h) => {
@@ -71,6 +73,8 @@
       g.fillStyle = gr; g.fillRect(0, 0, w, h);
       let s = 7; const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
       for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${r() < 0.5 ? '255,255,255' : '0,10,60'},${0.012 + r() * 0.03})`; g.beginPath(); g.ellipse(r() * w, r() * h, 10 + r() * 70, 6 + r() * 30, r() * 3.14, 0, 7); g.fill(); }      // Gebrauchsspuren
+      // Slot: die Zone vor dem Tor, aus der die meisten Tore fallen (heller, gestrichelt umrandet), an beiden Enden
+      [0, 1].forEach(e => { g.beginPath(); SLOT.forEach((q, i) => { const y = e ? 800 - q[1] : q[1]; if (i) g.lineTo(q[0] * kx, y * ky); else g.moveTo(q[0] * kx, y * ky); }); g.closePath(); g.fillStyle = 'rgba(255,255,255,.085)'; g.fill(); g.setLineDash([22, 20]); g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,.4)'; g.stroke(); g.setLineDash([]); });
       g.strokeStyle = 'rgba(255,255,255,.88)'; g.fillStyle = 'rgba(255,255,255,.88)'; g.lineWidth = 9; g.lineCap = 'round';
       const L = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1 * kx, y1 * ky); g.lineTo(x2 * kx, y2 * ky); g.stroke(); }, rect = (x, y, bw, bh) => g.strokeRect(x * kx, y * ky, bw * kx, bh * ky);
       L(4, 400, 356, 400); g.beginPath(); g.ellipse(180 * kx, 400 * ky, 7 * kx, 7 * ky, 0, 0, 7); g.fill();
@@ -542,6 +546,9 @@
     M.gate = group(sc);      // steht im Tor, auf das geschossen wird
     M.reach = goalM(new T.Mesh(new T.CircleGeometry(1, 44), new T.MeshBasicMaterial({ color: 0x050818, transparent: true, opacity: 0.5, depthWrite: false, clippingPlanes: clip, side: T.DoubleSide })), M.gate);
     M.reachEdge = goalM(new T.Mesh(new T.RingGeometry(0.965, 1, 56), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false, clippingPlanes: clip, side: T.DoubleSide })), M.gate);
+    // Schatten der Blocker: rot schraffierte Flächen im Tor, dort fliegt der Ball in einen Gegner
+    const hatch = canvasTex(64, 64, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(229,72,77,.5)'; g.fillRect(0, 0, w, h); g.strokeStyle = 'rgba(255,214,214,.75)'; g.lineWidth = 9; for (let i = -64; i < 128; i += 32) { g.beginPath(); g.moveTo(i, 64); g.lineTo(i + 64, 0); g.stroke(); } });
+    M.shade = []; for (let i = 0; i < 5; i++) { const tx = hatch.clone(); tx.needsUpdate = true; tx.wrapS = tx.wrapT = T.RepeatWrapping; const body = goalM(new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: tx, transparent: true, opacity: 0.85, depthWrite: false, clippingPlanes: clip, side: T.DoubleSide })), M.gate), edge = goalM(new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ color: 0xffb4b4, transparent: true, opacity: 0.95, depthWrite: false, clippingPlanes: clip, side: T.DoubleSide })), M.gate); M.shade.push({ body, edge, tx }); }
     M.aim = goalM(new T.Group(), M.gate); const a1 = new T.Mesh(new T.RingGeometry(0.1, 0.135, 32), new T.MeshBasicMaterial({ color: 0xf7d774, depthTest: false, transparent: true, side: T.DoubleSide })), a2 = new T.Mesh(new T.CircleGeometry(0.04, 16), new T.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, side: T.DoubleSide })); a1.renderOrder = a2.renderOrder = 6; M.aim.add(a1, a2);
     M.land = goalM(new T.Mesh(new T.RingGeometry(0.13, 0.19, 32), new T.MeshBasicMaterial({ color: 0xf7d774, depthTest: false, transparent: true, side: T.DoubleSide })), M.gate); M.land.renderOrder = 6;
     M.zones = goalM(new T.Group(), M.gate); M.zone = {};
@@ -660,13 +667,17 @@
       list.forEach(P => { if (P.side === spec.atk) look(P, 0, 0, true); else look(P, p0.x, p0.z, true); });
       look(Sh, 0, 0, true);
       // Der Blocker steht in der Schusslinie, knapp vor dem Schützen
-      if (Bl) { Bl.pos.copy(p0).addScaledVector(dir, 1.45); look(Bl, p0.x, p0.z, true); end.copy(Bl.pos); end.y = 0.4; }
-      const tEnd = tRel + (Bl ? 0.12 : fly), tCut = tEnd + 0.62; dur = tEnd + (goal ? 3.5 : 1.25);
-      K.pos.x = cont ? keepK : clamp((spec.kx || 0) * GW, -GW * 0.72, GW * 0.72); Sh.ball = !cont; actors([spec.by]);
+      // Geblockt vom Gegner am Mann: Er steht knapp vor dem Schützen. Geblockt in der Schussbahn (lane): Der Blocker bleibt, wo er steht.
+      const farB = !!Bl && spec.how === 'lane' && Bl.pos.distanceTo(p0) > 2.4, bFrac = farB ? clamp(Bl.pos.distanceTo(p0) / dist, 0.12, 0.95) : 0;
+      if (Bl && !farB) { Bl.pos.copy(p0).addScaledVector(dir, 1.45); look(Bl, p0.x, p0.z, true); end.copy(Bl.pos); end.y = 0.4; }
+      else if (Bl) { look(Bl, p0.x, p0.z, true); end.copy(Bl.pos); end.y = 0.38; }
+      const tEnd = tRel + (farB ? Math.max(0.14, fly * bFrac) : Bl ? 0.12 : fly), tCut = tEnd + 0.62; dur = tEnd + (goal ? 3.5 : spec.rebound ? 0.75 : 1.25);
+      K.pos.x = cont ? keepK : clamp((spec.kx || 0) * GW, -GW * 0.72, GW * 0.72); Sh.ball = !cont; actors([spec.by]); if (Bl && spec.blocker) actors([spec.blocker]);
       if (cont) anim(Sh, 'shot', t0, sd);
       const stickSide = V(Math.cos(Sh.faceTo), 0, -Math.sin(Sh.faceTo)).multiplyScalar(Sh.hand);
       const c0 = p0.clone().addScaledVector(dir, -3.0).addScaledVector(stickSide, 0.85).setY(1.5), l0 = p0.clone().addScaledVector(dir, Math.min(dist * 0.5, 3)).setY(0.7);
       const over = dist > 6.6 && !cont, c1 = over || cont ? V(lx * 0.3 + Math.sign(p0.x || 1) * 0.6, 1.45, 4.9) : c0.clone().addScaledVector(dir, 0.5).addScaledVector(stickSide, 0.4).setY(1.62), l1 = V(lx * 0.5, 0.6, 0), back = dir.clone().negate(), deflect = V(Math.sign(lx || 1) * (1.4 + Math.abs(lx)), 0, 1.7);
+      if (farB) { c1.copy(Bl.pos).addScaledVector(back, 3.4).addScaledVector(stickSide, 0.9).setY(1.5); l1.copy(Bl.pos).setY(0.6); }      // die Kamera bleibt beim Blocker, statt bis zum Tor zu fliegen
       const lat = P => (P.pos.x - p0.x) * back.z - (P.pos.z - p0.z) * back.x, mates = list.filter(P => P.side === spec.atk && P !== Sh).sort((a, b) => lat(a) - lat(b)), slots = [-1.25, -0.65, 0.65, 1.25];
       const S_ = { shot: cont, from: cont ? ball0 : null, hit: false, block: false, spin: 0, cutDone: false };
       step = (t, dt) => {
@@ -697,7 +708,7 @@
           K.tgt.multiplyScalar(1 / KS);      // der Goalie ist etwas kleiner gebaut: sein Raum ist entsprechend gestreckt
           K.amp = res === 'miss' && !spec.dive ? 0.45 : 1;
         }
-        if (Bl && t > t0 + 0.2 && !S_.block) { S_.block = true; anim(Bl, 'lunge', t, 0.7, { dir: 0, stay: true }); }
+        if (Bl && t > (farB ? tEnd - 0.3 : t0 + 0.2) && !S_.block) { S_.block = true; anim(Bl, 'lunge', t, 0.7, { dir: 0, stay: true }); }
         // Jubel: Der Schütze dreht ab, läuft Richtung Kamera und dreht sich im Sprung; die Mitspieler kommen dazu
         if (goal && t > tEnd + 0.45) {
           const tx = p0.x + back.x * 1.6, tz = p0.z + back.z * 1.6;
@@ -712,7 +723,7 @@
         } else {
           const k = cont ? 1 : ease(seg(t, tRel - 0.08, tEnd + 0.12)), pre = ease(seg(t, 0, tRel));
           // Geblockt: von der Seite, damit man Schütze und Blocker sieht
-          if (Bl) { camP.copy(p0).addScaledVector(dir, 0.75).addScaledVector(stickSide, 3.5 - pre * 0.4).setY(1.15); camL.copy(p0).addScaledVector(dir, 0.75).setY(0.65); camAt(camP, camL, 46); focus = 3.4; return; }
+          if (Bl && !farB) { camP.copy(p0).addScaledVector(dir, 0.75).addScaledVector(stickSide, 3.5 - pre * 0.4).setY(1.15); camL.copy(p0).addScaledVector(dir, 0.75).setY(0.65); camAt(camP, camL, 46); focus = 3.4; return; }
           camP.lerpVectors(c0, c1, k).addScaledVector(dir, pre * (over ? 0.45 : 0.2)); if (pullW) camP.x += (Sh.pos.x - p0.x) * (1 - k); if (over) { const arc = Math.sin(Math.PI * k); camP.y += arc * 0.55; camP.addScaledVector(stickSide, arc * 1.5); } camL.lerpVectors(l0, l1, k); if (pullW) camL.x += (Sh.pos.x - p0.x) * (1 - k) * 0.6;
           camAt(camP, camL, 46); focus = lerp(camP.distanceTo(p0), camP.distanceTo(l1), k);
         }
@@ -800,7 +811,7 @@
     };
     return { impact, done, dur };
   }
-  function hideMarks() { const M = R.marks; M.carrier.visible = false; M.lanes.forEach(m => { m.visible = false; }); M.rings.forEach(m => { m.visible = false; }); M.defs.forEach(d => { d.core.visible = d.edge.visible = d.brush.visible = false; }); M.finish.visible = M.sideN.visible = M.sideP.visible = M.arrow.visible = false; M.reach.visible = M.reachEdge.visible = M.aim.visible = M.land.visible = M.zones.visible = false; }
+  function hideMarks() { const M = R.marks; M.carrier.visible = false; M.lanes.forEach(m => { m.visible = false; }); M.rings.forEach(m => { m.visible = false; }); M.defs.forEach(d => { d.core.visible = d.edge.visible = d.brush.visible = false; }); M.finish.visible = M.sideN.visible = M.sideP.visible = M.arrow.visible = false; M.reach.visible = M.reachEdge.visible = M.aim.visible = M.land.visible = M.zones.visible = false; M.shade.forEach(o => { o.body.visible = o.edge.visible = false; }); }
 
   /* --- Laufendes Spiel: Die Figuren stehen dort, wo das Match sie hinstellt --- */
   // Wer auf dem Feld steht. list: { you: [{ id, name, no }], home: [...] }. Wer bleibt, behält seinen Platz.
@@ -883,6 +894,18 @@
   function aimTarget(g) { const m = R && R.marks.aim; if (!m) return; m.visible = !!g; if (g) m.position.set(g[0] * GW, g[1] * GH, 0.04); }
   // Reichweite des Goalies: Ellipse um ihn (kx, ky Mitte, r waagrecht, kys Stauchung nach oben), hot: er rückt
   function aimReach(o) { const M = R && R.marks; if (!M) return; M.reach.visible = M.reachEdge.visible = !!o; if (!o) return; [M.reach, M.reachEdge].forEach(m => { m.position.set(o.kx * GW, o.ky * GH, 0.03); m.scale.set(o.r * GW, o.r / o.kys * GH, 1); }); M.reachEdge.material.color.set(o.hot ? '#f7d774' : '#ffffff'); M.reach.material.opacity = o.hot ? 0.6 : 0.5; if (D.aim) D.aim.kx = clamp(o.kx * GW, -GW * 0.8, GW * 0.8); }
+  // Schatten der Blocker im Tor: list [{ x, w, top }] in Torkoordinaten (Mitte, halbe Breite, Höhe) oder leer
+  function aimShade(list) {
+    const M = R && R.marks; if (!M) return; const l = (list || []).slice().sort((a, b) => b.w - a.w).slice(0, M.shade.length);
+    M.shade.forEach((o, i) => {
+      const s = l[i]; o.body.visible = o.edge.visible = !!s; if (!s) return;
+      const x0 = Math.max(-1.02, s.x - s.w), x1 = Math.min(1.02, s.x + s.w), top = Math.min(1.02, s.top), w = Math.max(0.02, (x1 - x0) * GW), h = top * GH;
+      o.body.position.set((x0 + x1) / 2 * GW, h / 2, 0.02 + i * 0.002); o.body.scale.set(w, h, 1); o.tx.repeat.set(Math.max(0.5, w / 0.32), Math.max(0.5, h / 0.32));
+      // heller Rand an den Seiten, die im Tor liegen
+      const inL = s.x - s.w > -1, inR = s.x + s.w < 1, ex = inL && inR ? (s.w < 0.2 ? x0 : (Math.abs(x0) < Math.abs(x1) ? x0 : x1)) : inL ? x0 : inR ? x1 : null;
+      o.edge.visible = ex !== null; if (ex !== null) { o.edge.position.set(ex * GW, h / 2, 0.03 + i * 0.002); o.edge.scale.set(0.03, h, 1); }
+    });
+  }
   // Andere Schussart beim Zielen: Beim Zugschuss rückt die Kamera mit dem Ball zur Seite (pull: -1 links, 1 rechts), sonst zurück
   function aimStyle(style, pull) { const A = D.aim; if (!A) return; A.Sh.style = STY3[style] ? style : 'wrist'; A.offTo = style === 'drag' && pull ? pull * 0.9 : 0; }
   /* Anlauf des Gegners vor seinem Schuss: Der Schütze ist von hinten zu sehen und holt in seiner Schussart aus; nach ms
@@ -1048,5 +1071,5 @@
   // Zurück ins laufende Spiel (nach einer Szene, die nachläuft, oder nach dem Zielen)
   function resume() { if (!R) return; if (D.cut) D.cut.kill(); else if (D.mode !== 'live') { unflip(); blendCam(0.5); } }
 
-  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, aim, aimTarget, aimReach, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
+  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, play, stop, resume, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
 })();
