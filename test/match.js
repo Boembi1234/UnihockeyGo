@@ -6,8 +6,8 @@ const path = require('path'), fs = require('fs');
 const { chromium } = require('playwright');
 const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursive: true });
 (async () => {
-  // Pässe, Dribblings und Schüsse laufen als 3D-Szene, wo es WebGL gibt. Der letzte Lauf erzwingt WebGL (in Software gerechnet)
-  // und verlangt, dass 3D-Szenen vorkommen; der Lauf mit reduzierter Bewegung bleibt in der Sicht von oben.
+  // Wo es WebGL gibt, läuft das ganze Match in der 3D-Halle. Der letzte Lauf erzwingt WebGL (in Software gerechnet) und
+  // verlangt, dass das Match in 3D läuft; der Lauf mit reduzierter Bewegung bleibt in der Sicht von oben.
   const b = await chromium.launch(), bgl = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] }), N = +process.argv[2] || 1; let fail = 0;
   const RUNS = [{ width: 375, shots: true }, { width: 460, shots: true }, { width: 375, reduce: true }, { width: 375, shots: true, gl: true }].filter(r => !process.env.ONLY || (process.env.ONLY === 'gl') === !!r.gl);
   for (const run of RUNS) {
@@ -18,6 +18,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
     await p.evaluate(() => Promise.all(['600', '700', '800'].map(w => document.fonts.load(w + ' 16px "Saira Condensed"', 'ÜBERZAHL'))));
     const snap = async (name, full) => { if (!run.shots || taken[name]) return; taken[name] = 1; await p.screenshot({ path: path.join(OUT, run.width + (run.gl ? '-3d' : '') + '-' + name + '.png'), fullPage: !!full }); };
     if (run.gl) { await p.waitForFunction(() => !!window.THREE, null, { timeout: 15000 }).catch(() => {}); if (!(await p.evaluate(() => !!window.HKScene3D && window.HKScene3D.ok()))) errors.push('3D-Darstellung nicht verfügbar'); }
+    // Ohne Grafikkarte rechnet die 3D-Halle langsam, und der Testspieler träfe nichts mehr. In den Läufen, die den Ablauf prüfen, läuft sie darum mit winzigem Bild; nur der letzte Lauf zeigt sie in voller Güte.
+    if (!run.gl && !run.reduce) await p.evaluate(() => { if (window.HKScene3D) window.HKScene3D.quality(3); });
     const over = async w => { const x = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth); if (x > 0) errors.push('Überlauf ' + w + ' +' + x); };
     await snap('00-team', true); await over('team');
     await p.click('#tabs [data-tab="store"]'); await p.waitForTimeout(150); await snap('00-shop', true); await over('shop');
@@ -32,21 +34,30 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         const st = await p.evaluate(() => {
           const v = e => !!e && !e.hidden && e.offsetParent !== null;
           if (v(document.getElementById('screen-end'))) return 'end';
-          if (v(document.getElementById('view3d'))) return '3d';
+          const s3 = window.HKScene3D, l3 = document.getElementById('stage').classList.contains('live3d'), sd = document.getElementById('stage').dataset;
+          if (l3 && s3.mode() === 'cut') return '3d';
           if (document.getElementById('stage').classList.contains('livemode')) return 'live';
           if (v(document.getElementById('dribview'))) return document.getElementById('drib-msg').hidden ? 'drib' : 'wait';
           const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
-          if (document.getElementById('goalview').dataset.aim === '1' && !document.getElementById('goalview').hidden) return 'aim';
-          if (document.getElementById('zones').classList.contains('armed')) return 'react';
+          if (sd.aim === '1' && (l3 ? s3.mode() === 'aim' : !document.getElementById('goalview').hidden)) return 'aim';
+          if (l3 ? sd.react === '1' : document.getElementById('zones').classList.contains('armed')) return 'react';
           const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
           return 'wait';
         });
         seen[st] = (seen[st] || 0) + 1;
+        if (!seen.live3 && g % 20 === 0 && await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) seen.live3 = 1;
         if (process.env.DEBUG && (g % 400 === 0 || st !== seen._last)) { seen._last = st; console.log(g, st, await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent.slice(0, 60), document.getElementById('hint').hidden ? '' : document.getElementById('hint-text').textContent].join(' / '))); }
         if (st === 'end') { await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att') {
           await snap('01-angriff'); await over('angriff'); n++;
-          if (Math.random() < 0.25) await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+          const live3 = await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'));
+          if (live3) { seen.live3 = 1; await p.waitForTimeout(taken['01-angriff-3d'] ? 0 : 700); await snap('01-angriff-3d'); }
+          if (Math.random() < 0.25) {
+            // direkt auf dem Feld: in 3D dorthin tippen, wo die Figur steht
+            const at = live3 ? await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (!l.length) return null; return window.HKScene3D.screen(l[Math.floor(Math.random() * l.length)].getAttribute('data-id')); }) : null;
+            if (at) { await p.mouse.click(at[0], at[1]); await p.waitForTimeout(60); if (await p.evaluate(() => !!document.querySelector('#panel [data-a]:not(:disabled)'))) seen.missTap = (seen.missTap || 0) + 1; else seen.tap3 = 1; }
+            else await p.evaluate(() => { const l = [...document.querySelectorAll('#pls .pl.pick')]; if (l.length) l[Math.floor(Math.random() * l.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+          }
           else await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')]; l[Math.floor(Math.random() * l.length)].click(); });
           await p.waitForTimeout(40); continue;
         }
@@ -84,11 +95,14 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (shotBar && Math.random() < 0.3) { await p.waitForTimeout(2300); await snap('06-schuss-goalie-rueckt'); }   // trödeln: der Goalie rückt in die Ecke
           // Hälfte genau: warten, bis der Strich im Feld ist. Hälfte blind.
           const aimed = Math.random() < 0.55;
+          // Wo der Strich steht, wird aus seinem Lauf gerechnet (nicht aus dem Bild): so trifft der Testspieler auch, wenn die Bilder stocken
           await p.evaluate(aimed => new Promise(done => {
-            const tb = document.getElementById('tbb'), z = tb.querySelector('.tb-z'), m = document.getElementById('tb-m'), t0 = performance.now(), wait = aimed ? 0 : Math.random() * 900;
+            const tb = document.getElementById('tbb'), z = tb.querySelector('.tb-z'), t0 = performance.now(), wait = aimed ? 0 : Math.random() * 900;
+            const sw = +tb.dataset.sweep, st = +tb.dataset.start, tb0 = +tb.dataset.t0, B = tb.getBoundingClientRect(), a = z.getBoundingClientRect(), mid = (a.left + a.width / 2 - B.left) / B.width, tol = Math.max(0.006, a.width / B.width * 0.35);
+            const X = now => { const u = ((((now - tb0) / (sw * 2) + st) % 1) + 1) % 1; return u < 0.5 ? u * 2 : 2 - u * 2; };
             (function poll() {
-              const a = z.getBoundingClientRect(), x = m.getBoundingClientRect().left + 2, inside = x >= a.left && x <= a.right, now = performance.now();
-              if ((aimed && inside) || (!aimed && now - t0 > wait) || now - t0 > 4000) { tb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })); done(); } else requestAnimationFrame(poll);
+              const now = performance.now();
+              if ((aimed && now - tb0 > 300 && Math.abs(X(now) - mid) <= tol) || (!aimed && now - t0 > wait) || now - t0 > 4000) { tb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })); done(); } else setTimeout(poll, 1);
             })();
           }), aimed);
           if (!run.reduce) { await p.waitForTimeout(200); await snap(shotBar ? '07-schuss-gestoppt' : st === 'bar-att' ? '04-balken-treffer' : '05-balken-abwehr-treffer'); if (shotBar) { await p.waitForTimeout(1000); await snap('07-schuss-ende'); } }
@@ -97,7 +111,17 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         if (st === 'aim') {
           await p.waitForTimeout(200 + Math.random() * 300); await over('schuss'); n++; await snap('06-schuss');
           // Ziel setzen: meist in eine Ecke, mal irgendwohin; mal tippen, mal schieben. Danach läuft der Schuss-Balken.
-          const bb = await p.locator('#goalview').boundingBox(), k = bb.width / 360, r = Math.random();
+          const r = Math.random();
+          if (await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) {
+            await p.waitForTimeout(500); await snap('06-schuss-3d');
+            const g3 = r < 0.7 ? [Math.random() < 0.5 ? -0.8 : 0.8, Math.random() < 0.7 ? 0.86 : 0.15] : [(Math.random() - 0.5) * 2.6, Math.random() * 1.3], to3 = await p.evaluate(g => window.HKScene3D.goalAt(g), g3), c3 = await p.evaluate(() => window.HKScene3D.goalAt([0, 0.3]));
+            const back = await p.evaluate(a => { const b = document.getElementById('stage').getBoundingClientRect(), g = window.HKScene3D.pickGoal(a[0], a[1]); return [g, a[0] >= b.left && a[0] <= b.right && a[1] >= b.top && a[1] <= b.bottom]; }, to3);
+            if (r < 0.7 && !back[1]) errors.push('Tor liegt beim Zielen nicht ganz im Bild: ' + JSON.stringify(g3));
+            if (Math.hypot(back[0][0] - g3[0], back[0][1] - g3[1]) > 0.06) errors.push('Tippen ins Tor trifft nicht: ' + JSON.stringify([g3, back[0]]));
+            if (r > 0.5) await p.mouse.click(to3[0], to3[1]); else { await p.mouse.move(c3[0], c3[1]); await p.mouse.down(); await p.mouse.move(to3[0], to3[1], { steps: 5 }); await p.waitForTimeout(60); await snap('06-schuss-3d-ziel'); await p.mouse.up(); }
+            await p.waitForTimeout(60); continue;
+          }
+          const bb = await p.locator('#goalview').boundingBox(), k = bb.width / 360;
           const g = await p.evaluate(() => { const b = document.getElementById('posts').getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; });
           const to = r < 0.7 ? [g[0] + g[2] * (Math.random() < 0.5 ? 0.1 : 0.9), g[1] + g[3] * (Math.random() < 0.7 ? 0.14 : 0.85)] : [bb.x + (100 + Math.random() * 160) * k, bb.y + (95 + Math.random() * 130) * k];
           if (r > 0.5) await p.mouse.click(to[0], to[1]);
@@ -108,6 +132,15 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           await snap('08-parade'); n++;
           // Mal dorthin, wo der Ring ist, mal zufällig, mal gar nicht
           const r = Math.random();
+          if (await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) {
+            await snap('08-parade-3d');
+            // Tippen ins Tor muss die richtige Zone treffen, auch wenn das Tor des Gegners gespiegelt steht
+            const zbad = await p.evaluate(() => { const M = window.HKMatch, S3 = window.HKScene3D; return M.ZONES.filter(z => { const at = S3.goalAt(M.ZC[z]), g = S3.pickGoal(at[0], at[1]); return M.zoneOf(Math.max(-0.99, Math.min(0.99, g[0])), Math.max(0, Math.min(0.99, g[1]))) !== z; }); });
+            if (zbad.length && !taken.zbad) { taken.zbad = 1; errors.push('Parade in 3D: Tippen trifft die Zone nicht: ' + zbad.join(', ')); }
+            // Mal dorthin, wo der Ring ist, mal zufällig, mal gar nicht
+            if (r < 0.85) { const at = await p.evaluate(hit => { const l = document.getElementById('stage').dataset.land.split(',').map(Number), g = hit ? [Math.max(-0.9, Math.min(0.9, l[0])), Math.max(0.1, Math.min(0.9, l[1]))] : [[-0.62, 0, 0.62][Math.floor(Math.random() * 3)], Math.random() < 0.5 ? 0.25 : 0.72]; return window.HKScene3D.goalAt(g); }, r < 0.6); await p.mouse.move(at[0], at[1]); await p.mouse.down(); await p.mouse.up(); }
+            await p.waitForTimeout(300); continue;
+          }
           if (r < 0.6) await p.evaluate(() => { const mk = document.getElementById('mark').getBoundingClientRect(); document.getElementById('goalview').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: mk.left + mk.width / 2, clientY: mk.top + mk.height / 2 })); });
           else if (r < 0.85) await p.evaluate(() => { const gv = document.getElementById('goalview').getBoundingClientRect(); document.getElementById('goalview').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: gv.left + gv.width * (0.3 + Math.random() * 0.4), clientY: gv.top + gv.height * (0.45 + Math.random() * 0.4) })); });
           if (!run.reduce) { await p.waitForTimeout(650); await snap('08-parade-ende'); }
@@ -131,7 +164,8 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         await p.waitForTimeout(25);
       }
     }
-    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
+    const missing = ['att', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card'].concat(run.gl ? ['3d'] : []).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
+    if (run.reduce && seen.live3) errors.push('bei reduzierter Bewegung lief das Match in 3D'); if ((seen.missTap || 0) > 2 && !seen.tap3) errors.push('Tippen auf eine Figur wählt den Pass nicht: ' + seen.missTap + ' Versuche'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();

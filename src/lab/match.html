@@ -145,13 +145,29 @@
 .tb-pad.drib{min-height:76px;font-size:22px;cursor:default}
 .act .pct.word{font-size:15px;letter-spacing:.06em;top:12px}
 /* Anzeigetafel beim Tor: Leuchtpunkte, Lichtstrahlen, goldener Rahmen */
-/* 3D-Szene: liegt über dem Feld und der Torsicht, unter Stempel und Anzeigetafel */
-.view3d{position:absolute;inset:0;z-index:7;overflow:hidden;background:#050818}
+/* 3D-Bühne: liegt über der Sicht von oben und unter allen Anzeigen (Stempel, Balken, Anzeigetafel) */
+.view3d{position:absolute;inset:0;z-index:1;overflow:hidden;background:#0a0f2c}
 .view3d[hidden]{display:none}
 .view3d canvas{display:block;width:100%;height:100%}
-.stage.mode3d .stamp:not(.low){top:21%}
-.stage.mode3d .stamp.low{top:5%;bottom:auto}
-.stage.mode3d .stamp b{font-size:38px}
+.stage.live3d #pitch,.stage.live3d .goalview,.stage.live3d .dribview svg,.stage.live3d .vignette{visibility:hidden}
+.stage.live3d .dribview{background:none}
+.stage.live3d .stamp:not(.low){top:21%}
+.stage.live3d .stamp.low{top:5%;bottom:auto}
+.stage.live3d .stamp b{font-size:38px}
+/* Namensschilder über den Figuren */
+.s3tags{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.s3tags[hidden]{display:none}
+.s3tag{position:absolute;left:0;top:0;font-family:var(--display);font-weight:700;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;line-height:1;color:#fff;text-align:center;white-space:nowrap}
+.s3tag[hidden]{display:none}
+.s3tag b{display:block;padding:2px 5px 1px;border-radius:4px;background:rgba(5,8,24,.72)}
+.s3tag.home b{color:#f7d774;background:rgba(5,8,24,.5)}
+.s3tag i{display:block;height:3px;margin:1px 2px 0;border-radius:2px;background:#070b1f;overflow:hidden}
+.s3tag u{display:block;height:100%;width:100%;background:#34d399}
+.s3tag.s3pick b{box-shadow:0 0 0 1.5px #fff}
+.s3tag.s3free b{background:#34d399;color:#03130c;box-shadow:0 0 0 1.5px #03130c}
+.s3tag.s3free b::after{content:" · frei"}
+.s3tags.cut .s3tag b{font-size:13px;padding:3px 8px 2px}
+.s3tags.cut .s3tag i{display:none}
 .led{position:absolute;left:0;right:0;top:5%;z-index:8;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none}
 .led-panel{position:relative;width:100%;padding:12px 0;overflow:hidden;text-align:center;background:#170a04;border-top:4px solid #f7d774;border-bottom:4px solid #f7d774;box-shadow:0 0 0 1px #6b4a12,0 10px 30px rgba(0,0,0,.55),0 0 46px rgba(255,170,60,.35)}
 .led-panel::before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,170,80,.17) 0 32%,transparent 37%);background-size:6px 6px}
