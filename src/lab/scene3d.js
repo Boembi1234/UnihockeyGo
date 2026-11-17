@@ -27,7 +27,7 @@
   const hashOf = s => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
   let T = null, R = null, broken = false, onFail = null;      // THREE, alles einmal Gebaute, ob die Darstellung ausgefallen ist
   // Regie: Betriebsart, Zeit, laufende Szene und was das Match zuletzt gemeldet hat
-  const D = { mode: 'live', t: 0, cut: null, camY: 0, fz: 8.5, bx: 0, carrier: null, ballFree: null, ballAt: -9, blend: 0, blendT: 0.45, aim: null, drib: null, lanes: [], loop: false, raf: 0, last: 0, flip: false };
+  const D = { mode: 'live', t: 0, cut: null, camY: 0, fz: 8.5, bx: 0, carrier: null, ballFree: null, ballAt: -9, blend: 0, blendT: 0.45, aim: null, drib: null, lanes: [], spot: null, loop: false, raf: 0, last: 0, flip: false };
 
   function ok() {
     if (broken || !window.THREE) return false;
@@ -538,6 +538,7 @@
     const sc = R.scene, bm = (c, o) => new T.MeshBasicMaterial({ color: c, transparent: true, opacity: o == null ? 0.9 : o, depthWrite: false, fog: false }), flat = m => { m.rotation.x = -Math.PI / 2; m.visible = false; m.renderOrder = 2; sc.add(m); return m; };
     const M = R.marks = { lanes: [], rings: [], defs: [] };
     M.carrier = flat(new T.Mesh(new T.RingGeometry(0.42, 0.5, 32), bm(0xf7d774)));
+    M.spot = flat(new T.Mesh(new T.RingGeometry(0.972, 1, 64), bm(0xffffff, 0.55)));      // Standard: so weit müssen die Gegner vom Ball wegstehen
     for (let i = 0; i < 6; i++) { M.lanes.push(flat(new T.Mesh(new T.PlaneGeometry(1, 1), bm(0xffffff, 0.75)))); M.rings.push(flat(new T.Mesh(new T.RingGeometry(0.46, 0.56, 32), bm(0x34d399)))); }
     for (let i = 0; i < 4; i++) M.defs.push({ core: flat(new T.Mesh(new T.CircleGeometry(1, 28), bm(0xef4444, 0.34))), edge: flat(new T.Mesh(new T.RingGeometry(0.94, 1, 32), bm(0xff6b6b, 0.95))), brush: flat(new T.Mesh(new T.RingGeometry(0.96, 1, 40), bm(0xffffff, 0.5))) });
     M.finish = flat(new T.Mesh(new T.PlaneGeometry(1, 0.12), bm(0xf7d774))); M.sideN = flat(new T.Mesh(new T.PlaneGeometry(0.07, 1), bm(0xffffff, 0.4))); M.sideP = flat(new T.Mesh(new T.PlaneGeometry(0.07, 1), bm(0xffffff, 0.4)));
@@ -821,7 +822,7 @@
     };
     return { impact, done, dur };
   }
-  function hideMarks() { const M = R.marks; M.carrier.visible = false; M.lanes.forEach(m => { m.visible = false; }); M.rings.forEach(m => { m.visible = false; }); M.defs.forEach(d => { d.core.visible = d.edge.visible = d.brush.visible = false; }); M.finish.visible = M.sideN.visible = M.sideP.visible = M.arrow.visible = false; M.reach.visible = M.reachEdge.visible = M.aim.visible = M.land.visible = M.zones.visible = false; M.shade.forEach(o => { o.body.visible = o.edge.visible = false; }); }
+  function hideMarks() { const M = R.marks; M.carrier.visible = false; M.spot.visible = false; M.lanes.forEach(m => { m.visible = false; }); M.rings.forEach(m => { m.visible = false; }); M.defs.forEach(d => { d.core.visible = d.edge.visible = d.brush.visible = false; }); M.finish.visible = M.sideN.visible = M.sideP.visible = M.arrow.visible = false; M.reach.visible = M.reachEdge.visible = M.aim.visible = M.land.visible = M.zones.visible = false; M.shade.forEach(o => { o.body.visible = o.edge.visible = false; }); }
 
   /* --- Laufendes Spiel: Die Figuren stehen dort, wo das Match sie hinstellt --- */
   // Wer auf dem Feld steht. list: { you: [{ id, name, no }], home: [...] }. Wer bleibt, behält seinen Platz.
@@ -844,6 +845,8 @@
     R.figs.forEach(P => { if (P.tag) P.tag.classList.remove('s3free', 's3pick', 's3deep'); });
     D.lanes.forEach(L => { const P = L.id && figOf(L.id); if (P && P.tag && !L.dim) { P.tag.classList.add('s3pick'); if (L.free) P.tag.classList.add('s3free'); if (L.deep) P.tag.classList.add('s3deep'); } });
   }
+  // Standard: Kreis um den Ball (p in Feldkoordinaten, r in Feldeinheiten); ohne p verschwindet er
+  function spot(p, r) { D.spot = p ? { x: wx(p[0]), z: wz(p[1]), r: r * S } : null; if (R && !p) R.marks.spot.visible = false; }
   // Welcher Spieler liegt unter dem Finger? ids: wer in Frage kommt
   function pick(cx, cy, ids) {
     if (!R) return null; const r = R.host.getBoundingClientRect(); let best = null, bd = 46;
@@ -871,6 +874,7 @@
     setBall(tmp);
     M.carrier.visible = !!C; if (C) { M.carrier.position.set(C.pos.x, 0.02, C.pos.z); M.carrier.scale.setScalar(1 + Math.sin(t * 5) * 0.06); }
     M.rings.forEach((m, i) => { const L = D.lanes[i], P = L && (L.free || L.deep) && figOf(L.id); m.visible = !!P; if (P) { m.position.set(P.pos.x, 0.021, P.pos.z); m.scale.setScalar(1 + Math.sin(t * 6 + i) * 0.1); } });
+    M.spot.visible = !!D.spot; if (D.spot) { M.spot.position.set(D.spot.x, 0.019, D.spot.z); M.spot.scale.setScalar(D.spot.r); }
     // Kamera: schräg von hinten über deine Hälfte, fährt dem Ausschnitt nach, den das Match vorgibt
     const fz = (D.camY + 170) * S; D.fz += (fz - D.fz) * (1 - Math.exp(-dt * 3.2)); D.bx += (R.ballL.x - D.bx) * (1 - Math.exp(-dt * 2));
     camAt(R.v3.set(D.bx * 0.22, 7.2, D.fz + 13), R.v4.set(D.bx * 0.3, 0.5, D.fz - 2), 54);
@@ -1096,5 +1100,5 @@
   // Zurück ins laufende Spiel (nach einer Szene, die nachläuft, oder nach dem Zielen)
   function resume() { if (!R) return; if (D.cut) D.cut.kill(); else if (D.mode !== 'live') { unflip(); blendCam(0.5); } }
 
-  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, pick, camY(y) { D.camY = y; }, fit, play, stop, resume, inset, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
+  window.HKScene3D = { ok, mount, unmount, teams, place, ball, carrier: setCarrier, energy, lanes, spot, pick, camY(y) { D.camY = y; }, fit, play, stop, resume, inset, aim, aimTarget, aimReach, aimShade, aimStyle, windup, pickGoal, react, reactPick, flyLeft, drib, dribUpdate, dribEnd, step, screen, goalAt, quality, mode: () => D.mode, set onFail(f) { onFail = f; } };
 })();

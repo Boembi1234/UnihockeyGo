@@ -40,12 +40,12 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (l3 && s3.mode() === 'cut') return '3d';
           if (document.getElementById('stage').classList.contains('livemode')) return 'live';
           if (v(document.getElementById('dribview'))) return document.getElementById('drib-msg').hidden ? 'drib' : 'wait';
-          const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').textContent === 'Abwehr' ? 'bar-def' : 'bar-att';
+          const tb = document.getElementById('tbb'); if (v(tb)) return /g-/.test(tb.className) ? 'wait' : document.getElementById('tag').classList.contains('home') ? 'bar-def' : 'bar-att';
           if (sd.aim === '1' && (l3 ? s3.mode() === 'aim' : !document.getElementById('goalview').hidden)) return 'aim';
           if (l3 ? sd.react === '1' : document.getElementById('zones').classList.contains('armed')) return 'react';
           const dv = document.getElementById('duelov'); if (v(dv)) return dv.dataset.state === 'done' ? 'wait' : 'duel';
           const pnl = document.getElementById('panel'); if (v(pnl) && pnl.querySelector('[data-throw]')) return 'throw';
-          if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled)')) return 'att';
+          if (v(pnl) && pnl.querySelector('[data-a]:not(:disabled), .passes [data-to]')) return 'att';
           return 'wait';
         });
         seen[st] = (seen[st] || 0) + 1;
@@ -54,6 +54,15 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         if (st === 'end') { if (process.env.NOSKIP) console.log('Dauer ' + Math.round((Date.now() - tStart) / 1000) + ' s, ' + n + ' Eingaben bisher'); await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
         if (st === 'att') {
           await snap('01-angriff'); await over('angriff'); n++;
+          // Standard (Freischlag, Einschlag): Varianten im Raster, kein Dribbling; in der Ecke kein direkter Schuss
+          const std = await p.evaluate(() => { const g = window.HKMatchTest.state(), sc = g.cur, pc = sc && sc.piece && sc.piece.first ? sc.piece : null; if (!pc) return null; const q = s => document.querySelector(s); return { kind: pc.kind, own: !!pc.own, tag: document.getElementById('tag').textContent, grid: document.querySelectorAll('#panel .passes.std [data-var]').length, drib: !!q('#panel [data-a="dribble"]:not(:disabled)'), shoot: !!q('#panel [data-a="shoot"]:not(:disabled)'), noShot: window.HKMatch.noShot(g, sc) }; });
+          if (std) {
+            seen.std = 1; seen['std-' + (std.own ? 'hinten' : std.kind)] = 1; await p.waitForTimeout(taken['04-' + (std.own ? 'standard-hinten' : std.kind === 'free' ? 'freischlag' : 'einschlag')] ? 0 : 900); await snap('04-' + (std.own ? 'standard-hinten' : std.kind === 'free' ? 'freischlag' : 'einschlag')); await over('standard');
+            if (std.drib) errors.push('Standard: Dribbling ist möglich');
+            if (!/^(Freischlag|Einschlag)$/.test(std.tag)) errors.push('Standard: Ansage fehlt: ' + std.tag);
+            if (!std.own && std.grid !== 4) errors.push('Standard: Es stehen nicht vier Varianten zur Wahl: ' + std.grid);
+            if (!std.own && std.shoot === std.noShot) errors.push('Standard: Schuss-Knopf passt nicht zum Schusswinkel');
+          }
           if (await p.evaluate(() => !!document.querySelector('#panel .deepb'))) { seen.deep = 1; await p.waitForTimeout(taken['01-aufbau'] ? 0 : 900); await snap('01-aufbau'); await over('aufbau'); }
           const fit = await p.evaluate(() => { const b = document.querySelector('#panel [data-a]').getBoundingClientRect(), d = document.documentElement; return [d.scrollHeight - innerHeight, Math.round(b.bottom), innerHeight]; });
           if ((fit[0] > 0 || fit[1] > fit[2]) && !taken.fit) { taken.fit = 1; errors.push('Vollbild: Die Seite scrollt oder der Schuss-Knopf liegt nicht im Bild: ' + JSON.stringify(fit)); }
@@ -69,7 +78,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
             // Im Aufbau (langer Pass, Vorstoss, kurze Pässe) meist der Vorstoss oder ein kurzer Pass, damit der Testspieler auch vors Tor kommt; dort öfter der Schuss
             // solange noch kein Dribbling-Parcours zu sehen war, wählt er das Dribbling, wo es geht
             const did = await p.evaluate(want => { const q = s => document.querySelector(s), deep = q('#panel .deepb'), l = [...document.querySelectorAll('#panel [data-a]:not(:disabled), #panel [data-to]')], u = Math.random(), pick = l[Math.floor(Math.random() * l.length)];
-              const dr = q('#panel [data-a="dribble"]:not(:disabled)'), b = want && dr ? dr : deep ? (u < 0.4 ? dr : u < 0.6 ? deep : [...document.querySelectorAll('#panel .passes [data-to]')][0] || pick) : u < 0.3 ? q('#panel [data-a="shoot"]') || pick : pick; b.click(); return deep ? (b === deep ? 'long' : b.dataset.a ? 'carry' : 'short') : q('#panel .actions2.one') ? 'nodrib' : 'zone'; }, !seen.drib && Math.random() < 0.7);
+              const dr = q('#panel [data-a="dribble"]:not(:disabled)'), b = want && dr ? dr : deep ? (u < 0.4 && dr ? dr : u < 0.6 ? deep : [...document.querySelectorAll('#panel .passes [data-to]')][0] || pick) : u < 0.3 ? q('#panel [data-a="shoot"]:not(:disabled)') || pick : pick; b.click(); return deep ? (b === deep ? 'long' : b.dataset.a ? 'carry' : 'short') : q('#panel .actions2.one') ? 'nodrib' : 'zone'; }, !seen.drib && Math.random() < 0.7);
             seen[did] = (seen[did] || 0) + 1; if (did !== 'zone') await snap('01-' + ({ long: 'aufbau-langer-pass', carry: 'aufbau-vorstoss', short: 'aufbau-kurzer-pass', nodrib: 'vor-dem-tor-ohne-dribbling' })[did]);
           }
           await p.waitForTimeout(40); continue;
@@ -125,6 +134,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
         }
         if (st === 'bar-att' || st === 'bar-def') {
           await p.waitForTimeout(320); await snap(st === 'bar-att' ? '02-balken-angriff' : '03-balken-abwehr'); await over(st); n++;
+          if (st === 'bar-def' && await p.evaluate(() => /^(Freischlag|Einschlag) /.test(document.getElementById('tag').textContent))) { seen.std = 1; seen.stdDef = 1; await snap('04-standard-gegner'); }
           const shotBar = st === 'bar-att' && await p.evaluate(() => document.getElementById('tbov').classList.contains('shot'));
           if (shotBar) await snap('06-schuss-balken');
           if (st === 'bar-att' && !shotBar && Math.random() < 0.08) { await p.click('#tb-back'); continue; }   // «Andere Aktion»
@@ -154,7 +164,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           if (sty0[4]) { seen.reb = 1; await snap('06-abpraller'); if (sty0[0] !== 0 || document_style(sty0) !== 'wrist') errors.push('Abpraller: Schussart ist nicht fest das Handgelenk: ' + JSON.stringify(sty0)); }
           else if (sty0[0] !== 3 || sty0[1] !== 1 || sty0[2] !== 1 || !sty0[3]) { if (!taken.sty0) { taken.sty0 = 1; errors.push('Schussarten beim Zielen stimmen nicht (Knöpfe, gewählt, Tipp, Bühne): ' + JSON.stringify(sty0)); } }
           else if (Math.random() < 0.6) {
-            const pick = await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-sty]')], b = l[Math.floor(Math.random() * 3)]; b.click(); return b.dataset.sty; });
+            const pick = await p.evaluate(() => { const l = [...document.querySelectorAll('#panel [data-sty]:not(:disabled)')], b = l[Math.floor(Math.random() * l.length)]; b.click(); return b.dataset.sty; });      // beim Standard direkt ist der Zugschuss gesperrt
             await p.waitForTimeout(run.gl ? 450 : 120);
             const got = await p.evaluate(() => { const on = document.querySelectorAll('#panel .sty.on'); return [on.length === 1 && on[0].dataset.sty, document.getElementById('stage').dataset.style, document.getElementById('hist').textContent.slice(0, 40)]; });
             if (got[0] !== pick || got[1] !== pick) errors.push('Schussart nicht umgestellt: gewählt ' + pick + ', gezeigt ' + JSON.stringify(got));
@@ -222,7 +232,7 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
       }
     }
     // Den Auswurf gibt es nur, wenn der Goalie festhält: In der langsam gerechneten 3D-Halle reagiert der Testspieler dafür zu spät
-    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp', 'duel', 'loose'].concat(run.gl ? ['3d'] : ['throw']).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
+    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp', 'duel', 'loose'].concat(run.gl ? ['3d'] : ['throw', 'std']).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
     if (run.reduce && seen.live3) errors.push('bei reduzierter Bewegung lief das Match in 3D'); if ((seen.missTap || 0) > 2 && !seen.tap3) errors.push('Tippen auf eine Figur wählt den Pass nicht: ' + seen.missTap + ' Versuche'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
     console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;

@@ -158,7 +158,7 @@ const shortMate = s => s.teams.you.cards.filter(c => c.id !== s.cur.carrier && c
 }
 
 // --- Sequenzen: Der Ball bleibt im Spiel ---
-const GO = { seqGo: [1, 1, 1, 1, 1, 1] }, CALM = { seqGo: [0, 0, 0] };
+const GO = { seqGo: [1, 1, 1, 1, 1, 1], outBlock: 0, outSave: 0 }, CALM = { seqGo: [0, 0, 0], outBlock: 0, outSave: 0 };      // ohne Ball im Aus (siehe Standards)
 const zoneAtt = (sc, s) => sc.type === 'att' && sc.kind === 'set' && !sc.deep;
 /* Stellt eine klare Lage vor dem Tor: der Ballführende im Slot mit freier Schussbahn, ein Mitspieler rechts vor dem Tor,
    ein Gegner links daneben (nicht in der Bahn), alle anderen weit weg. */
@@ -283,16 +283,163 @@ function shotAt(s, what, seed) {
   } else ok(false, 'kein Festhalten gestellt: ' + ev(c, 'shot').result);
 }
 
+// --- Standards: Einschlag und Freischlag ---
+/* Stellt einen Standard: side führt aus, kind 'free' oder 'hitin', at: wo der Ball liegt. deep: in der eigenen Hälfte. */
+function std(side, kind, at, cfg, deep, seed) { const r = E.makeRng(seed || 3), s = M.newMatch(setup(cfg), r); M.startChance(s, r, side, 'set', undefined, true, !!deep, { kind, at }); return s; }
+const roleOf = (pc, role) => Object.keys(pc.roles).find(id => pc.roles[id] === role), canHit = (ct, g) => { try { hitFor(ct, g); return true; } catch (e) { return false; } };
+{
+  // Freischlag vor dem Tor: Aufstellung, Mauer, Abstand
+  const s = std('you', 'free', [120, 190]), sc = s.cur, pc = sc.piece, p = pc.at, rng = E.makeRng(4);
+  ok(s.phase === 'decide' && pc.first && pc.kind === 'free' && M.dist(sc.pos[sc.carrier], p) < 1 && sc.max === CFG.pieceSteps, 'Freischlag: Der Ball liegt am Ort, einer steht am Ball, drei Aktionen bleiben');
+  const near = Math.min(...s.teams.home.cards.map(c => M.dist(sc.pos[c.id], p)));
+  ok(near >= CFG.pieceDist - 0.5, `alle Gegner halten drei Meter Abstand (der nächste steht ${Math.round(near)} weg)`);
+  ok(pc.wall.length === 2 && pc.wall.every(id => Math.abs(M.dist(sc.pos[id], p) - CFG.pieceDist) < 0.5 && !!M.card(s, 'home', id)), 'zwei Gegner bilden die Mauer, genau im Abstand');
+  ok(Object.keys(pc.roles).map(id => pc.roles[id]).sort().join(',') === 'lay,post,safe,screen', 'die vier Mitspieler stehen für Ablage, zweiten Pfosten, Sichtschutz und Absicherung');
+  const lay = roleOf(pc, 'lay'), post = roleOf(pc, 'post');
+  ok(s.teams.you.cards.filter(c => c.id !== sc.carrier).every(c => M.shotVal(c) <= M.shotVal(M.card(s, 'you', lay))), 'für die Ablage steht der beste Schütze bereit');
+  ok(pc.os === 1 && sc.pos[lay][0] > p[0] + 50 && sc.pos[post][0] > 200 && goalDist(sc.pos[post]) < 80, 'der Ball liegt links: Die Ablage steht zur Mitte hin, einer wartet am zweiten Pfosten rechts');
+  const pv = M.shotPreview(s, sc.carrier), w = pv.shade.filter(o => o.wall), lo = Math.min(...w.map(o => o.x - o.w)), hi = Math.max(...w.map(o => o.x + o.w));
+  ok(w.length === 2 && lo <= -1 && hi > 0 && hi < 0.6, `die Mauer deckt die nahe Ecke und lässt die ferne offen (ihr Schatten reicht von ${lo.toFixed(2)} bis ${hi.toFixed(2)})`);
+  ok(!pv.shade.some(o => !o.wall && o.x + o.w > hi && o.x - o.w < 1), 'kein anderer Gegner steht für den direkten Schuss in der offenen Ecke');
+  ok(pv.sh.keeper.x > 0.3 && pv.sh.kwall === 1, `der Goalie steht in der fernen Ecke (bei ${pv.sh.keeper.x.toFixed(2)})`);
+  ok(pv.sh.dead && pv.ch.drag === 0 && pv.style !== 'drag', 'direkt aufs Tor: Der Zugschuss steht nicht zur Wahl');
+  // Der Ball muss gespielt werden
+  ok(!M.canDrib(s, sc) && !M.act(s, { type: 'dribble', hit: 0.5 }, rng).ok, 'der Ausführende darf nicht selbst loslaufen');
+  const sh = M.act(s, { type: 'shoot' }, rng);
+  ok(sh.ok && sh.state.phase === 'aim' && sh.state.shot.dead && sh.state.shot.kwall === 1 && ev(sh, 'shootStart').std === 'free' && !sh.state.cur.piece.first, 'direkter Freischlag: Der Schuss läuft, die Mauer steht');
+  ok(!M.act(sh.state, { type: 'style', value: 'drag' }, rng).ok && M.act(sh.state, { type: 'style', value: 'slap' }, rng).ok, 'beim direkten Freischlag wird der Zugschuss abgelehnt, der Schlagschuss geht');
+  const x = passTo(s, lay, 'good'), pv2 = M.shotPreview(x.state, lay);
+  ok(x.ok && !x.state.cur.piece.first && x.state.cur.carrier === lay && Math.abs(M.oneTimer(x.state.cur, lay)) >= 0.25, 'Ablage: Der Ball ist gespielt, der Schütze kann direkt abziehen');
+  ok(!pv2.sh.dead && !pv2.sh.kwall && !pv2.shade.some(o => o.wall) && pv2.ch.drag !== undefined, 'nach der Ablage gilt die Mauer nicht mehr, alle Schussarten sind erlaubt');
+  // Nicht näher als pieceMin am Tor, in der Mitte links oder rechts offen
+  const close = std('you', 'free', [170, 90]), mid = [1, 2, 3, 4, 5, 6, 7, 8].map(k => std('you', 'free', [182, 170], null, false, k).cur.piece.os);
+  ok(goalDist(close.cur.piece.at) >= CFG.pieceMin - 1, `ein Freischlag liegt nie näher am Tor als ${CFG.pieceMin} (Foul bei 52, Ball bei ${Math.round(goalDist(close.cur.piece.at))})`);
+  ok(mid.indexOf(1) >= 0 && mid.indexOf(-1) >= 0, 'liegt der Ball in der Mitte, deckt die Mauer mal die linke, mal die rechte Ecke');
+}
+{
+  // Einschlag: Ecke und Seitenbande
+  const s = std('you', 'hitin', [30, 60]), sc = s.cur, pc = sc.piece, rng = E.makeRng(4);
+  ok(pc.at[0] === 36 && pc.at[1] === 64 && !pc.wall && pc.kind === 'hitin', 'Einschlag hinter der Torlinie: Der Ball liegt in der Ecke, ohne Mauer');
+  ok(Object.keys(pc.roles).map(id => pc.roles[id]).sort().join(',') === 'back,post,safe,slot', 'die Mitspieler stehen im Slot, am zweiten Pfosten, hinten an der Bande und zur Absicherung');
+  ok(Math.min(...s.teams.home.cards.map(c => M.dist(sc.pos[c.id], pc.at))) >= CFG.pieceDist - 0.5, 'auch beim Einschlag halten alle Gegner Abstand');
+  ok(M.noShot(s, sc) && !M.act(s, { type: 'shoot' }, rng).ok && !M.canDrib(s, sc), 'aus der Ecke gibt es keinen Schusswinkel: weder Schuss noch Dribbling');
+  const slot = roleOf(pc, 'slot'), x = passTo(s, slot, 'good');
+  ok(x.ok && x.state.cur.carrier === slot && goalDist(x.state.cur.pos[slot]) < 110 && !M.noShot(x.state, x.state.cur), 'der Pass in den Slot kommt an: Von dort wird geschossen');
+  const side = std('you', 'hitin', [330, 200]);
+  ok(side.cur.piece.at[0] === 330 && side.cur.piece.os === -1 && !M.noShot(side, side.cur) && M.act(side, { type: 'shoot' }, rng).ok, 'Einschlag an der Seitenbande: Der direkte Schuss ist erlaubt');
+  // In der eigenen Hälfte: Die Auslösung beginnt an der Bande, der erste Ball muss gespielt werden
+  const own = std('you', 'hitin', [30, 60], null, true), oc = own.cur, ox = oc.pos[oc.carrier][0];
+  ok(oc.deep && oc.deep.kind === 'build' && oc.piece.own && (ox < 50 || ox > 310) && oc.pos[oc.carrier][1] > 600, 'Einschlag hinten: Die Auslösung beginnt an der Bande');
+  ok(!M.canDrib(own, oc) && !M.act(own, { type: 'dribble', hit: 0.5 }, rng).ok, 'beim Einschlag hinten gibt es keinen Vorstoss');
+  const sm = shortMate(own), y = passTo(own, sm, 'good');
+  ok(y.ok && !y.state.cur.piece.first && (!y.state.cur.deep || M.canDrib(y.state, y.state.cur)), 'nach dem ersten Pass ist der Vorstoss wieder möglich');
+}
+{
+  // Standard des Gegners: deine Mauer
+  const s = std('home', 'free', [200, 170]), sc = s.cur, pc = sc.piece, rng = E.makeRng(4);
+  ok(sc.type === 'def' && sc.max === CFG.pieceStepsAi && pc.wall.every(id => !!M.card(s, 'you', id)) && !!sc.intent && sc.intent.kind !== 'dribble', 'Freischlag des Gegners: Deine Spieler stellen die Mauer, er passt oder schiesst');
+  let drib = 0, shots = 0, wrong = 0, drag = 0; const plans = {};
+  for (let k = 1; k <= 60; k++) {
+    const t = std('home', 'free', [90 + k * 3, 150 + (k % 5) * 15], null, false, k), it = t.cur.intent; if (it.kind === 'dribble') drib++;
+    plans[it.kind === 'pass' ? t.cur.piece.roles[it.to] : it.kind] = 1; t.cur.intent = { kind: 'shoot' };
+    const d = M.defInfo(t, t.cur), z = M.act(t, { type: 'defend', hit: hitFor(M.contest(t, {}), 'bad') }, E.makeRng(k));
+    if (!d.wall || t.cur.piece.wall.indexOf(d.D.id) === -1) wrong++;
+    if (z.state.phase === 'aim') { shots++; const zs = z.state.shot; if (zs.style === 'drag') drag++; if (zs.wall !== t.cur.piece.os || zs.land[0] * t.cur.piece.os < -0.6) wrong++; }
+  }
+  ok(drib === 0 && Object.keys(plans).length >= 3, `der Gegner dribbelt beim Standard nie und wechselt die Variante (${Object.keys(plans).join(', ')})`);
+  ok(shots > 40 && wrong === 0 && drag === 0, `direkter Freischlag des Gegners: Es blockt die Mauer, der Schuss kommt auf die ferne Seite, nie als Zugschuss (${shots} Schüsse)`);
+  sc.intent = { kind: 'shoot' };
+  const b = M.act(Object.assign(copy(s), { cfg: Object.assign({}, CFG, { outBlock: 0 }) }), { type: 'defend', hit: hitFor(M.contest(s, {}), 'good') }, rng), o = M.act(Object.assign(copy(s), { cfg: Object.assign({}, CFG, { outBlock: 1 }) }), { type: 'defend', hit: hitFor(M.contest(s, {}), 'good') }, rng);
+  ok(ev(b, 'defend').blocked && ev(b, 'defend').wall && ev(b, 'loose') && !ev(b, 'out'), 'im Feld: Die Mauer blockt den Freischlag, der Ball liegt frei');
+  const op = ev(o, 'piece');
+  ok(ev(o, 'out') && ev(o, 'out').how === 'block' && op && op.kind === 'hitin' && op.side === 'home' && op.why === 'out' && (op.at[0] === 30 || op.at[0] === 330) && o.state.cur.waves === 1 && o.state.cur.piece.first && o.state.cur.type === 'def' && !!o.state.cur.intent, 'fliegt der geblockte Ball über die Bande, gibt es Einschlag für den Angreifer');
+}
+{
+  // Foul im Zweikampf
+  const FOUL = { foulP: 99 }, FAIR = { foulP: 0 }, rng = E.makeRng(4);
+  const dribOk = g => (sc, s) => zoneAtt(sc, s) && M.canDrib(s, sc) && canHit(M.contest(s, { type: 'dribble' }), g);
+  const s = find(dribOk('bad'), 1, FOUL), X = s.cur.carrier, x = M.act(s, { type: 'dribble', hit: hitFor(M.contest(s, { type: 'dribble' }), 'bad') }, rng), f = ev(x, 'foul'), pe = ev(x, 'piece');
+  ok(f && f.side === 'home' && f.on === X && !f.deep && ev(x, 'dribble').foul && pe && pe.kind === 'free' && pe.why === 'foul' && pe.side === 'you', 'dein Dribbling bleibt hängen, der Gegner foult: Freischlag für dich');
+  ok(x.state.cur.type === 'att' && x.state.cur.carrier === X && x.state.cur.piece.first && x.state.cur.piece.wall && x.state.phase === 'decide' && !ev(x, 'turn') && !ev(x, 'counter') && x.state.stats.fouled === 1 && x.state.stats.pieces === 1, 'der Gefoulte führt aus, der Ball bleibt bei dir');
+  ok(goalDist(x.state.cur.piece.at) >= CFG.pieceMin - 1 && M.dist(x.state.cur.piece.at, f.at) < 80, 'der Freischlag liegt dort, wo das Foul war');
+  const n = find(dribOk('near'), 1, FOUL), xn = M.act(n, { type: 'dribble', hit: hitFor(M.contest(n, { type: 'dribble' }), 'near') }, rng);
+  ok(ev(xn, 'foul') && ev(xn, 'piece'), 'auch knapp daneben kann der Gegner foulen');
+  const g = find(dribOk('gross'), 1, FOUL), xg = M.act(g, { type: 'dribble', hit: hitFor(M.contest(g, { type: 'dribble' }), 'gross') }, rng);
+  ok(!ev(xg, 'foul') && ev(xg, 'counter'), 'grob daneben ist dein Fehler: kein Foul, Konter für den Gegner');
+  const fair = find(dribOk('bad'), 1, FAIR), xf = M.act(fair, { type: 'dribble', hit: hitFor(M.contest(fair, { type: 'dribble' }), 'bad') }, rng);
+  ok(!ev(xf, 'foul') && (gone(xf) || ev(xf, 'counter')), 'ohne Foul ist der Ball weg');
+  // Höchstens ein Freischlag pro Szene
+  const back = roleOf(x.state.cur.piece, 'safe'), p1 = passTo(x.state, back, 'good');
+  if (p1.ok && M.canDrib(p1.state, p1.state.cur) && canHit(M.contest(p1.state, { type: 'dribble' }), 'bad')) { const again = M.act(p1.state, { type: 'dribble', hit: hitFor(M.contest(p1.state, { type: 'dribble' }), 'bad') }, rng); ok(!ev(again, 'foul'), 'nach einem Freischlag gibt es in derselben Szene keinen zweiten'); }
+  else ok(false, 'zweites Dribbling nach dem Freischlag nicht gestellt');
+  // Foul im Aufbau: Das Team rückt auf
+  const bd = find((sc, s2) => isBuild('att')(sc) && !M.contest(s2, { type: 'dribble' }).free && canHit(M.contest(s2, { type: 'dribble' }), 'bad'), 1, FOUL), xb = carry(bd, 'bad'), fb = ev(xb, 'foul'), ab = ev(xb, 'arrive');
+  ok(fb && fb.deep && ab && ab.how === 'set' && ab.free && !xb.state.cur.deep && xb.state.cur.kind === 'set' && xb.state.cur.type === 'att' && xb.state.phase === 'decide' && !ev(xb, 'piece'), 'Foul im Aufbau: Freischlag hinten, dein Team rückt auf, weiter als Positionsangriff');
+  // Dein Foul
+  const defDrib = (sc, s2) => sc.type === 'def' && !sc.deep && sc.intent.kind === 'dribble' && canHit(M.contest(s2, {}), 'gross') && canHit(M.contest(s2, {}), 'bad');
+  const d = find(defDrib, 1, FAIR), hd = g2 => ({ type: 'defend', hit: hitFor(M.contest(d, {}), g2) }), A = d.cur.carrier;
+  const dg = M.act(d, hd('gross'), rng), dfo = ev(dg, 'foul'), dp = ev(dg, 'piece');
+  ok(dfo && dfo.side === 'you' && dfo.on === A && dp && dp.side === 'home' && dp.kind === 'free' && dg.state.cur.type === 'def' && dg.state.cur.carrier === A && !!dg.state.cur.intent && dg.state.cur.piece.wall.every(id => !!M.card(dg.state, 'you', id)) && dg.state.stats.fouls === 1, 'dein Zweikampf grob daneben: Foul, Freischlag für den Gegner, du stellst die Mauer');
+  ok(!ev(M.act(d, hd('bad'), rng), 'foul') && !ev(M.act(d, hd('good'), rng), 'foul'), 'daneben ist bei einem fairen Verteidiger kein Foul, im Feld sowieso nicht');
+  const dirty = find(defDrib, 1, FOUL), db = M.act(dirty, { type: 'defend', hit: hitFor(M.contest(dirty, {}), 'bad') }, rng);
+  ok(ev(db, 'foul') && ev(db, 'foul').side === 'you', 'daneben kann ein Foul sein: Das hängt an der Fairness deines Verteidigers');
+  const c = dirty.teams.you.cards[0], lo = M.foulP(CFG, Object.assign({}, c, { fai: 95, en: 100 })), hi = M.foulP(CFG, Object.assign({}, c, { fai: 62, en: 100 })), tired = M.foulP(CFG, Object.assign({}, c, { fai: 62, en: 20 }));
+  ok(lo < hi * 0.5 && tired > hi * 1.2 && hi < 0.6, `wer unfair spielt oder müde ist, foult öfter: ${pc(lo)} bei Fairness 95, ${pc(hi)} bei 62, müde ${pc(tired)}`);
+  // Im Aufbau des Gegners kein Foul: Der Vorteil läuft
+  const dd = find((sc, s2) => isBuild('def')(sc) && sc.intent.kind === 'dribble' && canHit(M.contest(s2, {}), 'gross'), 1, FOUL), xd = M.act(dd, { type: 'defend', hit: hitFor(M.contest(dd, {}), 'gross') }, rng);
+  ok(!ev(xd, 'foul') && !ev(xd, 'piece'), 'im Aufbau des Gegners pfeift niemand: Wer dort zu spät kommt, ist überlaufen');
+}
+{
+  // Ball im Aus nach dem Schuss
+  const OUT = { seqGo: [1, 1, 1, 1, 1, 1], outSave: 1, outBlock: 1 };
+  let x = null; for (let seed = 1; seed < 300 && !x; seed++) { try { const c = clearLane(find(zoneAtt, seed, OUT)), y = shotAt(c, 'save', seed); if (ev(y, 'out')) x = y; } catch (e) { /* nächste Lage */ } }
+  const o = x && ev(x, 'out'), pe = x && ev(x, 'piece');
+  ok(!!x && o.how === 'save' && o.side === 'you' && pe.kind === 'hitin' && pe.why === 'corner' && pe.at[1] < 78 && x.state.cur.type === 'att' && M.noShot(x.state, x.state.cur) && x.state.cur.waves === 1, 'der Goalie lenkt den Schuss ins Aus: Einschlag für dich in der Ecke');
+  // Höchstens waveMax solche Fortsetzungen pro Szene
+  const s2 = copy(x.state); s2.cur.piece.first = false; const c2 = clearLane(s2); c2.cur.waves = CFG.waveMax; const y2 = shotAt(c2, 'save', 5);
+  ok(!ev(y2, 'out') && (ev(y2, 'loose') || ev(y2, 'rebound')), 'nach zwei Fortsetzungen fliegt kein Ball mehr ins Aus');
+  // Schuss über das Tor: über die Bande, Einschlag hinten
+  const s = clearLane(find(zoneAtt, 1, OUT)), sh = M.act(s, { type: 'shoot' }, E.makeRng(3)), hi = M.act(sh.state, { type: 'aim', target: [0, 1.18], hit: 0.5, t: 0 }, E.makeRng(3)), t = ev(hi, 'turn');
+  ok(ev(hi, 'shot').miss === 'high' && t && t.how === 'out' && t.side === 'home' && hi.state.cur.type === 'def' && hi.state.cur.deep && hi.state.cur.piece && hi.state.cur.piece.own && hi.state.cur.piece.kind === 'hitin' && hi.state.cur.intent.kind !== 'dribble', 'Schuss über das Tor: Der Ball ist im Aus, der Gegner beginnt hinten mit dem Einschlag');
+  const cs = clearLane(find(zoneAtt, 1, CALM)), csh = M.act(cs, { type: 'shoot' }, E.makeRng(3)), ch = M.act(csh.state, { type: 'aim', target: [0, 1.18], hit: 0.5, t: 0 }, E.makeRng(3)), ce = ev(ch, 'end');
+  ok(ce && ce.calm && ce.out && ch.state.phase === 'done', 'kommt das Spiel dabei zur Ruhe, endet die Sequenz mit dem Ball im Aus');
+}
+{
+  // Nach dem Zeitsprung: Ein Positionsangriff beginnt mit einem Standard vor dem Tor
+  const n = { free: 0, hitin: 0, rush: 0, corner: 0 }; let bad = 0;
+  for (let seed = 1; seed <= 400; seed++) {
+    const r = E.makeRng(seed), s = M.newMatch(setup(CALM), r); let g = M.act(s, { type: 'duel', rt: 200 }, r).state, guard = 0;
+    while (g.seq.n < 2 && g.phase !== 'end' && ++guard < 60) {
+      if (g.phase === 'done') g = M.act(g, { type: 'next' }, r).state;
+      else if (g.phase === 'duel') g = M.act(g, { type: 'duel', rt: 200 }, r).state;
+      else if (g.phase === 'throw') g = M.act(g, { type: 'throw', quick: false }, r).state;
+      else if (g.phase === 'aim') g = M.act(g, g.shot.side === 'you' ? { type: 'aim', target: [1.18, 0.5], hit: 0.5, t: 0 } : { type: 'aim', zone: g.shot.zone, rt: 100 }, r).state;
+      else if (g.cur.type === 'def') g = M.act(g, { type: 'defend', hit: M.contest(g, {}).pos }, r).state;
+      else if (g.cur.deep) { const to = shortMate(g); g = M.act(g, { type: 'pass', to, hit: M.contest(g, { type: 'pass', to }).pos }, r).state; }
+      else g = M.act(g, M.noShot(g, g.cur) ? { type: 'pass', to: g.teams.you.cards.find(c => c.id !== g.cur.carrier).id, hit: 0.5 } : { type: 'shoot' }, r).state;
+    }
+    if (g.seq.n !== 2 || g.seq.scenes !== 1 || g.phase === 'duel') continue;
+    const sc = g.cur;
+    if (sc.kind === 'set' && !sc.play) { if (!sc.piece || sc.piece.own || sc.deep || !sc.piece.first) bad++; else { n[sc.piece.kind]++; if (sc.piece.kind === 'hitin' && sc.piece.at[1] < 78) n.corner++; } } else n.rush++;
+  }
+  const all = n.free + n.hitin;
+  ok(bad === 0 && all > 100, `nach dem Zeitsprung beginnt jeder Positionsangriff mit einem Standard vor dem Tor (${all} Fälle)`);
+  ok(n.hitin > n.free && n.free > all * 0.25 && n.corner > 5 && n.rush > 40, `meist ein Einschlag (${n.hitin}, davon ${n.corner} in der Ecke), sonst ein Freischlag (${n.free}); Konter beginnen wie bisher (${n.rush})`);
+}
+
 // --- Ganze Matches: jede Wahl im Aufbau, alle Wege kommen vor ---
 function gauss(rn) { let u = 0; for (let i = 0; i < 6; i++) u += rn(); return (u - 3) / Math.sqrt(0.5); }
 {
-  const seen = {}, N = 80; let err = null, goals = { you: 0, home: 0 }, deepActs = 0, acts = 0, seqs = 0, pers = 0, inputs = 0, clk = 0;
+  const seen = {}, N = 120; let err = null, goals = { you: 0, home: 0 }, deepActs = 0, acts = 0, seqs = 0, pers = 0, inputs = 0, clk = 0, pieces = 0;
   try {
     for (let i = 1; i <= N; i++) {
       const rng = E.makeRng(i * 7 + 1), hr = E.makeRng(i * 11 + 3), pol = ['long', 'carry', 'short', 'mix'][i % 4]; let s = M.newMatch(setup(), rng), guard = 0; seqs++; clk = 0;
       const hit = c => Math.max(0, Math.min(1, c.pos + gauss(hr) * 80 / c.sweep));
       const act = a => { const before = JSON.stringify(s), x = M.act(s, a, rng); if (!x.ok) throw new Error('abgelehnt: ' + JSON.stringify(a) + ' in Phase ' + s.phase); if (JSON.stringify(s) !== before) throw new Error('act hat den alten Zustand verändert'); s = x.state; acts++; x.events.forEach(e => { if (e.t === 'arrive') seen[e.side + ':' + e.from + '>' + e.how] = 1; if (e.t === 'counter') seen['Konter ' + e.side + (e.near ? ' nah' : '')] = 1;
           if (e.t === 'turn') seen['Ball ' + e.side + ' ' + e.how + (e.near ? ' nah' : '')] = 1; if (e.t === 'wave') seen['Welle ' + e.side] = 1; if (e.t === 'duel') seen['Duell ' + e.kind + ' ' + e.won] = 1; if (e.t === 'loose' && e.auto) seen['frei ohne Duell'] = 1; if (e.t === 'throw') seen['Auswurf ' + e.side] = 1; if (e.t === 'end' && e.calm) seen.Ruhe = 1; if (e.t === 'defend' && e.blocked) seen.Block = 1;
+          if (e.t === 'foul') seen['Foul ' + e.side + (e.deep ? ' hinten' : '')] = 1; if (e.t === 'out') seen['Aus ' + e.side + ' ' + e.how] = 1; if (e.t === 'piece') { seen['Standard ' + e.side + ' ' + e.kind + ' ' + e.why] = 1; pieces++; }
+          if (e.t === 'seq' && e.n > 1 && x.state.cur && x.state.cur.piece) { seen['Neustart ' + (x.state.cur.type === 'att' ? 'you' : 'home') + ' ' + x.state.cur.piece.kind] = 1; pieces++; if (x.state.cur.piece.own) throw new Error('Neustart mit einem Standard in der eigenen Hälfte'); }
+          if (e.t === 'seq' && e.n > 1 && x.state.cur && x.state.cur.kind === 'set' && !x.state.cur.play && !x.state.cur.piece) throw new Error('Positionsangriff nach dem Zeitsprung ohne Standard');
           if (e.t === 'seq') { seqs++; if (e.clock < clk - 1e-9) throw new Error('die Uhr läuft rückwärts'); } if (e.t === 'period') pers++; });
         if (s.clock < clk - 1e-9 && s.phase !== 'end') throw new Error('die Uhr läuft rückwärts'); clk = s.clock; if (s.clock > (s.period + 1) * CFG.periodMin + 1e-9) throw new Error('die Uhr läuft über das Drittel hinaus');
         if (a.type !== 'next') inputs++; if (s.cur && !s.cur.done && Object.keys(s.cur.pos).some(id => { const p = s.cur.pos[id]; return !(p[0] >= 0 && p[0] <= 360 && p[1] >= 40 && p[1] <= 760); })) throw new Error('Spieler steht neben dem Feld'); };
@@ -306,12 +453,12 @@ function gauss(rn) { let u = 0; for (let i = 0; i < 6; i++) u += rn(); return (u
           const dp = s.cur.deep, cd = M.contest(s, { type: 'dribble' }), p = pol === 'mix' ? ['long', 'carry', 'short'][Math.floor(hr() * 3)] : pol; deepActs++;
           if (dp.n >= dp.max) throw new Error('Aufbau läuft über sein Ende hinaus');
           if (p === 'long') act({ type: 'pass', to: dp.run, hit: hit(M.contest(s, { type: 'pass', to: dp.run })) });
-          else if (p === 'carry') act(cd.free ? { type: 'dribble' } : { type: 'dribble', hit: hit(cd) });
+          else if (p === 'carry' && M.canDrib(s, s.cur)) act(cd.free ? { type: 'dribble' } : { type: 'dribble', hit: hit(cd) });      // beim Einschlag hinten muss der Ball gespielt werden
           else { const to = shortMate(s); act({ type: 'pass', to, hit: hit(M.contest(s, { type: 'pass', to })) }); }
         } else if (s.phase === 'decide') {
           const sc = s.cur, last = sc.step >= sc.max - 1, u = hr();
           if (!last && u < 0.3 && M.canDrib(s, sc)) act({ type: 'dribble', hit: hit(M.contest(s, { type: 'dribble' })) });
-          else if (!last && u < 0.6) { const l = s.teams.you.cards.filter(c => c.id !== sc.carrier), to = l[Math.floor(hr() * l.length)].id; act({ type: 'pass', to, hit: hit(M.contest(s, { type: 'pass', to })) }); }
+          else if (!last && (u < 0.6 || M.noShot(s, sc))) { const l = s.teams.you.cards.filter(c => c.id !== sc.carrier), to = l[Math.floor(hr() * l.length)].id; act({ type: 'pass', to, hit: hit(M.contest(s, { type: 'pass', to })) }); }      // Einschlag in der Ecke: kein direkter Schuss
           else act({ type: 'shoot' });
         } else if (s.shot.side === 'you') { const b = M.shotBar(s); act({ type: 'aim', target: [hr() < 0.5 ? -0.7 : 0.7, 0.8], hit: hit(b), t: 300 + hr() * b.sweep }); }
         else act({ type: 'aim', zone: hr() < 0.1 ? 'tm' : s.shot.zone, rt: (s.shot.feint ? s.shot.feint.ms : 0) + Math.max(150, 330 + gauss(hr) * 70) });
@@ -324,6 +471,10 @@ function gauss(rn) { let u = 0; for (let i = 0; i < 6; i++) u += rn(); return (u
   ok(!miss.length, 'alle Wege aus dem Aufbau kommen vor' + (miss.length ? ', es fehlen: ' + miss.join(', ') : ''));
   const want2 = ['Ball home won', 'Ball home behind', 'Ball home loose', 'Ball you loose', 'Ball you press', 'Ball home won nah', 'Welle you', 'Welle home', 'Duell faceoff you', 'Duell faceoff home', 'Duell loose you', 'Duell loose home', 'frei ohne Duell', 'Auswurf you', 'Auswurf home', 'Ruhe', 'Block'], miss2 = want2.filter(k => !seen[k]);
   ok(!miss2.length, 'alle Übergänge kommen vor: Ballwechsel, zweite Welle, Bully, freier Ball, Auswurf, Block, Ruhe' + (miss2.length ? ', es fehlen: ' + miss2.join(', ') : ''));
+  const want3 = ['Foul you', 'Foul home', 'Foul home hinten', 'Standard you free foul', 'Standard home free foul', 'Standard you hitin out', 'Standard home hitin out', 'Standard you hitin corner', 'Standard home hitin corner', 'Aus you block', 'Aus home block', 'Aus you save', 'Aus home save', 'Ball home out', 'Neustart you free', 'Neustart you hitin', 'Neustart home free', 'Neustart home hitin'], miss3 = want3.filter(k => !seen[k]);
+  ok(!miss3.length, 'alle Standards kommen vor: Foul und Freischlag, Ball im Aus und Einschlag, Ecke, Neustart nach dem Zeitsprung' + (miss3.length ? ', es fehlen: ' + miss3.join(', ') : ''));
+  ok(!seen['Foul you hinten'], 'kein Foul von dir im Aufbau des Gegners: Dort läuft der Vorteil');
+  ok(pieces / N > 1 && pieces / N < 4.5, `Standards vor einem Tor pro Match: ${(pieces / N).toFixed(2)}`);
   ok(pers === 3 * N && seqs >= 3 * CFG.seqPer * N && seqs <= 3 * CFG.seqPer * N + N, `jedes Match hat drei Drittel zu ${CFG.seqPer} Sequenzen (${(seqs / N).toFixed(2)} pro Match)`);
   ok(inputs / N > 35 && inputs / N < 62, `Eingaben pro Match: ${(inputs / N).toFixed(1)}`);
   ok(goals.you / N > 0.6 && goals.you / N < 3.5 && goals.home / N > 0.4 && goals.home / N < 3, `Tore pro Match bleiben im Rahmen: du ${(goals.you / N).toFixed(2)}, Gegner ${(goals.home / N).toFixed(2)}`);

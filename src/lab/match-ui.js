@@ -34,7 +34,11 @@
     wrist: { tag: 'schnell, genau', does: 'Schnell und genau: breites Feld, auch mit einem Gegner am Mann. Aus der Distanz zu schwach.', per: 'aus dem Handgelenk' },
     drag: { tag: 'am Stock vorbei', does: 'Der Ball wird am Stock des Gegners vorbeigezogen: kaum zu blocken, und der Goalie steht noch auf der alten Seite. Danach schnell abziehen, er rutscht zurück.', per: 'per Zugschuss' }
   };
-  const WHY = { direct: 'Direktschuss: Der Goalie steht noch falsch', tight: 'ein Gegner ist am Mann', lane: 'ein Gegner steht in der Schussbahn, der Zug öffnet ein Fenster', far: 'aus der Distanz hilft nur Härte', power: 'der harte Schuss kommt am ehesten durch', near: 'aus der Nähe zählt Genauigkeit', acc: 'hier zählt Genauigkeit', goalie: 'der Zug lässt den Goalie falsch stehen', fav: 'sein Lieblingsschuss', shut: 'die Schussbahn ist zu, besser passen oder dribbeln', empty: 'das Tor ist leer', rebound: 'Abpraller' };
+  const WHY = { direct: 'Direktschuss: Der Goalie steht noch falsch', tight: 'ein Gegner ist am Mann', lane: 'ein Gegner steht in der Schussbahn, der Zug öffnet ein Fenster', far: 'aus der Distanz hilft nur Härte', power: 'der harte Schuss kommt am ehesten durch', near: 'aus der Nähe zählt Genauigkeit', acc: 'hier zählt Genauigkeit', goalie: 'der Zug lässt den Goalie falsch stehen', fav: 'sein Lieblingsschuss', shut: 'die Schussbahn ist zu, besser passen oder dribbeln', empty: 'das Tor ist leer', rebound: 'Abpraller', wall: 'an der Mauer vorbei bleibt nur die ferne Ecke' };
+  // Standards: wofür ein Mitspieler steht (siehe layPiece) und was der Pass zu ihm bringt
+  const VARIANT = { lay: ['Ablage', 'Direktschuss'], screen: ['Vor den Goalie', 'aus nächster Nähe'], post: ['2. Pfosten', 'Direktschuss'], safe: ['Zurück', 'neu aufbauen'], slot: ['In den Slot', 'Direktschuss'], back: ['Zurück', 'sicher, neu ansetzen'] }, VORDER = ['lay', 'slot', 'post', 'screen', 'back', 'safe'];
+  const variant = (pc, id) => { const r = pc.roles[id]; return r === 'safe' && pc.kind === 'hitin' ? ['Seitenwechsel', 'neu aufbauen'] : VARIANT[r] || null; };
+  const stdName = pc => (pc.kind === 'free' ? 'Freischlag' : 'Einschlag');
   const ZNAME = { tl: 'oben links', tm: 'oben Mitte', tr: 'oben rechts', bl: 'unten links', bm: 'unten Mitte', br: 'unten rechts' };
   const ROLE = { LD: 'Vert. links', RD: 'Vert. rechts', LW: 'Flügel links', C: 'Center', RW: 'Flügel rechts' };
 
@@ -290,11 +294,19 @@
     moves.push({ id: 'ball', to: (p => [p[0] + 10, p[1] - 12])(ep(sc, sc.carrier)) });
     return tween(moves, far || carrier !== sc.carrier ? ms : 0).then(() => setCarrier(sc.carrier));
   }
-  function clearLanes() { $('lanes').innerHTML = ''; if (L3) S3.lanes([]); }
+  function clearLanes() { $('lanes').innerHTML = ''; if (L3) { S3.lanes([]); S3.spot(null); } }
+  // Standard: Kreis um den Ball, so weit müssen die Gegner wegstehen (drei Meter)
+  function drawSpot() {
+    const sc = G.cur; if (!sc || !M.std1(sc)) return;
+    const p = pos[sc.carrier], r = G.cfg.pieceDist;
+    svg('circle', { cx: p[0], cy: p[1], r, fill: 'rgba(255,255,255,.06)', stroke: '#ffffff', 'stroke-width': 1.6, 'stroke-dasharray': '5 7', opacity: 0.6 }, $('lanes'));
+    if (L3) S3.spot(p, r);
+  }
   function drawLanes() {
     const g = $('lanes'), l3 = []; clearLanes();
     const sc = G.cur; if (!sc || phase !== 'decide') return;
     const as = M.atkSide(sc), last = sc.step >= sc.max - 1;
+    drawSpot();
     if (last) return;
     G.teams[as].cards.forEach(c => {
       if (c.id === sc.carrier) return;
@@ -451,28 +463,32 @@
     phase = 'decide';
     if (sc.deep) { renderDeep(); return; }
     const last = sc.step >= sc.max - 1, xt = TR(X.id), canD = M.canDrib(G, sc), alone = sc.kind === 'solo';
-    setTag(sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
+    const pc = M.std1(sc) ? sc.piece : null, noSh = M.noShot(G, sc);      // Standard: Der Ball ist noch nicht gespielt
+    setTag(pc ? stdName(pc) : sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
     const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), di = M.dribInfo(G, sc, X.id), co = last || !canD ? null : M.dribCourse(G), mk = card('home', cd.by), bl = card('home', pv.by), direct = Math.abs(pv.oneT) >= 0.25;
     const anyFree = !last && G.teams.you.cards.some(c => c.id !== X.id && M.isFree(G, sc, c.id));
     // Verkehr vor dem Tor: Gegner, deren Schatten im Tor liegt; zu ist die Schussbahn, wenn keine Schussart eine Chance hat
     const lane = (pv.shade || []).filter(o => o.x + o.w > -1 && o.x - o.w < 1), shut = pv.why === 'shut';
-    say((alone ? `${X.last} ist allein durch!` : `${X.last} hat den Ball.`) + (last ? ' Letzte Aktion: Abschluss.' : alone ? ' Abschliessen oder quer legen.' : shut && lane.length ? (canD ? ' Die Schussbahn ist zu: passen oder dribbeln.' : ' Die Schussbahn ist zu: quer legen.') : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : canD ? ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.' : ' Direkt vor dem Tor: schiessen oder quer legen.'));
+    if (pc) say(pc.wall ? `Freischlag: ${X.last} steht am Ball. Die Mauer deckt die nahe Ecke: direkt schiessen oder ablegen?` : noSh ? `Einschlag in der Ecke: ${X.last} steht am Ball. Von hier gibt es keinen Schusswinkel: in den Slot, an den zweiten Pfosten oder zurück?` : `Einschlag: ${X.last} steht am Ball. In den Slot, an den zweiten Pfosten oder zurück?`);
+    else say((alone ? `${X.last} ist allein durch!` : `${X.last} hat den Ball.`) + (last ? ' Letzte Aktion: Abschluss.' : alone ? ' Abschliessen oder quer legen.' : shut && lane.length ? (canD ? ' Die Schussbahn ist zu: passen oder dribbeln.' : ' Die Schussbahn ist zu: quer legen.') : direct ? ' Direktschuss möglich: Der Goalie steht noch falsch.' : anyFree ? ' Ein Mitspieler ist frei!' : G.teams.you.cards.some(c => c.id !== X.id && M.passInfo(G, sc, X.id, c.id).risk < 0.3 && M.shotInfo(G, sc, c.id).q >= 0.3) ? ' Ein Passweg ist offen.' : canD ? ' Die Passwege nach vorne sind zu: Ein Dribbling zieht einen Verteidiger an.' : ' Direkt vor dem Tor: schiessen oder quer legen.'));
     let h = `<div class="actions2${canD ? '' : ' one'}">
-<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"><b>${ic('shoot')}${direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>${shut ? `<em class="bad">${lane.length ? 'Schussbahn zu' : 'kaum eine Chance'}</em> · ` : lane.length ? `<em class="bad">${lane.length} im Weg</em> · ` : ''}<em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.scr && pv.scr.length ? ' · <em>Sichtschutz</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''} · Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
+<button type="button" class="act${M.trait(X) === 'kanone' || direct ? ' fit' : ''}${direct ? ' direct' : ''}" data-a="shoot"${noSh ? ' disabled' : ''}><b>${ic('shoot')}${pc ? 'Direkt aufs Tor' : direct ? 'Direktschuss' : 'Schuss'}</b><span class="pct">${Math.round(pv.w * 100)}</span><span class="mini" aria-hidden="true"><u style="left:${((0.5 - pv.w / 2) * 100).toFixed(1)}%;width:${(pv.w * 100).toFixed(1)}%"></u></span><small>${noSh ? '<em class="bad">kein Schusswinkel</em> · ' : shut ? `<em class="bad">${pc && pc.wall ? 'die Mauer deckt alles' : lane.length ? 'Schussbahn zu' : 'kaum eine Chance'}</em> · ` : pc && pc.wall ? '<em class="bad">Mauer: nur die ferne Ecke</em> · ' : lane.length ? `<em class="bad">${lane.length} im Weg</em> · ` : ''}<em>${M.STYLE[pv.style].name}</em>${direct ? ' · <em>Goalie noch auf der anderen Seite</em>' : ''}${pv.scr && pv.scr.length ? ' · <em>Sichtschutz</em>' : ''}${pv.pressed ? ` · Block ${esc(bl.last)} ${r0(M.stanceVal(bl, 'block'))}` : ''} · Lage ${lage(pv.q)} · ${r0(M.shotVal(X))} gegen Goalie ${G.teams.home.goalie.val} · Strich ${tempoTxt(pv.sweep)}${trChip(X.id, 'kanone')}${pv.pressed ? trChip(bl.id, 'wand', true) : ''}</small></button>
 ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"${last ? ' disabled' : ''}><b>${ic('drib')}Dribbling</b><small>${co ? `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · ` : ''}${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${di.again ? ` · <em>${di.again + 1}. Dribbling: Feld kleiner</em>` : ' · zieht Hilfe an, ein Mitspieler wird frei'}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}</small></button>` : ''}</div>`;
     if (!last) {
       // Pässe: freie Mitspieler zuerst, dann nach Lage. Dazu, was der Pass bringt: Direktschuss nach Querpass oder sicherer Rückpass.
       const opts = G.teams.you.cards.filter(c => c.id !== X.id).map(c => { const cp = M.contest(G, { type: 'pass', to: c.id }), v = M.shotPreview(G, c.id, X.id); return { c, cp, v, free: M.isFree(G, sc, c.id) }; })
-        .sort((a, b) => (b.free - a.free) || (b.v.q - a.v.q));
-      h += '<p class="passes-head">Pass, tippe auch direkt auf dem Feld</p><div class="passes">' + opts.map(o => {
-        const c = o.c, by = card('home', o.cp.by), cross = Math.abs(o.v.oneT) >= 0.4 && o.v.q >= 0.45;
+        .sort((a, b) => (pc ? VORDER.indexOf(pc.roles[a.c.id]) - VORDER.indexOf(pc.roles[b.c.id]) : (b.free - a.free) || (b.v.q - a.v.q)));
+      // Standard: die Varianten als Raster, jede mit ihrem Namen (Ablage, zweiter Pfosten ...) und dem Spieler, der dort steht
+      h += `<p class="passes-head">${pc ? 'Variante wählen, tippe auch direkt auf dem Feld' : 'Pass, tippe auch direkt auf dem Feld'}</p><div class="passes${pc ? ' std' : ''}">` + opts.map(o => {
+        const c = o.c, by = card('home', o.cp.by), cross = Math.abs(o.v.oneT) >= 0.4 && o.v.q >= 0.45, vr = pc ? variant(pc, c.id) : null;
         els[c.id].classList.add('pick');
+        if (vr) return `<button type="button" class="pass std${o.free ? ' free' : ''}" data-to="${c.id}" data-var="${pc.roles[c.id]}"><span><b class="nm">${vr[0]}${o.free ? '<i class="tr">frei</i>' : ''}</b><small>${esc(c.last)} · ${vr[1]}</small>${mini(o.cp)}</span><em class="pct">${fieldPct(o.cp)}</em></button>`;
         const what = o.free ? '<i class="tr">frei</i>' : '', gain = cross ? 'Direktschuss, Goalie muss rüber' : o.v.q >= 0.45 ? 'Abschluss aus dem Slot' : o.v.q < 0.25 ? 'sicherer Rückpass' : 'Anspielstation';
         return `<button type="button" class="pass${o.free ? ' free' : ''}" data-to="${c.id}"><span><b class="nm">${esc(c.last)}${enPill(c)}${what}</b><small>${gain} · Lage ${lage(o.v.q)} · ${r0(M.passVal(X))} gegen ${esc(by.last)} ${r0(M.stanceVal(by, 'pass'))}</small>${mini(o.cp)}</span><em class="pct">${fieldPct(o.cp)}</em></button>`;
       }).join('') + '</div>';
     }
     panel.innerHTML = h;
-    const fxNote = sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '';
+    const fxNote = (pc ? `<b class="tr">${stdName(pc)}</b>: ${esc(HOME)} hält drei Meter Abstand. Der Ball muss gespielt werden: kein Dribbling, kein Zugschuss. ` : '') + (sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '');
     $('hist').innerHTML = `<em>${fxNote}Energie ${esc(X.last)} ${enPill(X)} ${Math.round(X.en)} %${X.en <= 60 ? ': müde, sein Strich läuft schneller' : ''}. ${xt && xt.off ? `<b class="tr">${xt.name}</b>: breiteres Feld beim ${xt.what}.` : 'Die Zahl ist die Breite des grünen Felds in Prozent.'}</em>`;
     drawLanes();
   }
@@ -482,12 +498,13 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   function renderDeep() {
     const sc = G.cur, dp = sc.deep, turn = dp.kind === 'turn', X = card('you', sc.carrier), R = card('you', dp.run), panel = $('panel'), kt = KINDTXT[sc.kind];
     const cd = M.contest(G, { type: 'dribble' }), co = cd.free ? null : M.dribCourse(G), mk = card('home', cd.by), left = dp.max - dp.n, own = pos[X.id][1] > 400;
-    setTag(turn ? M.KINDS[sc.kind] : 'Auslösung', 'you');
-    say(turn ? `${X.last} hat den Ball gewonnen. ${R.last} läuft in die Tiefe!` : dp.n ? `${X.last} hat den Ball. ${left === 1 ? 'Jetzt in die Tiefe oder selbst, sonst steht die Abwehr.' : 'Lang, kurz oder selbst?'}` : `${X.last} baut hinten auf, ${HOME} stört früh. Lang, kurz oder selbst?`);
+    const pc = M.std1(sc) ? sc.piece : null;      // Einschlag oder Freischlag hinten: Der Ball muss gespielt werden
+    setTag(pc ? stdName(pc) : turn ? M.KINDS[sc.kind] : 'Auslösung', 'you');
+    say(pc ? `${stdName(pc)} hinten: ${X.last} steht am Ball, ${HOME} hält Abstand. Lang oder kurz?` : turn ? `${X.last} hat den Ball gewonnen. ${R.last} läuft in die Tiefe!` : dp.n ? `${X.last} hat den Ball. ${left === 1 ? 'Jetzt in die Tiefe oder selbst, sonst steht die Abwehr.' : 'Lang, kurz oder selbst?'}` : `${X.last} baut hinten auf, ${HOME} stört früh. Lang, kurz oder selbst?`);
     const lp = M.contest(G, { type: 'pass', to: R.id }), lby = card('home', lp.by);
     let h = `<div class="actions2">
 <button type="button" class="act deepb${M.trait(X) === 'passer' ? ' fit' : ''}" data-to="${R.id}"><b>${ic('long')}${turn ? 'Steilpass' : 'Langer Pass'}</b><span class="pct">${fieldPct(lp)}</span>${mini(lp)}<small><em>auf ${esc(R.last)}</em> · ${turn ? 'im Feld: allein durch' : 'im Feld: 2 gegen 1, perfekt: allein durch'} · ${r0(M.passVal(X))} gegen ${esc(lby.last)} ${r0(M.stanceVal(lby, 'pass'))}${trChip(X.id, 'passer')}${trChip(lby.id, 'anti', true)}</small></button>
-<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' : ''}" data-a="dribble"><b>${ic('drib')}Vorstoss</b>${cd.free ? '<span class="pct word">frei</span>' : ''}<small>${cd.free ? `<em>freie Bahn</em> · ${esc(X.last)} trägt den Ball selbst nach vorn${kt ? ', ' + kt[1] : ''}` : `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · vorbei: 3 gegen 2 · ${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}`}</small></button></div>`;
+<button type="button" class="act${M.trait(X) === 'dribbler' && !pc ? ' fit' : ''}" data-a="dribble"${pc ? ' disabled' : ''}><b>${ic('drib')}Vorstoss</b>${cd.free && !pc ? '<span class="pct word">frei</span>' : ''}<small>${pc ? `<em class="bad">nicht beim ${stdName(pc)}</em> · Der Ball muss gespielt werden` : cd.free ? `<em>freie Bahn</em> · ${esc(X.last)} trägt den Ball selbst nach vorn${kt ? ', ' + kt[1] : ''}` : `<em>Parcours ${dribTxt(co.p)}</em> · ${co.defs.length} Gegner · vorbei: 3 gegen 2 · ${r0(M.dribVal(X))} gegen ${esc(mk.last)} ${r0(M.stanceVal(mk, 'zwei'))}${trChip(X.id, 'dribbler')}${trChip(mk.id, 'kampf', true)}`}</small></button></div>`;
     const opts = G.teams.you.cards.filter(c => c.id !== X.id && c.id !== R.id).map(c => { const cp = M.contest(G, { type: 'pass', to: c.id }), ahead = pos[c.id][1] < pos[X.id][1] - 20; return { c, cp, ahead, pi: M.passInfo(G, sc, X.id, c.id) }; }).sort((a, b) => (b.ahead - a.ahead) || (b.cp.p - a.cp.p));
     h += `<p class="passes-head">${turn ? 'Kurzer Pass' : left <= 1 ? 'Kurzer Pass: danach steht die Abwehr' : 'Kurzer Pass: sicher'}</p><div class="passes">` + opts.map(o => {
       const c = o.c, by = card('home', o.cp.by), isD = c.role === 'LD' || c.role === 'RD';
@@ -498,7 +515,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     els[R.id].classList.add('pick');
     panel.innerHTML = h;
     const fxNote = sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '';
-    $('hist').innerHTML = `<em>${fxNote}${own ? '<b class="t-bad">Grober Fehler hinten:</b> Konter direkt vor deinem Tor. ' : ''}Von hier wird nicht geschossen: Bring den Ball nach vorn.${turn ? '' : ' Nach zwei Aktionen ohne Durchbruch steht die Abwehr.'} Die Zahl ist die Breite des grünen Felds in Prozent.</em>`;
+    $('hist').innerHTML = `<em>${pc ? `<b class="tr">${stdName(pc)}</b>: ${esc(HOME)} hält drei Meter Abstand. ` : ''}${fxNote}${own ? '<b class="t-bad">Grober Fehler hinten:</b> Konter direkt vor deinem Tor. ' : ''}Von hier wird nicht geschossen: Bring den Ball nach vorn.${turn ? '' : ' Nach zwei Aktionen ohne Durchbruch steht die Abwehr.'} Die Zahl ist die Breite des grünen Felds in Prozent.</em>`;
     drawLanes();
   }
   // Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Der User trifft das Timing.
@@ -509,12 +526,14 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   };
   function renderDefence() {
     const sc = G.cur, X = card('home', sc.carrier), d = M.defInfo(G, sc), T = d.to ? card('home', d.to) : null, it = sc.intent, long = !!sc.deep && !!it.long;
-    const tx = long ? [`${X.last} spielt den langen Ball auf ${T.last}`, `${d.D.last} geht dazwischen`, 'Antizipation', 'Vorlage'] : sc.deep && d.kind === 'dribble' ? [`${X.last} stösst mit dem Ball vor`, `${d.D.last} ${it.free ? 'setzt nach' : 'stellt ihn'}`, 'Zweikampf', 'Dribbling'] : DEFTXT[d.kind](X, d.D, T);
-    setTag('Abwehr', 'home');
+    const pc = M.std1(sc) ? sc.piece : null;
+    const tx = pc && d.wall ? [`${X.last} schiesst den Freischlag direkt`, `${d.D.last} steht in der Mauer`, 'Block', 'Schuss'] : pc && d.kind === 'pass' && !long ? [`${X.last} spielt den ${stdName(pc)} zu ${T.last}`, `${d.D.last} geht in den Passweg`, 'Antizipation', 'Vorlage'] : long ? [`${X.last} spielt den langen Ball auf ${T.last}`, `${d.D.last} geht dazwischen`, 'Antizipation', 'Vorlage'] : sc.deep && d.kind === 'dribble' ? [`${X.last} stösst mit dem Ball vor`, `${d.D.last} ${it.free ? 'setzt nach' : 'stellt ihn'}`, 'Zweikampf', 'Dribbling'] : DEFTXT[d.kind](X, d.D, T);
+    setTag(pc ? `${stdName(pc)} ${HOME}` : 'Abwehr', 'home');
     say(`${tx[0]}. ${tx[1]}: triff das Timing.`);
-    $('hist').innerHTML = long && !G.fx.you.empty ? '<em><b class="tr">Langer Pass</b>: Schon «Im Feld» fängt ihn ab. Kommt er an, ist der Gegner durch.</em>' : sc.deep && sc.gegen && !sc.pressing && !G.fx.you.empty ? `<em><b class="tr">Gegenpressing</b>: Deine Spieler stehen noch vorne. Schon «Im Feld» holt den Ball zurück, und dein Angriff geht weiter.</em>` : sc.deep && !sc.pressing && !G.fx.you.empty ? `<em>${sc.deep.kind === 'turn' ? `${esc(HOME)} schaltet um. ` : `${esc(HOME)} baut hinten auf. `}Im Feld: Gegner gestört. Genau in der Mitte: Ball gewonnen, weit vorne.</em>` : sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}${d.kind === 'shoot' ? 'Im Feld: Schuss geblockt, der Ball liegt frei.' : 'Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit.'} Genau in der Mitte: Ball gewonnen und Konter.</em>`;
+    $('hist').innerHTML = d.wall && !G.fx.you.empty && !sc.pressing ? '<em><b class="tr">Mauer</b>: Sie deckt die nahe Ecke, dein Feld ist breiter. Im Feld: geblockt. Genau in der Mitte: Ball gewonnen und Konter.</em>' : long && !G.fx.you.empty ? '<em><b class="tr">Langer Pass</b>: Schon «Im Feld» fängt ihn ab. Kommt er an, ist der Gegner durch.</em>' : sc.deep && sc.gegen && !sc.pressing && !G.fx.you.empty ? `<em><b class="tr">Gegenpressing</b>: Deine Spieler stehen noch vorne. Schon «Im Feld» holt den Ball zurück, und dein Angriff geht weiter.</em>` : sc.deep && !sc.pressing && !G.fx.you.empty ? `<em>${sc.deep.kind === 'turn' ? `${esc(HOME)} schaltet um. ` : `${esc(HOME)} baut hinten auf. `}Im Feld: Gegner gestört. Genau in der Mitte: Ball gewonnen, weit vorne.</em>` : sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}${d.kind === 'shoot' ? 'Im Feld: Schuss geblockt, der Ball liegt frei.' : 'Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit.'} Genau in der Mitte: Ball gewonnen und Konter.</em>`;
     const g = $('lanes'), a = pos[sc.carrier], b = d.kind === 'pass' ? pos[d.to] : d.kind === 'shoot' ? goalOf('home') : null; clearLanes();
     if (b) { svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: '#ff8a8a', 'stroke-width': 3, 'stroke-dasharray': '6 6', opacity: 0.85, 'stroke-linecap': 'round' }, g); if (L3) S3.lanes([{ a, b, col: '#ff8a8a', w: 3 }]); }
+    drawSpot();
     // Im Aufbau des Gegners spielt sich alles hinten im Bild ab: Der Balken liegt dann unten, sonst oben
     openBar({ type: 'defend' }, { title: `${tx[2]} ${esc(d.D.last)} ${r0(d.dv)}${d.trait ? `<i class="tr">${M.TRAITS[d.trait].name}</i>` : ''}`, sub: `gegen ${tx[3]} ${esc(X.last)} ${r0(d.atkV)}`, back: false, at: sc.deep ? 'bot' : null });
   }
@@ -760,7 +779,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
         else { stamp('Abgefangen', `${by.last} geht dazwischen.`, 'bad'); addTick(`Pass abgefangen von ${by.last}.`); if (e.by) setCarrier(e.by); }
         buzz(50); await hold(1000); hideStamp();
       } else if (e.t === 'shootStart') {
-        say(`${card(sideOf(e.x), e.x).last} zieht ab.`);
+        say(e.std ? `${card(sideOf(e.x), e.x).last} schiesst den ${e.std === 'free' ? 'Freischlag' : 'Einschlag'} direkt.` : `${card(sideOf(e.x), e.x).last} zieht ab.`);
       } else if (e.t === 'pass') {
         // Im Aufbau bleibt der Empfänger zuerst, wo er ist: Wie es weitergeht, zeigt das Ereignis danach (arrive) oder die neue Aufstellung
         const side = sideOf(e.from), to = e.ok && !e.deep && G.cur && G.cur.pos[e.to] ? ep(G.cur, e.to) : pos[e.to], T = card(side, e.to), far = Math.hypot(pos[e.to][0] - pos[e.from][0], pos[e.to][1] - pos[e.from][1]);
@@ -785,7 +804,12 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
         const side = sideOf(e.x), X = card(side, e.x), mk = card(sideOf(e.by), e.by);
         say(`${X.last} geht ins Dribbling gegen ${mk.last}.`);
         const d3 = { kind: 'dribble', atk: side, players: specPlayers(before.cur), x: e.x, by: e.by };
-        if (e.ok && e.grade !== 'near') {
+        if (e.foul) {
+          // Der Verteidiger kommt nur mit einem Foul an den Ball: Der Pfiff folgt (siehe 'foul')
+          const meet = lerp(pos[e.x], pos[e.by], 0.45);
+          const s3 = await act3(Object.assign(d3, { result: 'held' }), [{ id: e.x, to: meet }, { id: 'ball', to: [meet[0] + 10, meet[1] - 12] }, { id: e.by, to: lerp(pos[e.by], meet, 0.5) }], 420, true);
+          await end3(s3, 0);
+        } else if (e.ok && e.grade !== 'near') {
           const to = ep(G.cur, e.x), via = [pos[e.by][0] + (pos[e.x][0] < 180 ? 34 : -34), pos[e.by][1]];
           const s3 = await act3(Object.assign(d3, { result: 'past', to: G.cur.pos[e.x] }), [{ id: e.x, to, via }, { id: 'ball', to: [to[0] + 10, to[1] - 12], via }, { id: e.by, to: ep(G.cur, e.by) }], 700, true);
           setCarrier(e.x);
@@ -818,10 +842,13 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
           stamp(e.long ? 'Abgefangen' : 'Ball gewonnen', e.long ? `${Dc.last} fängt den langen Ball ab.` : nx && nx.t === 'turn' ? `Gegenpressing: ${Dc.last} holt den Ball zurück.` : `${Dc.last} nimmt ${X.last} den Ball ab.`, 'good');
           addTick(e.long ? `${Dc.last} fängt den langen Pass von ${X.last} ab.` : `${Dc.last} gewinnt den Ball gegen ${X.last}.`);
           await end3(s3, 1100); hideStamp();
+        } else if (e.foul) {
+          // Dein Verteidiger kommt zu spät und trifft den Gegner: Der Pfiff folgt (siehe 'foul')
+          moves.push({ id: e.x, to: lerp(c, spot, 0.3) }); await tween(moves, 420);
         } else {
           const Tg = it.to ? card('home', it.to) : null;
           const w = e.long ? (e.grade === 'near' ? ['Knapp dran', `${Dc.last} ist dran, aber der lange Ball kommt an.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `Der lange Ball kommt an, ${Tg.last} hat freie Bahn.`, 'bad'] : ['Zu spät', `Der lange Ball findet ${Tg.last}.`, 'bad'])
-            : e.blocked ? ['Geblockt', `${Dc.last} wirft sich in den Schuss von ${X.last}.`, 'good'] : e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', it.kind === 'pass' ? `Der Pass zu ${Tg.last} kommt an.` : `${X.last} kommt glatt durch.`, 'bad'];
+            : e.blocked ? ['Geblockt', e.wall ? `Die Mauer steht: ${Dc.last} blockt den Freischlag von ${X.last}.` : `${Dc.last} wirft sich in den Schuss von ${X.last}.`, 'good'] : e.grade === 'good' ? ['Gestört', `${Dc.last} stört ${X.last}: mehr Zeit für deinen Goalie.`, 'good'] : e.grade === 'near' ? ['Knapp dran', `${Dc.last} stört ein wenig.`, 'warn'] : e.grade === 'gross' ? ['Weit daneben', `${X.last} hat freie Bahn, dein Goalie hat weniger Zeit.`, 'bad'] : ['Zu spät', it.kind === 'pass' ? `Der Pass zu ${Tg.last} kommt an.` : `${X.last} kommt glatt durch.`, 'bad'];
           let s3 = null;
           if (it.kind === 'pass') {
             const to = !e.deep && G.cur.pos[it.to] ? ep(G.cur, it.to) : pos[it.to];
@@ -846,7 +873,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
       } else if (e.t === 'arrive') {
         /* Der Aufbau ist vorbei: Alle laufen dorthin, wo es vor dem Tor weitergeht. */
         const mine = e.side === 'you', X = card(e.side, e.x), who = mine ? X.last : `${HOME}: ${X.last}`;
-        const A = { through: ['Durchbruch', `${who} ist allein durch${e.tight ? ', ein Verfolger im Rücken' : ''}!`], rush21: ['2 gegen 1', `${who} kommt in Überzahl vors Tor${e.tight ? ', der Verteidiger ist dran' : ''}.`], rush32: ['3 gegen 2', `${who} kommt in Überzahl vors Tor${e.tight ? ', der Verteidiger ist dran' : ''}.`], set: ['Abwehr steht', mine ? `${HOME} hat sich formiert: Positionsangriff.` : 'Deine Abwehr hat sich formiert.'] }[e.how];
+        const A = e.free ? ['Freischlag', mine ? `Dein Team rückt in Ruhe auf, ${HOME} formiert sich: Positionsangriff.` : `${HOME} rückt in Ruhe auf, deine Abwehr steht.`] : { through: ['Durchbruch', `${who} ist allein durch${e.tight ? ', ein Verfolger im Rücken' : ''}!`], rush21: ['2 gegen 1', `${who} kommt in Überzahl vors Tor${e.tight ? ', der Verteidiger ist dran' : ''}.`], rush32: ['3 gegen 2', `${who} kommt in Überzahl vors Tor${e.tight ? ', der Verteidiger ist dran' : ''}.`], set: ['Abwehr steht', mine ? `${HOME} hat sich formiert: Positionsangriff.` : 'Deine Abwehr hat sich formiert.'] }[e.how];
         const good = e.how === 'set' ? !mine : mine;
         stamp(A[0], A[1], e.how === 'set' ? 'warn' : good ? 'good' : 'bad', 'low');
         if (e.how !== 'set' || !mine) addTick(e.how === 'set' ? `${HOME} baut auf, deine Abwehr steht.` : `${A[0]}: ${mine ? X.last : HOME + ' über ' + X.last}.`);
@@ -897,6 +924,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
         const mine = e.side === 'you', X = e.x ? card(e.side, e.x) : null, kt = KINDTXT[e.kind], who = X ? X.last : (mine ? 'Dein Team' : HOME);
         const st = e.how === 'press' ? ['Dein Ball', `${who} hat den Ball zurückgeholt: Der Angriff geht weiter.`, 'good'] : e.near ? ['Ball weg', `${HOME} hat den Ball vor deinem Tor.`, 'bad']
           : kt ? [mine ? 'Umschalten' : 'Gegenstoss', mine ? `${who} hat den Ball: ${kt[0]}.` : `${HOME} schaltet um: ${kt[0]}.`, mine ? 'good' : 'bad']
+            : e.how === 'out' ? ['Einschlag', mine ? `Der Schuss geht über die Bande. ${who} führt hinten in der Ecke aus.` : `Dein Schuss geht über die Bande. ${HOME} führt hinten aus: Störe den ersten Pass.`, 'warn']
             : e.how === 'behind' ? [mine ? 'Dein Ball' : 'Ballwechsel', mine ? `${who} holt den Ball hinter dem Tor: Auslösung.` : `${HOME} holt den Ball hinter dem Tor und baut auf.`, 'warn']
               : [mine ? 'Dein Ball' : 'Ballwechsel', mine ? `${who} hat den Ball: Auslösung.` : `${HOME} hat den Ball und baut auf: Störe früh.`, 'warn'];
         hideStamp(); if (X) setCarrier(X.id);
@@ -911,11 +939,30 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
         if (!e.quick) await sceneIntro(['Auslösung', `Dein Goalie leitet ruhig aus: ${card('you', G.cur.carrier).last} baut auf.`, 'warn']);
         else if (g === 'perfect' || g === 'good' || g === 'near') await sceneIntro(g === 'perfect' ? ['Auswurf perfekt', `${R.last} ist auf und davon: zwei gegen einen.`, 'good'] : g === 'good' ? ['Auswurf sitzt', `${R.last} nimmt den Ball mit: drei gegen zwei.`, 'good'] : ['Knapp', `${R.last} hat den Ball, aber ${HOME} steht schon.`, 'warn']);
         else { await tween([{ id: 'ball', to: [180 + (Math.random() - 0.5) * 120, 470], via: [180, 620] }], 520); stamp('Abgefangen', `Der Auswurf landet bei ${HOME}.`, 'bad'); addTick('Auswurf abgefangen.'); buzz(50); await hold(900); hideStamp(); }
+      } else if (e.t === 'foul') {
+        // Pfiff: Foul im Zweikampf. Was daraus wird (Freischlag vor dem Tor oder Aufrücken), zeigt das Ereignis danach
+        const mine = e.side === 'you', Dc = card(e.side, e.by), X = card(mine ? 'home' : 'you', e.on);
+        hideStamp(); leaveGoal(); setCarrier(null); buzz(mine ? [40, 60, 40] : 40);
+        stamp('Foul', mine ? `${Dc.last} trifft ${X.last} am Stock: Freischlag für ${HOME}.` : `${Dc.last} hält ${X.last} mit dem Stock zurück: Freischlag für dich.`, mine ? 'bad' : 'good');
+        addTick(mine ? `Foul von ${Dc.last} an ${X.last}: Freischlag ${HOME}.` : `Foul von ${Dc.last} (${HOME}) an ${X.last}: Freischlag für dich.`);
+        await hold(1150); hideStamp();
+      } else if (e.t === 'out') {
+        // Der Ball fliegt über die Bande: Einschlag für das angreifende Team (siehe 'piece')
+        const mine = e.side === 'you', at = toRink(e.at, e.side), over = [at[0] < 180 ? -16 : 376, at[1]];
+        leaveGoal(); hideStamp(); camMode = 'scene'; setCarrier(null);
+        await tween([{ id: 'ball', to: over, via: lerp(ballP, over, 0.5) }], 380);
+        stamp('Aus', e.how === 'save' ? (mine ? `Der Goalie von ${HOME} lenkt den Ball über die Bande.` : 'Dein Goalie lenkt den Ball über die Bande.') : 'Der geblockte Ball fliegt über die Bande.', mine ? 'good' : 'warn', 'low');
+        addTick(e.how === 'save' ? (mine ? 'Parade ins Aus: Einschlag für dich in der Ecke.' : `Parade ins Aus: Einschlag ${HOME} in der Ecke.`) : (mine ? 'Block ins Aus: Einschlag für dich.' : `Block ins Aus: Einschlag ${HOME}.`));
+        await hold(800); hideStamp();
+      } else if (e.t === 'piece') {
+        // Standard: Der Ball liegt am Ort, alle stellen sich auf (Mauer, Abstand)
+        hideStamp(); await sceneIntro(pieceStamp(G.cur), false);
       } else if (e.t === 'end' && e.calm) {
         // Das Spiel kommt zur Ruhe: Die Sequenz ist vorbei
         hideStamp(); leaveGoal();
-        stamp('Ruhe im Spiel', e.ball === 'you' ? 'Du hast den Ball und baust in Ruhe auf.' : `${HOME} hat den Ball und baut in Ruhe auf.`, 'warn');
-        addTick(e.ball === 'you' ? 'Du hast den Ball, das Spiel beruhigt sich.' : `${HOME} hat den Ball, das Spiel beruhigt sich.`);
+        if (e.out) { stamp('Ball im Aus', e.ball === 'you' ? 'Der Schuss geht über die Bande: Einschlag für dich, du baust in Ruhe auf.' : `Dein Schuss geht über die Bande: Einschlag für ${HOME}, das Spiel beruhigt sich.`, 'warn'); addTick(e.ball === 'you' ? 'Ball im Aus, Einschlag für dich.' : `Ball im Aus, Einschlag ${HOME}.`); }
+        else { stamp('Ruhe im Spiel', e.ball === 'you' ? 'Du hast den Ball und baust in Ruhe auf.' : `${HOME} hat den Ball und baut in Ruhe auf.`, 'warn');
+          addTick(e.ball === 'you' ? 'Du hast den Ball, das Spiel beruhigt sich.' : `${HOME} hat den Ball, das Spiel beruhigt sich.`); }
         await hold(1100); hideStamp();
       }
     }
@@ -981,8 +1028,18 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   }
   /* Eine neue Szene beginnt: Ansage, was jetzt läuft, und alle laufen an ihre Plätze. st: eigene Ansage [Titel, Text, Ton],
      sonst nach der Art der Szene. tick: auch in den Ticker (false: nicht). */
+  // Standard: Freischlag (mit Mauer vor dem Tor), Einschlag an der Bande oder in der Ecke; hinten beginnt damit die Auslösung
+  function pieceStamp(sc) {
+    const att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), pc = sc.piece, name = stdName(pc), corner = pc.kind === 'hitin' && !pc.own && pc.at[1] < 78;
+    // nach dem Zeitsprung: sagen, warum das Spiel unterbrochen war
+    const why = sc.fresh ? (pc.kind === 'free' ? (att ? `Foul an ${X.last}. ` : `Foul an ${X.last} (${HOME}). `) : 'Der Ball war im Aus. ') : '';
+    if (pc.own) return [name, why + (att ? `${X.last} führt hinten aus, ${HOME} hält Abstand.` : `${HOME} führt hinten aus: Störe den ersten Pass.`), 'warn'];
+    if (pc.wall) return [name, why + (att ? `${X.last} steht am Ball, ${HOME} stellt die Mauer.` : `${X.last} steht am Ball, deine Mauer deckt die nahe Ecke.`), att ? 'good' : 'bad'];
+    return [corner ? 'Einschlag in der Ecke' : name, why + (att ? `${X.last} führt ${corner ? 'in der Ecke' : 'an der Bande'} aus, ${HOME} hält Abstand.` : `${HOME} führt ${corner ? 'in der Ecke' : 'an der Bande'} aus: ${X.last} steht am Ball.`), att ? 'good' : 'bad'];
+  }
   function sceneStamp() {
     const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), kt = KINDTXT[sc.kind], dk = sc.deep ? sc.deep.kind : null;
+    if (M.std1(sc)) return pieceStamp(sc);
     if (dk === 'build') return ['Auslösung', att ? `${X.last} baut hinten auf, ${HOME} stört früh.` : `${HOME} baut hinten auf: Störe früh.`, 'warn'];
     if (kt) return [kt[0], att ? `${X.last} zieht los, ${kt[1]}.` : `${HOME} kontert über ${X.last}, ${kt[1]}.`, att ? 'good' : 'bad'];
     return [att ? 'Angriff' : 'Abwehr', att ? `${X.last} hat den Ball, ${HOME} steht.` : `${HOME} greift an: ${X.last} am Ball.`, 'warn'];
@@ -1298,6 +1355,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
       wrist: [`${X.last} zieht aus dem Handgelenk ab. Tippe die Ecke an, in die der Ball fliegt.`, 'Handgelenkschuss: kommt ohne Ansatz. Der goldene Ring zeigt, wo der Ball hinfliegt.'],
       drag: [`${X.last} zieht den Ball zur Seite: Zugschuss! Achtung, Finte.`, 'Zugschuss: Der Ball zieht zuerst zur falschen Seite. Tippe erst, wenn der Ring springt, oder gleich auf die andere Seite.']
     }[sh.style] || [`${X.last} holt aus. Tippe die Ecke an, in die der Ball fliegt, bevor er im Tor ist.`, 'Der goldene Ring zeigt, wo der Ball hinfliegt.'];
+    if (sh.wall) { TELL[0] = `${X.last} schiesst den Freischlag direkt, an deiner Mauer vorbei!`; TELL[1] = 'Deine Mauer deckt die nahe Ecke: Der Ball kommt auf die ferne Seite. ' + TELL[1]; }
     if (sh.reb) { TELL[0] = `Abpraller! ${X.last} schiesst sofort nach.`; TELL[1] = 'Dein Goalie hat den Ball nicht festgehalten. Der Nachschuss kommt aus der Nähe: Du hast wenig Zeit.'; }
     say(sh.empty ? `${X.last} schiesst aufs leere Tor.` : TELL[0]);
     $('hist').innerHTML = sh.empty ? '<em>Dein Goalie ist draussen: Nur ein Fehlschuss rettet dich.</em>' : `<em>${TELL[1]}${sh.oneT ? ' Direktschuss nach einem Querpass: noch weniger Zeit.' : ''}${sh.press > 0 ? ' Der Schütze wurde gestört: du hast mehr Zeit.' : sh.press < 0 ? ' Freie Bahn für den Schützen: du hast weniger Zeit.' : ''}</em>`;
@@ -1477,15 +1535,16 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     const tip = sh.style === sh.auto ? ` <b class="tr">Tipp</b> ${WHY[sh.why]}.` : '', mine = sh.style === fav ? ` <b class="tr fav">Liebling</b> ${esc(X.last)}s Lieblingsschuss: breiteres Feld.` : '';
     panel.innerHTML = '<p class="passes-head">Schussart wählen, dann ins Tor tippen</p><div class="styles">' + M.STYLES.map(st => {
       const g2 = st === sh.style ? G : M.act(G, { type: 'style', value: st }, rng).state, b = M.shotBar(g2), none = sh.ch && sh.ch[st] <= 0.001 && !sh.empty, shut = (g2.shot.shade || []).some(o => o.x - o.w <= -0.98 && o.x + o.w >= 0.98 && o.top >= 1);
+      if (sh.dead && st === 'drag') return `<button type="button" class="sty" data-sty="drag" disabled><span class="top">${ic(st)}</span><b>${M.STYLE[st].short}</b><small><em class="bad">gilt nicht beim Standard</em></small><span class="tags"></span></button>`;
       return `<button type="button" class="sty${st === sh.style ? ' on' : ''}" data-sty="${st}" aria-pressed="${st === sh.style}"><span class="top">${ic(st)}<span class="pct" title="Breite des grünen Felds in Prozent">${Math.round(b.w * 100)}</span></span><b>${M.STYLE[st].short}</b><small>${shut ? '<em class="bad">geht in den Block</em>' : none ? '<em class="bad">kaum eine Chance</em>' : STY[st].tag}${b.pressed ? ' · <em class="bad">Block droht</em>' : ''}</small><span class="tags">${st === sh.auto ? '<i class="tr">Tipp</i>' : ''}${st === fav ? '<i class="tr fav">Liebling</i>' : ''}</span></button>`;
     }).join('') + `</div><p class="sty-note"><b>${M.STYLE[sh.style].name}.</b> ${STY[sh.style].does}${tip}${mine}</p>`;
-    setTag(sh.ctx === 'so' ? 'Penalty' : one ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : 'Schuss', 'you');
+    setTag(sh.ctx === 'so' ? 'Penalty' : sh.dead ? (sh.kwall ? 'Freischlag direkt' : 'Einschlag direkt') : one ? 'Direktschuss' : sh.ctx === 'counter' ? 'Konter' : 'Schuss', 'you');
     // Verkehr vor dem Tor: Wer blockt, wer nimmt dem Goalie die Sicht
     const sd = (sh.shade || []).filter(o => o.x + o.w > -1 && o.x - o.w < 1), full = sd.some(o => o.x - o.w <= -1 && o.x + o.w >= 1 && o.top >= 1), names = l => l.map(id => esc(card(sideOf(id), id).last)).join(' und ');
-    const dragOpen = sh.style !== 'drag' && !!sh.ch && sh.ch.drag > 0.001;
-    const blockTxt = !sd.length ? '' : full ? `<b class="t-bad">${names([sd.sort((a, b) => b.w - a.w)[0].id])} steht in der Schussbahn: Das Tor ist zu.</b> ${dragOpen ? 'Ein Zugschuss öffnet ein Fenster. ' : 'Hier hilft keine Schussart: Beim nächsten Mal vorher passen oder dribbeln. '}` : `<b class="t-bad">Rot schraffiert:</b> Dort blockt ${names(sd.map(o => o.id).filter((id, i, l) => l.indexOf(id) === i).slice(0, 2))}. Ziele daran vorbei. `;
+    const dragOpen = sh.style !== 'drag' && !!sh.ch && sh.ch.drag > 0.001, wallSd = sd.some(o => o.wall), shutAll = sh.why === 'shut';
+    const blockTxt = !sd.length ? '' : wallSd ? `<b class="t-bad">Rot schraffiert:</b> Dort steht die Mauer. ${full || shutAll ? 'Was offen bleibt, hat der Goalie: Von hier besser ablegen. ' : 'Frei bleibt die ferne Ecke, und dort steht der Goalie. '}` : full ? `<b class="t-bad">${names([sd.sort((a, b) => b.w - a.w)[0].id])} steht in der Schussbahn: Das Tor ist zu.</b> ${dragOpen ? 'Ein Zugschuss öffnet ein Fenster. ' : 'Hier hilft keine Schussart: Beim nächsten Mal vorher passen oder dribbeln. '}` : `<b class="t-bad">Rot schraffiert:</b> Dort blockt ${names(sd.map(o => o.id).filter((id, i, l) => l.indexOf(id) === i).slice(0, 2))}. Ziele daran vorbei. `;
     const scrTxt = sh.scr && sh.scr.length ? `<b class="t-good">Sichtschutz:</b> ${names(sh.scr)} steht dem Goalie im Weg, er reicht weniger weit. ` : '';
-    say(sh.empty ? 'Das Tor ist leer: Tippe ins Tor.' : full && sh.style !== 'drag' ? 'Die Schussbahn ist zu: So geht der Schuss in den Block.' : one ? 'Direktschuss! Tippe schnell auf die offene Seite.' : sh.style === 'drag' ? 'Zugschuss: Tippe auf die offene Seite, dann schnell abziehen.' : sd.length ? 'Tippe ins Tor: am Block vorbei.' : 'Tippe ins Tor: Wohin soll der Schuss?');
+    say(sh.empty ? 'Das Tor ist leer: Tippe ins Tor.' : wallSd ? (full || shutAll ? 'Mauer und Goalie decken alles: Dieser Schuss hat kaum eine Chance.' : 'Tippe ins Tor: an der Mauer vorbei in die ferne Ecke.') : full && sh.style !== 'drag' ? 'Die Schussbahn ist zu: So geht der Schuss in den Block.' : one ? 'Direktschuss! Tippe schnell auf die offene Seite.' : sh.style === 'drag' ? 'Zugschuss: Tippe auf die offene Seite, dann schnell abziehen.' : sd.length ? 'Tippe ins Tor: am Block vorbei.' : 'Tippe ins Tor: Wohin soll der Schuss?');
     $('hist').innerHTML = `<em>${blockTxt}${scrTxt}${sh.empty ? 'Der Goalie ist draussen: Triff einfach das Tor.' : one ? 'Der Goalie steht noch auf der Seite, von der der Pass kam, und rutscht schon herüber.' : sh.style === 'drag' ? 'Der Goalie steht noch dort, wo der Ball vor dem Zug lag.' : `Im dunklen Bereich hält der Goalie. ${sd.length ? '' : sh.q < 0.45 ? 'Aus der Distanz bleiben nur die Ecken.' : sh.q < 0.75 ? 'Frei sind die Ecken, am meisten oben.' : 'Aus der Nähe kommt er nicht weit: weg von ihm reicht.'}`}</em>`;
   }
   // Andere Schussart: Die Engine stellt Druck und Goalie um, hier wird es gezeigt
@@ -1615,6 +1674,8 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
       [`${st.passOk} von ${st.passes}`, 'Pässe angekommen'],
       [`${st.hits} von ${st.bars}`, `Timing getroffen, ${st.perfects} perfekt`],
       [`${st.duelsWon} von ${st.duels}`, 'Bullys und freie Bälle gewonnen'],
+      [`${st.pieces}`, 'eigene Standards vor dem Tor'],
+      [`${st.fouls} : ${st.fouled}`, 'Fouls, du und Gegner'],
       [`${st.saved} von ${st.onGoal}`, 'Schüsse aufs Tor gehalten']
     ].map(r => `<li><b>${r[0]}</b><span>${r[1]}</span></li>`).join('');
     $('ticker-end').innerHTML = $('ticker').innerHTML;
@@ -1672,6 +1733,6 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   $('hint').addEventListener('click', () => { if (phase === 'play') skip(); else if (phase === 'pause' && wake) wake(); });
   S.onChange(() => { if (!$('screen-intro').hidden || phase === 'end' || phase === 'idle') renderIntro(); });
   // Für Tests: den Zustand des laufenden Matchs lesen und einen gestellten Zustand laden (eine bestimmte Lage prüfen, ohne darauf zu warten)
-  window.HKMatchTest = { state: () => G, phase: () => phase, load(s) { closeBar(); closeDuel(); G = s; phase = 'play'; return after(); } };
+  window.HKMatchTest = { state: () => G, phase: () => phase, load(s) { closeBar(); closeDuel(); G = s; phase = 'play'; return after(); }, act(a) { closeBar(); phase = 'decide'; return run(a); } };
   renderIntro();
 })();

@@ -153,16 +153,16 @@ function playMatch(seed, policy, on) {
       const short = s.teams.you.cards.filter(c => c.id !== X && c.id !== dp.run).map(c => ({ id: c.id, cp: M.contest(s, { type: 'pass', to: c.id }) })).sort((a, b) => b.cp.p - a.cp.p)[0];
       if (on && on.deep) on.deep(s);
       if (u < 0.35 && dp.run !== X) { const cp = M.contest(s, { type: 'pass', to: dp.run }); act({ type: 'pass', to: dp.run, hit: hit(cp) }); }
-      else if (u < 0.7) act(cd.free ? { type: 'dribble' } : { type: 'dribble', hit: hit(cd) });
+      else if (u < 0.7 && M.canDrib(s, sc)) act(cd.free ? { type: 'dribble' } : { type: 'dribble', hit: hit(cd) });      // beim Einschlag hinten muss der Ball gespielt werden
       else act({ type: 'pass', to: short.id, hit: hit(short.cp) });
     } else if (s.phase === 'decide') {
-      const sc = s.cur, X = sc.carrier, pv = M.shotPreview(s, X); let to = null, bv = pv.q * (1 - pv.block) + 0.15 * sc.step + (Math.abs(pv.oneT) >= 0.25 ? 0.3 : 0);
+      const sc = s.cur, X = sc.carrier, pv = M.shotPreview(s, X); let to = null, bv = M.noShot(s, sc) ? -1 : pv.q * (1 - pv.block) + 0.15 * sc.step + (Math.abs(pv.oneT) >= 0.25 ? 0.3 : 0);      // Einschlag in der Ecke: kein direkter Schuss
       if (sc.step < sc.max - 1) s.teams.you.cards.forEach(c => { if (c.id === X) return; const cp = M.contest(s, { type: 'pass', to: c.id }), v = M.shotPreview(s, c.id, X), val = cp.p * (v.q + (Math.abs(v.oneT) >= 0.4 ? 0.3 : 0)) * 0.95; if (val > bv) { bv = val; to = c.id; } });
       if (to) act({ type: 'pass', to, hit: hit(M.contest(s, { type: 'pass', to })) }); else act({ type: 'shoot' });
     } else if (s.shot.side === 'you') {
       if (on && on.shot) on.shot(s);
       const st = policy === 'auto' ? s.shot.auto : policy === 'rand' ? M.STYLES[Math.floor(hr() * 3)] : policy;
-      if (st !== s.shot.style && !s.shot.reb) act({ type: 'style', value: st });
+      if (st !== s.shot.style && !s.shot.reb && !(s.shot.dead && st === 'drag')) act({ type: 'style', value: st });      // Standard direkt: kein Zugschuss
       const b = M.shotBar(s); act({ type: 'aim', target: bestTarget(s), hit: hit(b), t: 300 + hr() * b.sweep });
     } else {
       // Parade: Der Spieler wartet beim Zugschuss die Finte ab und reagiert dann wie sonst
