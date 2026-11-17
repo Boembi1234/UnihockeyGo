@@ -167,7 +167,7 @@
   // Linienwechsel: Figuren neu aufbauen. Wer bleibt, steht, wo er war; die Neuen kommen von der Bande.
   function rebuildPlayers() {
     const old = Object.assign({}, pos), n = { you: 0, home: 0 };
-    buildPlayers();
+    buildPlayers(); boxShown = G.pbox ? G.pbox.card.id : null;
     ['you', 'home'].forEach(side => G.teams[side].cards.forEach(c => { const k = n[side]++; place(c.id, old[c.id] || [side === 'you' ? 14 : 346, 400 + (side === 'you' ? 1 : -1) * (30 + k * 26)]); }));
     renderEnergy();
   }
@@ -357,8 +357,10 @@
     // jede Szene ein Punkt: blau deine Angriffe, gold die des Gegners, grün und rot die Tore, hell die laufende
     const dots = G.results.slice(-14).map(r => `<span class="dot ${r.goal ? 'g-' + r.goal : r.type === 'att' ? 'you' : 'home'}"></span>`);
     if (G.cur && !G.cur.done && !G.pen) dots.push('<span class="dot now"></span>');
-    $('dots').innerHTML = dots.join('');
-    renderTac(); renderEnergy();
+    // Strafe: Wer in Überzahl spielt und wie lange noch; angezeigte Strafe: Der Vorteil läuft
+    const pb = G.pbox, adv = G.cur && !G.cur.done ? G.cur.adv : null;
+    $('dots').innerHTML = pb ? `<span class="penline ${pb.side === 'you' ? 'bad' : 'good'}" id="penline" data-side="${pb.side}">${pb.side === 'you' ? 'Unterzahl' : 'Überzahl'} ${secText(pb.left)}</span>` : adv ? `<span class="penline warn" id="penline" data-adv="${adv.side}">Strafe angezeigt</span>` : dots.join('');
+    boxSync(); renderTac(); renderEnergy();
   }
   // Energie: grün, gelb (unter 60) oder rot (unter 35). Müde Spieler haben einen schnelleren Strich.
   const enLvl = v => (v > 60 ? '' : v > 35 ? 'mid' : 'low'), enCol = { '': '#34d399', mid: '#f7d774', low: '#ff6b6b' };
@@ -367,6 +369,20 @@
   const tempoTxt = ms => (ms >= 1000 ? 'ruhig' : ms >= 800 ? 'normal' : ms >= 600 ? 'schnell' : 'sehr schnell');
   // Uhr: Minuten und Sekunden seit dem Anpfiff. clockHold: Die Anzeige bleibt stehen, bis der Zeitsprung gezeigt ist.
   let clockHold = null;
+  const secText = v => { const t = Math.max(0, Math.round(v)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  // Strafe: Hinweis für die Zeile unter der Ansage
+  const penNote = () => { const b = G.pbox; return !b ? '' : b.side === 'you' ? `<b class="tr bad">Unterzahl</b> noch ${secText(b.left)}: Du spielst zu viert, bis die Zeit um ist oder ${esc(HOME)} trifft. ` : `<b class="tr">Überzahl</b> noch ${secText(b.left)}: Fünf gegen vier, einer ist immer frei. Lass den Ball laufen. `; };
+  // Strafbank: Die Figur verschwindet vom Feld und kommt an der Bande zurück
+  let boxShown = null;
+  function boxSync(back) {
+    const b = G.pbox, id0 = b ? b.card.id : null;
+    if (back && !els[back]) { boxShown = id0; rebuildPlayers(); return; }
+    if (id0 === boxShown && !back) return;                               // steht schon richtig
+    boxShown = id0;
+    Object.keys(els).forEach(id => { els[id].style.display = id === id0 ? 'none' : ''; });
+    sync3();
+    if (back && els[back]) place(back, [sideOf(back) === 'you' ? 14 : 346, 400]);
+  }
   const clockText = m => { const t = Math.round(Math.max(0, Math.min(G.cfg.periods * G.cfg.periodMin, m)) * 60); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
   function clockRun(from, to, ms) {
     const el = $('sc-time'); el.classList.add('run');
@@ -464,7 +480,7 @@
     if (sc.deep) { renderDeep(); return; }
     const last = sc.step >= sc.max - 1, xt = TR(X.id), canD = M.canDrib(G, sc), alone = sc.kind === 'solo';
     const pc = M.std1(sc) ? sc.piece : null, noSh = M.noShot(G, sc);      // Standard: Der Ball ist noch nicht gespielt
-    setTag(pc ? stdName(pc) : sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
+    setTag(pc ? stdName(pc) : sc.pp ? 'Überzahl' : sc.kind === 'set' ? 'Angriff' : M.KINDS[sc.kind], 'you');
     const pv = M.shotPreview(G, X.id), cd = M.contest(G, { type: 'dribble' }), di = M.dribInfo(G, sc, X.id), co = last || !canD ? null : M.dribCourse(G), mk = card('home', cd.by), bl = card('home', pv.by), direct = Math.abs(pv.oneT) >= 0.25;
     const anyFree = !last && G.teams.you.cards.some(c => c.id !== X.id && M.isFree(G, sc, c.id));
     // Verkehr vor dem Tor: Gegner, deren Schatten im Tor liegt; zu ist die Schussbahn, wenn keine Schussart eine Chance hat
@@ -488,7 +504,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
       }).join('') + '</div>';
     }
     panel.innerHTML = h;
-    const fxNote = (pc ? `<b class="tr">${stdName(pc)}</b>: ${esc(HOME)} hält drei Meter Abstand. Der Ball muss gespielt werden: kein Dribbling, kein Zugschuss. ` : '') + (sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '');
+    const fxNote = penNote() + (pc ? `<b class="tr">${stdName(pc)}</b>: ${esc(HOME)} hält drei Meter Abstand. Der Ball muss gespielt werden: kein Dribbling, kein Zugschuss. ` : '') + (sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '');
     $('hist').innerHTML = `<em>${fxNote}Energie ${esc(X.last)} ${enPill(X)} ${Math.round(X.en)} %${X.en <= 60 ? ': müde, sein Strich läuft schneller' : ''}. ${xt && xt.off ? `<b class="tr">${xt.name}</b>: breiteres Feld beim ${xt.what}.` : 'Die Zahl ist die Breite des grünen Felds in Prozent.'}</em>`;
     drawLanes();
   }
@@ -515,7 +531,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     els[R.id].classList.add('pick');
     panel.innerHTML = h;
     const fxNote = sc.play ? '<b class="tr">Spielzug</b>: alle Felder breiter. ' : G.fx.you.empty ? '<b class="tr">Goalie raus</b>: breitere Felder, aber jeder Ballverlust ist ein Konter. ' : sc.pressed ? `<b class="tr bad">${esc(HOME)} presst</b>: schmalere Felder. ` : '';
-    $('hist').innerHTML = `<em>${pc ? `<b class="tr">${stdName(pc)}</b>: ${esc(HOME)} hält drei Meter Abstand. ` : ''}${fxNote}${own ? '<b class="t-bad">Grober Fehler hinten:</b> Konter direkt vor deinem Tor. ' : ''}Von hier wird nicht geschossen: Bring den Ball nach vorn.${turn ? '' : ' Nach zwei Aktionen ohne Durchbruch steht die Abwehr.'} Die Zahl ist die Breite des grünen Felds in Prozent.</em>`;
+    $('hist').innerHTML = `<em>${penNote()}${pc ? `<b class="tr">${stdName(pc)}</b>: ${esc(HOME)} hält drei Meter Abstand. ` : ''}${fxNote}${own ? '<b class="t-bad">Grober Fehler hinten:</b> Konter direkt vor deinem Tor. ' : ''}Von hier wird nicht geschossen: Bring den Ball nach vorn.${turn ? '' : ' Nach zwei Aktionen ohne Durchbruch steht die Abwehr.'} Die Zahl ist die Breite des grünen Felds in Prozent.</em>`;
     drawLanes();
   }
   // Abwehr: Der Plan des Gegners ist sichtbar, der passende Verteidiger reagiert von selbst. Der User trifft das Timing.
@@ -528,9 +544,10 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     const sc = G.cur, X = card('home', sc.carrier), d = M.defInfo(G, sc), T = d.to ? card('home', d.to) : null, it = sc.intent, long = !!sc.deep && !!it.long;
     const pc = M.std1(sc) ? sc.piece : null;
     const tx = pc && d.wall ? [`${X.last} schiesst den Freischlag direkt`, `${d.D.last} steht in der Mauer`, 'Block', 'Schuss'] : pc && d.kind === 'pass' && !long ? [`${X.last} spielt den ${stdName(pc)} zu ${T.last}`, `${d.D.last} geht in den Passweg`, 'Antizipation', 'Vorlage'] : long ? [`${X.last} spielt den langen Ball auf ${T.last}`, `${d.D.last} geht dazwischen`, 'Antizipation', 'Vorlage'] : sc.deep && d.kind === 'dribble' ? [`${X.last} stösst mit dem Ball vor`, `${d.D.last} ${it.free ? 'setzt nach' : 'stellt ihn'}`, 'Zweikampf', 'Dribbling'] : DEFTXT[d.kind](X, d.D, T);
-    setTag(pc ? `${stdName(pc)} ${HOME}` : 'Abwehr', 'home');
+    setTag(pc ? `${stdName(pc)} ${HOME}` : sc.pp ? 'Unterzahl' : 'Abwehr', 'home');
     say(`${tx[0]}. ${tx[1]}: triff das Timing.`);
     $('hist').innerHTML = d.wall && !G.fx.you.empty && !sc.pressing ? '<em><b class="tr">Mauer</b>: Sie deckt die nahe Ecke, dein Feld ist breiter. Im Feld: geblockt. Genau in der Mitte: Ball gewonnen und Konter.</em>' : long && !G.fx.you.empty ? '<em><b class="tr">Langer Pass</b>: Schon «Im Feld» fängt ihn ab. Kommt er an, ist der Gegner durch.</em>' : sc.deep && sc.gegen && !sc.pressing && !G.fx.you.empty ? `<em><b class="tr">Gegenpressing</b>: Deine Spieler stehen noch vorne. Schon «Im Feld» holt den Ball zurück, und dein Angriff geht weiter.</em>` : sc.deep && !sc.pressing && !G.fx.you.empty ? `<em>${sc.deep.kind === 'turn' ? `${esc(HOME)} schaltet um. ` : `${esc(HOME)} baut hinten auf. `}Im Feld: Gegner gestört. Genau in der Mitte: Ball gewonnen, weit vorne.</em>` : sc.pressing ? '<em><b class="tr">Pressing</b>: Schon «Im Feld» gewinnt den Ball.</em>' : G.fx.you.empty ? '<em><b class="tr bad">Dein Tor ist leer</b>: Nur ein perfekter Stopp verhindert den Schuss.</em>' : `<em>${sc.play ? `<b class="tr bad">Spielzug ${esc(HOME)}</b>: schmaleres Feld. ` : ''}${d.kind === 'shoot' ? 'Im Feld: Schuss geblockt, der Ball liegt frei.' : 'Im Feld: Gegner gestört, dein Goalie bekommt mehr Zeit.'} Genau in der Mitte: Ball gewonnen und Konter.</em>`;
+    if (G.pbox) $('hist').innerHTML = $('hist').innerHTML.replace('<em>', '<em>' + penNote());
     const g = $('lanes'), a = pos[sc.carrier], b = d.kind === 'pass' ? pos[d.to] : d.kind === 'shoot' ? goalOf('home') : null; clearLanes();
     if (b) { svg('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: '#ff8a8a', 'stroke-width': 3, 'stroke-dasharray': '6 6', opacity: 0.85, 'stroke-linecap': 'round' }, g); if (L3) S3.lanes([{ a, b, col: '#ff8a8a', w: 3 }]); }
     drawSpot();
@@ -943,9 +960,41 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
         // Pfiff: Foul im Zweikampf. Was daraus wird (Freischlag vor dem Tor oder Aufrücken), zeigt das Ereignis danach
         const mine = e.side === 'you', Dc = card(e.side, e.by), X = card(mine ? 'home' : 'you', e.on);
         hideStamp(); leaveGoal(); setCarrier(null); buzz(mine ? [40, 60, 40] : 40);
-        stamp('Foul', mine ? `${Dc.last} trifft ${X.last} am Stock: Freischlag für ${HOME}.` : `${Dc.last} hält ${X.last} mit dem Stock zurück: Freischlag für dich.`, mine ? 'bad' : 'good');
-        addTick(mine ? `Foul von ${Dc.last} an ${X.last}: Freischlag ${HOME}.` : `Foul von ${Dc.last} (${HOME}) an ${X.last}: Freischlag für dich.`);
+        if (e.pen) stamp('Foul', mine ? `${Dc.last} trifft ${X.last} hart am Körper. Das gibt zwei Minuten.` : `${Dc.last} reisst ${X.last} um. Das gibt zwei Minuten.`, mine ? 'bad' : 'good');
+        else stamp('Foul', mine ? `${Dc.last} trifft ${X.last} am Stock: Freischlag für ${HOME}.` : `${Dc.last} hält ${X.last} mit dem Stock zurück: Freischlag für dich.`, mine ? 'bad' : 'good');
+        addTick(mine ? `Foul von ${Dc.last} an ${X.last}${e.pen ? '' : ': Freischlag ' + HOME}.` : `Foul von ${Dc.last} (${HOME}) an ${X.last}${e.pen ? '' : ': Freischlag für dich'}.`);
         await hold(1150); hideStamp();
+      } else if (e.t === 'adv') {
+        // Angezeigte Strafe: Das Foul ist gesehen, aber der Vorteil läuft. Gepfiffen wird beim nächsten Unterbruch.
+        const mine = e.side === 'you', Dc = card(e.side, e.x), X = e.on ? card(mine ? 'home' : 'you', e.on) : null;
+        stamp('Strafe angezeigt', mine ? `${Dc.last} foult von hinten. Der Vorteil läuft: Trifft ${HOME} nicht, musst du danach zu viert spielen.` : `${Dc.last} hält ${X ? X.last : 'deinen Spieler'} fest. Der Vorteil läuft: Triffst du nicht, spielst du danach in Überzahl.`, mine ? 'bad' : 'good', 'low');
+        addTick(mine ? `Strafe gegen ${Dc.last} angezeigt, der Vorteil läuft.` : `Strafe gegen ${Dc.last} (${HOME}) angezeigt, der Vorteil läuft.`);
+        buzz(mine ? [40, 60, 40] : 40); renderScore(); await hold(1200); hideStamp();
+      } else if (e.t === 'advOff') {
+        addTick(e.side === 'you' ? 'Die angezeigte Strafe gegen dich entfällt: Das Tor zählt.' : `Die angezeigte Strafe gegen ${HOME} entfällt: Das Tor zählt.`);
+      } else if (e.t === 'penalty') {
+        // Zwei Minuten: Der Spieler geht auf die Strafbank
+        const mine = e.side === 'you', Pc = card(e.side, e.x);
+        hideStamp(); leaveGoal(); setCarrier(null); camMode = 'scene';
+        stamp('2 Minuten', mine ? `${Pc.last} muss auf die Strafbank. Du spielst ${secText(e.left)} zu viert.` : `${Pc.last} (${HOME}) muss auf die Strafbank. Du spielst ${secText(e.left)} in Überzahl.`, mine ? 'bad' : 'good');
+        addTick(mine ? `2 Minuten gegen ${Pc.last}. Du spielst in Unterzahl.` : `2 Minuten gegen ${Pc.last} (${HOME}). Du spielst in Überzahl.`);
+        buzz(mine ? [60, 80, 60] : 50); boxSync(); renderScore(); await hold(1500); hideStamp();
+      } else if (e.t === 'pp') {
+        // Die Überzahl stellt sich auf (beim Freischlag nach dem Foul sagt ihn das nächste Ereignis an)
+        if (!e.piece) await sceneIntro(ppStamp(e));
+      } else if (e.t === 'clear') {
+        // Die Unterzahl hat den Ball und schlägt ihn weit weg: Die Strafzeit läuft
+        const mine = e.side === 'you', far = mine ? [180 + (Math.random() - 0.5) * 160, 120] : [180 + (Math.random() - 0.5) * 160, 680];
+        leaveGoal(); hideStamp(); camMode = 'scene'; setCarrier(null);
+        stamp('Befreit', mine ? `Dein Team schlägt den Ball weit weg: ${e.sec} Sekunden sind um, noch ${secText(e.left)}.` : `${HOME} schlägt den Ball weit weg: ${e.sec} Sekunden sind um, noch ${secText(e.left)}.`, mine ? 'good' : 'warn', 'low');
+        addTick(mine ? `Befreit. Noch ${secText(e.left)} in Unterzahl.` : `${HOME} befreit sich. Noch ${secText(e.left)} in Überzahl.`);
+        renderScore(); await tween([{ id: 'ball', to: far, via: lerp(ballP, far, 0.5) }], 520); await hold(600); hideStamp();
+      } else if (e.t === 'penaltyEnd') {
+        // Die Strafe ist vorbei: abgesessen oder durch ein Tor in Überzahl
+        const mine = e.side === 'you', Pc = card(e.side, e.x);
+        boxSync(e.x); renderScore();
+        if (e.why === 'goal') addTick(mine ? `Tor in Überzahl für ${HOME}: ${Pc.last} darf zurück.` : `Tor in Überzahl: Die Strafe gegen ${HOME} ist vorbei.`);
+        else { stamp('Wieder komplett', mine ? `${Pc.last} ist zurück: Die Strafe ist abgesessen.` : `${Pc.last} ist zurück: ${HOME} hat die Strafe überstanden.`, mine ? 'good' : 'warn', 'low'); addTick(mine ? `Strafe abgesessen: ${Pc.last} ist zurück.` : `${HOME} ist wieder komplett.`); await hold(1000); hideStamp(); }
       } else if (e.t === 'out') {
         // Der Ball fliegt über die Bande: Einschlag für das angreifende Team (siehe 'piece')
         const mine = e.side === 'you', at = toRink(e.at, e.side), over = [at[0] < 180 ? -16 : 376, at[1]];
@@ -960,10 +1009,11 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
       } else if (e.t === 'end' && e.calm) {
         // Das Spiel kommt zur Ruhe: Die Sequenz ist vorbei
         hideStamp(); leaveGoal();
-        if (e.out) { stamp('Ball im Aus', e.ball === 'you' ? 'Der Schuss geht über die Bande: Einschlag für dich, du baust in Ruhe auf.' : `Dein Schuss geht über die Bande: Einschlag für ${HOME}, das Spiel beruhigt sich.`, 'warn'); addTick(e.ball === 'you' ? 'Ball im Aus, Einschlag für dich.' : `Ball im Aus, Einschlag ${HOME}.`); }
+        if (e.why === 'pp') { /* nach der Strafe: schon angesagt */ }
+        else if (e.out) { stamp('Ball im Aus', e.ball === 'you' ? 'Der Schuss geht über die Bande: Einschlag für dich, du baust in Ruhe auf.' : `Dein Schuss geht über die Bande: Einschlag für ${HOME}, das Spiel beruhigt sich.`, 'warn'); addTick(e.ball === 'you' ? 'Ball im Aus, Einschlag für dich.' : `Ball im Aus, Einschlag ${HOME}.`); }
         else { stamp('Ruhe im Spiel', e.ball === 'you' ? 'Du hast den Ball und baust in Ruhe auf.' : `${HOME} hat den Ball und baut in Ruhe auf.`, 'warn');
           addTick(e.ball === 'you' ? 'Du hast den Ball, das Spiel beruhigt sich.' : `${HOME} hat den Ball, das Spiel beruhigt sich.`); }
-        await hold(1100); hideStamp();
+        if (e.why !== 'pp') await hold(1100); hideStamp();
       }
     }
   }
@@ -1037,9 +1087,15 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
     if (pc.wall) return [name, why + (att ? `${X.last} steht am Ball, ${HOME} stellt die Mauer.` : `${X.last} steht am Ball, deine Mauer deckt die nahe Ecke.`), att ? 'good' : 'bad'];
     return [corner ? 'Einschlag in der Ecke' : name, why + (att ? `${X.last} führt ${corner ? 'in der Ecke' : 'an der Bande'} aus, ${HOME} hält Abstand.` : `${HOME} führt ${corner ? 'in der Ecke' : 'an der Bande'} aus: ${X.last} steht am Ball.`), att ? 'good' : 'bad'];
   }
+  // Überzahl oder Unterzahl: wer mit fünf spielt, wie lange noch
+  function ppStamp(e) {
+    const sc = G.cur, mine = e.side === 'you', X = card(e.side, sc.carrier), t = secText(e.left);
+    return mine ? ['Überzahl', `Fünf gegen vier, noch ${t}. ${X.last} baut auf, ${HOME} verteidigt in der Box.`, 'good'] : ['Unterzahl', `${HOME} hat einen Mann mehr, noch ${t}. Deine vier stehen in der Box.`, 'bad'];
+  }
   function sceneStamp() {
     const sc = G.cur, att = sc.type === 'att', X = card(att ? 'you' : 'home', sc.carrier), kt = KINDTXT[sc.kind], dk = sc.deep ? sc.deep.kind : null;
     if (M.std1(sc)) return pieceStamp(sc);
+    if (sc.pp && G.pbox) return ppStamp({ side: att ? 'you' : 'home', left: G.pbox.left });
     if (dk === 'build') return ['Auslösung', att ? `${X.last} baut hinten auf, ${HOME} stört früh.` : `${HOME} baut hinten auf: Störe früh.`, 'warn'];
     if (kt) return [kt[0], att ? `${X.last} zieht los, ${kt[1]}.` : `${HOME} kontert über ${X.last}, ${kt[1]}.`, att ? 'good' : 'bad'];
     return [att ? 'Angriff' : 'Abwehr', att ? `${X.last} hat den Ball, ${HOME} steht.` : `${HOME} greift an: ${X.last} am Ball.`, 'warn'];
@@ -1655,7 +1711,7 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
   function start() {
     HOME = W.club(opp).short;
     G = M.newMatch(setup(opp), rng);
-    disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; ticker = []; $('ticker').innerHTML = ''; clockHold = null; infoCard = null;
+    disp = { you: 0, home: 0 }; penDisp = { you: 0, home: 0 }; boxShown = null; ticker = []; $('ticker').innerHTML = ''; clockHold = null; infoCard = null;
     show('match'); fullscreen(true); drawer(false); stage3(use3d() && S3.mount($('view3d'))); buildPlayers();
     G.teams.you.cards.concat(G.teams.home.cards).forEach((c, i) => place(c.id, [60 + (i % 5) * 60, i < 5 ? 430 : 370])); ballAt([180, 400], true); camSet(190, 420);
     addTick(`Anpfiff. Du spielst ${M.TACTICS[G.tactic.you].name.toLowerCase()}.`);
@@ -1676,6 +1732,8 @@ ${canD ? `<button type="button" class="act${M.trait(X) === 'dribbler' ? ' fit' :
       [`${st.duelsWon} von ${st.duels}`, 'Bullys und freie Bälle gewonnen'],
       [`${st.pieces}`, 'eigene Standards vor dem Tor'],
       [`${st.fouls} : ${st.fouled}`, 'Fouls, du und Gegner'],
+      [`${st.pens} : ${st.pensOpp}`, 'Strafen, du und Gegner'],
+      [`${st.ppGoals} : ${st.ppAgainst}`, 'Tore in Überzahl, du und Gegner'],
       [`${st.saved} von ${st.onGoal}`, 'Schüsse aufs Tor gehalten']
     ].map(r => `<li><b>${r[0]}</b><span>${r[1]}</span></li>`).join('');
     $('ticker-end').innerHTML = $('ticker').innerHTML;

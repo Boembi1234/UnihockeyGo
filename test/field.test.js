@@ -165,7 +165,7 @@ const zoneAtt = (sc, s) => sc.type === 'att' && sc.kind === 'set' && !sc.deep;
 function clearLane(s0) {
   const s = copy(s0), sc = s.cur, you = s.teams.you.cards.filter(c => c.id !== sc.carrier), home = s.teams.home.cards;
   sc.pos[sc.carrier] = [180, 140]; sc.pos[you[0].id] = [236, 100]; [[60, 300], [300, 300], [180, 340]].forEach((p, i) => { sc.pos[you[i + 1].id] = p; });
-  sc.pos[home[0].id] = [150, 118]; [[40, 250], [320, 250], [70, 330], [290, 330]].forEach((p, i) => { sc.pos[home[i + 1].id] = p; });
+  sc.pos[home[0].id] = [150, 118]; [[40, 250], [320, 250], [70, 330], [290, 330]].forEach((p, i) => { if (home[i + 1]) sc.pos[home[i + 1].id] = p; });      // in Unterzahl sind es nur vier
   sc.last = null; sc.reb = false; sc.waves = 0; return s;
 }
 // Schuss aus der laufenden Szene mit einem bestimmten Ausgang: perfekt gestoppt, das Ziel entscheidet
@@ -427,21 +427,103 @@ const roleOf = (pc, role) => Object.keys(pc.roles).find(id => pc.roles[id] === r
   ok(n.hitin > n.free && n.free > all * 0.25 && n.corner > 5 && n.rush > 40, `meist ein Einschlag (${n.hitin}, davon ${n.corner} in der Ecke), sonst ein Freischlag (${n.free}); Konter beginnen wie bisher (${n.rush})`);
 }
 
+// --- Strafen: zwei Minuten, Überzahl und Unterzahl ---
+// Stellt eine Überzahl: side spielt mit fünf, beim Gegner sitzt der Spieler mit der Rolle role auf der Strafbank
+function powerplay(side, role, cfg, seed) {
+  const r = E.makeRng(seed || 3), s = M.newMatch(setup(cfg), r), ev = [], sh = side === 'you' ? 'home' : 'you', out = s.teams[sh].cards.find(c => c.role === (role || 'LW'));
+  s.duel = null; M.penalty(s, ev, sh, out.id); M.ppAttack(s, r, ev); return { s, ev, out };
+}
+{
+  const NOPEN = { penRush: 0, penBeat: 0, penP: 0 }, rng = E.makeRng(4);
+  // Strafbank
+  const { s, ev: e0, out } = powerplay('you', 'LW'), sc = s.cur, b = s.pbox;
+  ok(b && b.side === 'home' && b.card.id === out.id && b.left === CFG.penSec && s.teams.home.cards.length === 4 && !s.teams.home.cards.some(c => c.id === out.id), 'zwei Minuten: Der Spieler sitzt auf der Strafbank, sein Team hat vier Feldspieler');
+  ok(M.card(s, 'home', out.id) === b.card && M.all(s, 'home').some(c => c.id === out.id) && M.byRole(s, 'home').LW && M.byRole(s, 'home').LW.id !== out.id, 'er bleibt auffindbar, und seine Rolle übernimmt ein Mitspieler');
+  ok(e0[0].t === 'penalty' && e0[0].side === 'home' && e0[1].t === 'pp' && e0[1].side === 'you' && e0[1].n === 1, 'angesagt werden die Strafe und der erste Angriff in Überzahl');
+  // Aufstellung fünf gegen vier
+  const you = s.teams.you.cards, P = id => sc.pos[id], role = r => P(you.find(c => c.role === r).id);
+  ok(sc.pp && sc.type === 'att' && sc.kind === 'set' && !sc.deep && sc.max === CFG.ppSteps && Object.keys(sc.pos).length === 9, 'Überzahl: fünf gegen vier vor dem Tor, vier Aktionen');
+  ok(role('LD')[1] > 230 && role('RD')[1] > 230 && role('LW')[0] < 100 && role('RW')[0] > 260 && goalDist(role('C')) < 110 && ['LD', 'RD'].indexOf(M.card(s, 'you', sc.carrier).role) >= 0, 'zwei Verteidiger hinten (einer am Ball), die Flügel tief an der Bande, der Center im Slot');
+  ok(s.teams.home.cards.every(c => goalDist(P(c.id)) < 240) && s.teams.home.cards.filter(c => goalDist(P(c.id)) < 100).length >= 2, 'der Gegner verteidigt in der Box vor dem Tor');
+  let free = 0; for (let k = 1; k <= 60; k++) { const t = powerplay('you', ['LD', 'RD', 'LW', 'C', 'RW'][k % 5], null, k).s; if (t.teams.you.cards.some(c => M.isFree(t, t.cur, c.id))) free++; }
+  ok(free >= 40, `in Überzahl steht meist ein Mitspieler frei (${free} von 60 Aufstellungen)`);
+  // Die Box schiebt mit dem Ball
+  const lw = you.find(c => c.role === 'LW').id, x1 = passTo(s, lw, 'good'), avg = t => t.teams.home.cards.reduce((a, c) => a + t.cur.pos[c.id][0], 0) / 4;
+  ok(x1.ok && x1.state.cur.pp && x1.state.cur.carrier === lw && avg(x1.state) < avg(s) - 10 && x1.state.pbox.left === CFG.penSec - CFG.sec.pass, 'nach dem Pass an die Bande schiebt die Box zur Ballseite, die Strafzeit läuft');
+  // Schuss daneben: Die Unterzahl befreit sich, die Überzahl stellt sich neu auf
+  const wide = t => { const a = M.act(t, { type: 'shoot' }, E.makeRng(3)); return M.act(a.state, { type: 'aim', target: [1.18, 0.5], hit: 0.5, t: 0 }, E.makeRng(3)); };
+  const w1 = wide(Object.assign(copy(s), { cfg: Object.assign({}, CFG, { outSave: 0, outBlock: 0 }) })), cl = ev(w1, 'clear'), p2 = ev(w1, 'pp');
+  ok(cl && cl.side === 'home' && cl.sec >= CFG.ppClear[0] && cl.sec <= CFG.ppClear[1] && p2 && p2.n === 2 && w1.state.cur.pp && w1.state.cur.type === 'att' && w1.state.phase === 'decide' && !ev(w1, 'turn') && !ev(w1, 'end'), `Schuss daneben: Der Gegner befreit sich (${cl && cl.sec} Sekunden), dann stellt sich die Überzahl neu auf`);
+  ok(w1.state.pbox.left === CFG.penSec - CFG.sec.shoot - CFG.sec.aim - cl.sec && w1.state.clock > s.clock + 0.5, 'die Strafzeit und die Uhr laufen mit');
+  let g = w1.state, n = 0, last = w1; while (g.pbox && n++ < 6) { last = wide(g); g = last.state; }
+  const pe = ev(last, 'penaltyEnd'), en = ev(last, 'end');
+  ok(!g.pbox && pe && pe.why === 'time' && pe.x === out.id && en && en.calm && en.why === 'pp' && g.phase === 'done' && g.teams.home.cards.length === 5 && g.teams.home.cards.findIndex(c => c.id === out.id) === b.at && n <= 3, `nach ${n + 1} Angriffen ist die Strafe abgesessen: Der Spieler ist zurück, das Spiel kommt zur Ruhe`);
+  ok(M.act(g, { type: 'next' }, E.makeRng(5)).ok, 'danach geht es mit dem Zeitsprung weiter');
+  // Tor in Überzahl beendet die Strafe
+  const gl = shotAt(clearLane(s), 'goal'), ge = ev(gl, 'penaltyEnd');
+  ok(ev(gl, 'shot').result === 'goal' && ge && ge.why === 'goal' && !gl.state.pbox && gl.state.teams.home.cards.length === 5 && gl.state.stats.ppGoals === 1 && gl.state.phase === 'done', 'ein Tor in Überzahl beendet die Strafe');
+  // Unterzahl: Der Gegner hat einen Mann mehr
+  const bp = powerplay('home', 'RD').s, bc = bp.cur;
+  ok(bc.pp && bc.type === 'def' && bc.max === CFG.ppStepsAi && bp.teams.you.cards.length === 4 && !!bc.intent && Object.keys(bc.pos).length === 9, 'Unterzahl: Der Gegner greift mit fünf an, deine vier verteidigen');
+  const st = M.act(bp, { type: 'defend', hit: M.contest(bp, {}).pos }, rng), co = ev(st, 'counter');
+  ok(co && co.side === 'you' && st.state.cur.type === 'att' && st.state.pbox && st.state.teams.you.cards.length === 4 && Object.keys(st.state.cur.pos).length === 9 && st.state.teams.you.cards.every(c => !!st.state.cur.pos[c.id]), 'Ballgewinn in Unterzahl: Du konterst zu viert, die Strafe läuft weiter');
+  ok(!M.act(Object.assign(copy(bp), { cfg: Object.assign({}, CFG, { foulP: 99 }) }), { type: 'defend', hit: M.contest(bp, {}).pos }, rng).events.some(e => e.t === 'penalty'), 'während einer Strafe gibt es keine zweite');
+  let ints = 0, dr = 0; for (let k = 1; k <= 80; k++) { const t = powerplay('home', ['LD', 'RD', 'LW', 'C', 'RW'][k % 5], null, k).s; ints++; if (t.cur.intent.kind === 'dribble') dr++; }
+  ok(dr / ints < 0.2, `in Überzahl lässt der Gegner den Ball laufen: Er dribbelt nur in ${pc(dr / ints)} der Fälle`);
+  // Jede Aufstellung geht auch zu viert auf (Konter, Auslösung, Umschalten, Positionsangriff)
+  let holes = 0; for (let k = 1; k <= 40; k++) for (const kind of ['set', 'rush32', 'rush21', 'solo']) for (const far of [true, false]) for (const who of ['you', 'home']) {
+    const r = E.makeRng(k * 3 + 1), t = M.newMatch(setup(), r); M.penalty(t, [], k % 2 ? 'you' : 'home', t.teams[k % 2 ? 'you' : 'home'].cards[k % 5].id); M.startChance(t, r, who, kind, undefined, true, far);
+    if (t.teams.you.cards.concat(t.teams.home.cards).some(c => !t.cur.pos[c.id]) || t.teams[who].cards.some(c => !t.cur.mark[c.id]) || !t.cur.pos[t.cur.carrier]) holes++;
+  }
+  ok(holes === 0, 'zu viert hat in jeder Aufstellung jeder Spieler seinen Platz und jeder Angreifer einen Gegenspieler');
+  // Hartes Foul: dein Zweikampf grob daneben vor dem Tor
+  const defDrib = (sc2, s2) => sc2.type === 'def' && !sc2.deep && sc2.intent.kind === 'dribble' && canHit(M.contest(s2, {}), 'gross') && canHit(M.contest(s2, {}), 'bad');
+  const d = find(defDrib, 1, { foulP: 99 }), dg = M.act(d, { type: 'defend', hit: hitFor(M.contest(d, {}), 'gross') }, rng), fo = ev(dg, 'foul'), pn = ev(dg, 'penalty'), pp = ev(dg, 'pp'), pi = ev(dg, 'piece');
+  ok(fo && fo.pen && pn && pn.side === 'you' && pn.x === fo.by && pp && pp.piece && pp.side === 'home' && pi && pi.kind === 'free' && dg.state.cur.pp && dg.state.cur.piece.first && dg.state.cur.max === CFG.ppStepsAi && dg.state.teams.you.cards.length === 4 && dg.state.stats.pens === 1, 'dein Zweikampf grob daneben: Foul, zwei Minuten, der Freischlag ist der erste Angriff des Gegners in Überzahl');
+  const db = M.act(d, { type: 'defend', hit: hitFor(M.contest(d, {}), 'bad') }, rng);
+  ok(ev(db, 'foul') && !ev(db, 'foul').pen && !ev(db, 'penalty') && !db.state.pbox, 'daneben ist ein gewöhnliches Foul: Freischlag ohne Strafe');
+  // Angezeigte Strafe: im Aufbau des Gegners grob daneben, der Vorteil läuft
+  const dd = find((sc2, s2) => (isBuild('def')(sc2) || isTurn('def')(sc2)) && sc2.intent.kind === 'dribble' && canHit(M.contest(s2, {}), 'gross'), 1), xd = M.act(dd, { type: 'defend', hit: hitFor(M.contest(dd, {}), 'gross') }, rng), ad = ev(xd, 'adv');
+  ok(ad && ad.side === 'you' && !ev(xd, 'penalty') && !ev(xd, 'foul') && xd.state.cur.adv && xd.state.cur.adv.by === ad.x && !xd.state.pbox && xd.state.cur.type === 'def', 'im Aufbau des Gegners grob daneben: Der Vorteil läuft, die Strafe ist angezeigt');
+  // ... sie wird ausgesprochen, sobald du den Ball hast, und entfällt, wenn der Gegner trifft
+  const play = (t0, save) => { let t = t0, x = null, k = 0; while (k++ < 12 && t.cur && t.cur.adv && t.phase !== 'done') { x = t.phase === 'aim' ? M.act(t, save ? { type: 'aim', zone: t.shot.zone, rt: 50 } : { type: 'aim', zone: t.shot.zone[0] + (t.shot.zone[1] === 'l' ? 'r' : 'l'), rt: 900 }, E.makeRng(7 + k)) : t.phase === 'duel' ? M.act(t, { type: 'duel', rt: 150 }, E.makeRng(7 + k)) : M.act(t, { type: 'defend', hit: hitFor(M.contest(t, {}), canHit(M.contest(t, {}), 'bad') ? 'bad' : 'near') }, E.makeRng(7 + k)); t = x.state; } return x; };
+  let called = null, off = null;
+  for (let seed = 1; seed < 200 && (!called || !off); seed++) { let t; try { t = find((sc2, s2) => (isBuild('def')(sc2) || isTurn('def')(sc2)) && sc2.intent.kind === 'dribble' && canHit(M.contest(s2, {}), 'gross'), seed * 7); } catch (e) { continue; } const a0 = M.act(t, { type: 'defend', hit: hitFor(M.contest(t, {}), 'gross') }, E.makeRng(seed)); if (!a0.state.cur.adv) continue;
+    try { const a = play(a0.state, true); if (!called && a && ev(a, 'penalty')) called = a; const c2 = play(a0.state, false); if (!off && c2 && ev(c2, 'advOff')) off = c2; } catch (e) { /* nächste Lage */ } }
+  ok(called && ev(called, 'penalty').side === 'you' && ev(called, 'pp') && called.state.cur.pp && called.state.cur.type === 'def' && called.state.teams.you.cards.length === 4 && !ev(called, 'throw') && !ev(called, 'turn'), 'hast du den Ball, wird gepfiffen: zwei Minuten, der Gegner beginnt in Überzahl');
+  ok(off && ev(off, 'shot').result === 'goal' && !ev(off, 'penalty') && !off.state.pbox && off.state.teams.you.cards.length === 5, 'trifft der Gegner vorher, entfällt die angezeigte Strafe');
+  // Der Gegner foult von hinten, wenn er überspielt ist
+  const dribOk2 = (sc2, s2) => zoneAtt(sc2, s2) && M.canDrib(s2, sc2) && canHit(M.contest(s2, { type: 'dribble' }), 'good');
+  const bt = find(dribOk2, 1, { penBeat: 99, outSave: 0, outBlock: 0 }), xb = M.act(bt, { type: 'dribble', hit: hitFor(M.contest(bt, { type: 'dribble' }), 'good') }, rng), ab = ev(xb, 'adv');
+  ok(ab && ab.side === 'home' && xb.state.cur.adv && xb.state.cur.type === 'att' && ev(xb, 'dribble').ok && !xb.state.pbox, 'du lässt ihn stehen, er hält dich fest: Strafe angezeigt, dein Angriff läuft weiter');
+  const wb = wide(clearLane(xb.state)), pb = ev(wb, 'penalty');      // freie Schussbahn, damit der Schuss sicher neben das Tor geht
+  ok(pb && pb.side === 'home' && pb.x === ab.x && ev(wb, 'pp') && wb.state.cur.pp && wb.state.cur.type === 'att' && wb.state.teams.home.cards.length === 4 && wb.state.stats.pensOpp === 1 && !ev(wb, 'turn'), 'geht dein Schuss daneben, wird gepfiffen: Du spielst in Überzahl');
+  const fair = find(dribOk2, 1, NOPEN), xf = M.act(fair, { type: 'dribble', hit: hitFor(M.contest(fair, { type: 'dribble' }), 'good') }, rng);
+  ok(!ev(xf, 'adv') && !xf.state.cur.adv, 'ohne Foul keine Strafe');
+  // Kurz vor Drittelsende dauert die Strafe nur bis zur Sirene
+  const late = M.newMatch(setup(), E.makeRng(3)); late.duel = null; late.clock = CFG.periodMin - 0.5; M.penalty(late, [], 'home', late.teams.home.cards[0].id);
+  ok(late.pbox.left === 30, 'kurz vor Drittelsende dauert die Strafe nur bis zur Sirene');
+}
+
 // --- Ganze Matches: jede Wahl im Aufbau, alle Wege kommen vor ---
 function gauss(rn) { let u = 0; for (let i = 0; i < 6; i++) u += rn(); return (u - 3) / Math.sqrt(0.5); }
 {
-  const seen = {}, N = 120; let err = null, goals = { you: 0, home: 0 }, deepActs = 0, acts = 0, seqs = 0, pers = 0, inputs = 0, clk = 0, pieces = 0;
+  const seen = {}, N = 120; let err = null, goals = { you: 0, home: 0 }, deepActs = 0, acts = 0, seqs = 0, pers = 0, inputs = 0, clk = 0, pieces = 0, pens = 0;
   try {
     for (let i = 1; i <= N; i++) {
       const rng = E.makeRng(i * 7 + 1), hr = E.makeRng(i * 11 + 3), pol = ['long', 'carry', 'short', 'mix'][i % 4]; let s = M.newMatch(setup(), rng), guard = 0; seqs++; clk = 0;
       const hit = c => Math.max(0, Math.min(1, c.pos + gauss(hr) * 80 / c.sweep));
       const act = a => { const before = JSON.stringify(s), x = M.act(s, a, rng); if (!x.ok) throw new Error('abgelehnt: ' + JSON.stringify(a) + ' in Phase ' + s.phase); if (JSON.stringify(s) !== before) throw new Error('act hat den alten Zustand verändert'); s = x.state; acts++; x.events.forEach(e => { if (e.t === 'arrive') seen[e.side + ':' + e.from + '>' + e.how] = 1; if (e.t === 'counter') seen['Konter ' + e.side + (e.near ? ' nah' : '')] = 1;
           if (e.t === 'turn') seen['Ball ' + e.side + ' ' + e.how + (e.near ? ' nah' : '')] = 1; if (e.t === 'wave') seen['Welle ' + e.side] = 1; if (e.t === 'duel') seen['Duell ' + e.kind + ' ' + e.won] = 1; if (e.t === 'loose' && e.auto) seen['frei ohne Duell'] = 1; if (e.t === 'throw') seen['Auswurf ' + e.side] = 1; if (e.t === 'end' && e.calm) seen.Ruhe = 1; if (e.t === 'defend' && e.blocked) seen.Block = 1;
+          if (e.t === 'penalty') { seen['Strafe ' + e.side] = 1; pens++; } if (e.t === 'adv') seen['angezeigt ' + e.side] = 1; if (e.t === 'advOff') seen.entfällt = 1; if (e.t === 'pp') seen['Überzahl ' + e.side] = 1; if (e.t === 'clear') seen['Befreit ' + e.side] = 1; if (e.t === 'penaltyEnd') seen['Strafe vorbei ' + e.why] = 1;
+          if ((e.t === 'seq' || e.t === 'period') && x.state.pbox) throw new Error('Strafe läuft über einen Zeitsprung hinaus');
           if (e.t === 'foul') seen['Foul ' + e.side + (e.deep ? ' hinten' : '')] = 1; if (e.t === 'out') seen['Aus ' + e.side + ' ' + e.how] = 1; if (e.t === 'piece') { seen['Standard ' + e.side + ' ' + e.kind + ' ' + e.why] = 1; pieces++; }
           if (e.t === 'seq' && e.n > 1 && x.state.cur && x.state.cur.piece) { seen['Neustart ' + (x.state.cur.type === 'att' ? 'you' : 'home') + ' ' + x.state.cur.piece.kind] = 1; pieces++; if (x.state.cur.piece.own) throw new Error('Neustart mit einem Standard in der eigenen Hälfte'); }
           if (e.t === 'seq' && e.n > 1 && x.state.cur && x.state.cur.kind === 'set' && !x.state.cur.play && !x.state.cur.piece) throw new Error('Positionsangriff nach dem Zeitsprung ohne Standard');
           if (e.t === 'seq') { seqs++; if (e.clock < clk - 1e-9) throw new Error('die Uhr läuft rückwärts'); } if (e.t === 'period') pers++; });
         if (s.clock < clk - 1e-9 && s.phase !== 'end') throw new Error('die Uhr läuft rückwärts'); clk = s.clock; if (s.clock > (s.period + 1) * CFG.periodMin + 1e-9) throw new Error('die Uhr läuft über das Drittel hinaus');
+        ['you', 'home'].forEach(sd => { if (s.teams[sd].cards.length !== (s.pbox && s.pbox.side === sd ? 4 : 5)) throw new Error('falsche Zahl Feldspieler bei ' + sd); });
+        if (s.cur && !s.cur.done && s.phase === 'decide' && s.teams.you.cards.concat(s.teams.home.cards).some(c => !s.cur.pos[c.id])) throw new Error('Spieler ohne Platz');
         if (a.type !== 'next') inputs++; if (s.cur && !s.cur.done && Object.keys(s.cur.pos).some(id => { const p = s.cur.pos[id]; return !(p[0] >= 0 && p[0] <= 360 && p[1] >= 40 && p[1] <= 760); })) throw new Error('Spieler steht neben dem Feld'); };
       while (s.phase !== 'end') {
         if (++guard > 4000) throw new Error('Match endet nicht, Phase ' + s.phase);
@@ -473,10 +555,13 @@ function gauss(rn) { let u = 0; for (let i = 0; i < 6; i++) u += rn(); return (u
   ok(!miss2.length, 'alle Übergänge kommen vor: Ballwechsel, zweite Welle, Bully, freier Ball, Auswurf, Block, Ruhe' + (miss2.length ? ', es fehlen: ' + miss2.join(', ') : ''));
   const want3 = ['Foul you', 'Foul home', 'Foul home hinten', 'Standard you free foul', 'Standard home free foul', 'Standard you hitin out', 'Standard home hitin out', 'Standard you hitin corner', 'Standard home hitin corner', 'Aus you block', 'Aus home block', 'Aus you save', 'Aus home save', 'Ball home out', 'Neustart you free', 'Neustart you hitin', 'Neustart home free', 'Neustart home hitin'], miss3 = want3.filter(k => !seen[k]);
   ok(!miss3.length, 'alle Standards kommen vor: Foul und Freischlag, Ball im Aus und Einschlag, Ecke, Neustart nach dem Zeitsprung' + (miss3.length ? ', es fehlen: ' + miss3.join(', ') : ''));
-  ok(!seen['Foul you hinten'], 'kein Foul von dir im Aufbau des Gegners: Dort läuft der Vorteil');
+  ok(!seen['Foul you hinten'], 'kein Freischlag gegen dich im Aufbau des Gegners: Dort läuft der Vorteil');
+  const want4 = ['Strafe you', 'Strafe home', 'angezeigt you', 'angezeigt home', 'entfällt', 'Überzahl you', 'Überzahl home', 'Befreit you', 'Befreit home', 'Strafe vorbei time', 'Strafe vorbei goal'], miss4 = want4.filter(k => !seen[k]);
+  ok(!miss4.length, 'Strafen kommen vor: ausgesprochen, angezeigt, entfallen, Überzahl und Unterzahl, Befreiung, abgesessen, durch ein Tor beendet' + (miss4.length ? ', es fehlen: ' + miss4.join(', ') : ''));
+  ok(pens / N > 0.3 && pens / N < 2, `Strafen pro Match: ${(pens / N).toFixed(2)}`);
   ok(pieces / N > 1 && pieces / N < 4.5, `Standards vor einem Tor pro Match: ${(pieces / N).toFixed(2)}`);
   ok(pers === 3 * N && seqs >= 3 * CFG.seqPer * N && seqs <= 3 * CFG.seqPer * N + N, `jedes Match hat drei Drittel zu ${CFG.seqPer} Sequenzen (${(seqs / N).toFixed(2)} pro Match)`);
-  ok(inputs / N > 35 && inputs / N < 62, `Eingaben pro Match: ${(inputs / N).toFixed(1)}`);
+  ok(inputs / N > 35 && inputs / N < 70, `Eingaben pro Match: ${(inputs / N).toFixed(1)}`);      // dieser Testspieler dribbelt oft und holt darum viele Strafen heraus
   ok(goals.you / N > 0.6 && goals.you / N < 3.5 && goals.home / N > 0.4 && goals.home / N < 3, `Tore pro Match bleiben im Rahmen: du ${(goals.you / N).toFixed(2)}, Gegner ${(goals.home / N).toFixed(2)}`);
 }
 

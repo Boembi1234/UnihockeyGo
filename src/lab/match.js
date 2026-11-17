@@ -43,6 +43,10 @@
    Zweikampf einen Freischlag. Die Gegner halten drei Meter Abstand, der Ball muss gespielt werden (kein Dribbling,
    kein Zugschuss). Beim Freischlag vor dem Tor steht eine Mauer: Sie deckt die nahe Ecke, der Goalie die ferne.
    Nach einem Zeitsprung beginnt ein Positionsangriff mit einem Standard (siehe «Standards», layPiece, piece, foul, out).
+   Strafen: Ein hartes Foul gibt zwei Minuten. Der Spieler sitzt auf der Strafbank, sein Team spielt zu viert, bis die
+   Zeit um ist oder der Gegner trifft. Die Überzahl stellt sich vor dem Tor auf, die Unterzahl verteidigt in der Box und
+   befreit sich, wenn sie den Ball hat. Läuft nach dem Foul ein Vorteil, ist die Strafe angezeigt und wird erst beim
+   nächsten Unterbruch ausgesprochen; fällt vorher ein Tor, entfällt sie (siehe «Strafen», penalty, ppAttack, ppFlow).
    Linien: Jedes Team hat zwei Linien zu fünf Feldspielern. Eine steht auf dem Feld, die andere erholt sich auf der Bank.
    Gewechselt wird zwischen zwei Sequenzen und nach einem Tor; der Wunsch lässt sich jederzeit setzen. Die Werte der Linie auf dem Feld bestimmen,
    wie viele Chancen entstehen.
@@ -228,6 +232,16 @@
     pieceDist: 56, pieceMin: 112, pieceAngle: 0.4, layOff: 70, layCover: 26, wallOpen: 0.34, kWall: 0.42, wallBody: 1.15, pieceSteps: 3, pieceStepsAi: 2, wallBar: 1.25, wallRx: 60,
     foulP: 0.3, foulFai: 0.035, foulMin: 0.35, foulMax: 1.8, foulEn: 0.5, pieceFouls: 1,
     outBlock: 0.2, outSave: 0.1, restart: { hitin: 0.6, free: 0.4 },
+    /* Strafen. penSec: Dauer in Sekunden. Zwei Minuten gibt es für ein hartes Foul: dein Zweikampf grob daneben; ein
+       Foul des Gegners an deinem Dribbling im Konter immer, sonst mit penP (mal seine Unfairness, siehe unfair); und
+       wenn er überspielt ist: Lässt du ihn im Dribbling stehen, hält er dich mit penBeat (mal Unfairness) von hinten
+       fest, nach einem gelungenen Pass im Konter kommt er mit penRush zu spät. Dann läuft der Vorteil, und die Strafe
+       ist nur angezeigt. Im Aufbau des Gegners ist dein Zweikampf grob daneben ebenfalls eine angezeigte Strafe.
+       Überzahl: ppSteps und ppStepsAi Aktionen pro Angriff (du, Gegner), deine Felder sind ppBoost mal breiter; in
+       Unterzahl sind deine Abwehrfelder bpBoost mal so breit. Der Gegner dribbelt in Überzahl selten (Gewicht mal ppDrib). Hat die Unterzahl den Ball, befreit sie sich: Die Uhr
+       läuft ppClear Sekunden weiter (sonst ppSetup, bis die Überzahl wieder steht). Bleiben danach weniger als ppMin
+       Sekunden, ist die Strafe abgesessen. penRest: Energie, die der Spieler auf der Strafbank zurückbekommt. */
+    penSec: 120, penP: 0.35, penRush: 0.3, penBeat: 0.4, ppSteps: 4, ppStepsAi: 3, ppBoost: 1.1, bpBoost: 1, ppDrib: 0.3, ppClear: [35, 50], ppSetup: 8, ppMin: 25, penRest: 12,
     laneRange: 36, laneMore: 0.35, intercept: 0.55, passLong: 700,
     drib: 0.52, dribSlope: 0.022, dribMin: 0.12, dribMax: 0.9,
     // Abwehrszene: richtige Abwehr stoppt so oft, verschoben um den Wertevergleich
@@ -237,7 +251,8 @@
   };
 
   const byId = (l, id) => { for (let i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; };
-  const card = (s, side, id) => byId(s.teams[side].cards, id) || byId(s.teams[side].bench || [], id);
+  const boxed = (s, side) => (s.pbox && s.pbox.side === side ? s.pbox.card : null);      // wer auf der Strafbank sitzt
+  const card = (s, side, id) => byId(s.teams[side].cards, id) || byId(s.teams[side].bench || [], id) || (boxed(s, side) && boxed(s, side).id === id ? boxed(s, side) : null);
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   function distSeg(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l, 0, 1); return dist(p, [a[0] + t * dx, a[1] + t * dy]); }
@@ -303,7 +318,7 @@
   const atkSide = sc => (sc.type === 'att' ? 'you' : 'home');
   const P = (sc, id) => sc.pos[id];
   const players = (s, side) => s.teams[side].cards;                                     // die Linie auf dem Feld
-  const all = (s, side) => s.teams[side].cards.concat(s.teams[side].bench || []);      // beide Linien
+  const all = (s, side) => s.teams[side].cards.concat(s.teams[side].bench || [], boxed(s, side) ? [boxed(s, side)] : []);      // beide Linien, auch wer auf der Strafbank sitzt
   const avgEn = cards => cards.reduce((a, c) => a + (c.en === undefined ? 100 : c.en), 0) / (cards.length || 1);
   function nearest(s, sc, side, p) { let b = null, d = Infinity; players(s, side).forEach(c => { const x = dist(P(sc, c.id), p); if (x < d) { d = x; b = c; } }); return { c: b, d }; }
   // Schussqualität 0 bis 1 aus Distanz und Winkel; Blockgefahr aus dem nächsten Verteidiger
@@ -424,6 +439,7 @@
   }
   // Laufwege: Nach jeder gelungenen Aktion laufen sich die anderen Angreifer frei (im Konter: alle aufs Tor), die Gegenspieler folgen.
   function shift(s, sc, rng) {
+    if (sc.pp) return shiftPP(s, sc, rng);                                // Überzahl: eigene Laufwege, der Gegner schiebt in der Box
     const as = atkSide(sc), left = P(sc, sc.carrier)[0] < 180, n = {}, busy = sc.mark[sc.carrier];
     Object.keys(sc.mark).forEach(a => { n[sc.mark[a]] = (n[sc.mark[a]] || 0) + 1; });
     players(s, as).forEach(c => {
@@ -451,8 +467,17 @@
   }
 
   // --- Szenen ---
-  const byRole = (s, side) => { const m = {}; players(s, side).forEach(x => { m[x.role] = x; }); return m; };
+  // In Unterzahl fehlt eine Rolle: Ein Mitspieler übernimmt sie mit (er steht dann für beide)
+  const SUBS = { LD: ['RD', 'C', 'LW', 'RW'], RD: ['LD', 'C', 'RW', 'LW'], LW: ['C', 'RW', 'LD', 'RD'], C: ['LW', 'RW', 'LD', 'RD'], RW: ['C', 'LW', 'RD', 'LD'] };
+  const byRole = (s, side) => { const m = {}; players(s, side).forEach(x => { m[x.role] = x; }); ROLES.forEach(r => { if (!m[r]) m[r] = m[SUBS[r].filter(k => m[k])[0]]; }); return m; };
   const onField = (s, side, id) => (id ? byId(players(s, side), id) : null);
+  /* Unterzahl: Fehlt dem angreifenden Team ein Spieler, bleibt ein Verteidiger ohne Gegenspieler und damit ohne Platz.
+     Er sichert vor dem eigenen Tor ab. Wer sonst keinen Platz oder keinen Gegenspieler hat, bekommt den nächsten. */
+  function fillPos(s, sc, rng) {
+    const as = atkSide(sc), ball = P(sc, sc.carrier);
+    players(s, other(as)).forEach(d => { if (!sc.pos[d.id]) sc.pos[d.id] = jit(rng, lerp(GOAL, ball, clamp(70 / Math.max(71, dist(ball, GOAL)), 0.1, 0.6)), 6); });
+    players(s, as).forEach(a => { if (!sc.pos[a.id]) sc.pos[a.id] = jit(rng, [180, clamp(ball[1] + 60, 100, 700)], 10); if (!sc.mark[a.id]) sc.mark[a.id] = nearest(s, sc, other(as), sc.pos[a.id]).c.id; });
+  }
   /* Positionsangriff: Der Ballführende steht auf seinem Platz (Bande, Mitte oder hinten). Die anderen haben sich schon
      freigelaufen: Center im Slot, ballferner Flügel am zweiten Pfosten. Ihre Gegenspieler stellen die Passwege zu, nicht
      jeder rechtzeitig. */
@@ -463,6 +488,7 @@
     const left = car.role === 'C' ? rng() < 0.5 : sc.pos[car.id][0] < 180;
     ROLES.forEach(r => { if (A[r].id !== car.id) sc.pos[A[r].id] = jit(rng, spotFor(s, sc, r, left), 9); sc.mark[A[r].id] = D[MARKS[r]].id; });
     ROLES.forEach(r => { const a = A[r], d = sc.mark[a.id]; sc.pos[d] = a.id === car.id ? jit(rng, lerp(sc.pos[a.id], GOAL, clamp(34 / dist(sc.pos[a.id], GOAL), 0.1, 0.5)), 4) : jit(rng, coverPos(s, sc, a.id, d, rng() < c.lateProb), 4); });
+    fillPos(s, sc, rng);
   }
   /* Konter vor dem Tor. kind: rush32, rush21 oder solo. Nur ein Teil der Spieler ist vorne dabei, der Rest läuft hinterher.
      o.through: allein durch nach einem Pass in die Tiefe. Dann rückt ein Mitspieler nach (Anspielstation), und der nächste
@@ -492,7 +518,7 @@
       pool.forEach(d => { const v = dist(sc.pos[x.id], sc.pos[d.id]); if (v < bd) { bd = v; b = d; } });
       sc.mark[x.id] = b.id;
     });
-    sc.carrier = car.id;
+    sc.carrier = car.id; fillPos(s, sc, rng);
   }
   /* --- Aufbau: Chancen, die nicht vor dem Tor beginnen ---
      Solange sc.deep gesetzt ist, läuft der Aufbau: { kind: 'build' (Auslösung) | 'turn' (Umschalten nach Ballgewinn),
@@ -534,6 +560,7 @@
       else p = rng() < (r === 'C' ? c.cutC : c.cutW) ? lerp(lerp(a, ball, r === 'C' ? 0.3 : 0.26), GOAL, 0.02) : back(a, 34);      // im Passweg oder im Rücken
       sc.pos[d] = jit(rng, p, 3);
     });
+    fillPos(s, sc, rng);
   }
   /* Umschalten (layTurn): Der Ball ist in der eigenen Hälfte gewonnen. Der Gegner war im Angriff: Die meisten seiner
      Spieler sind hinter dem Ball und laufen zurück, hinten sichern einer oder zwei ab. Ein eigener Spieler läuft schon in
@@ -556,7 +583,7 @@
       pool.forEach(d => { const v = dist(sc.pos[x.id], sc.pos[d.id]); if (v < bd) { bd = v; b = d; } });
       sc.mark[x.id] = b.id;
     });
-    sc.carrier = car.id; sc.deep = { kind: 'turn', n: 0, max: 1, run: run.id, sx };
+    sc.carrier = car.id; sc.deep = { kind: 'turn', n: 0, max: 1, run: run.id, sx }; fillPos(s, sc, rng);
   }
   /* Der Aufbau ist vorbei, vor dem Tor geht es weiter. how: 'through' (allein durch: als Alleingang, mit höchstens einer
      Aktion vor dem Schuss), 'rush21' oder 'rush32' (Überzahl; nach einer Auslösung mit einer Aktion mehr als im Konter,
@@ -596,6 +623,8 @@
     const T = onField(s, as, taker) || (free ? A[sample({ C: 0.4, LW: 0.3, RW: 0.3 }, rng)] : A[ns < 0 ? 'LW' : 'RW']), rest = players(s, as).filter(x => x.id !== T.id), roles = {}, q = {};
     const take = (...fs) => { for (let k = 0; k < fs.length; k++) { const i = rest.findIndex(fs[k]); if (i >= 0) return rest.splice(i, 1)[0]; } return rest.shift(); };
     const fwd = x => FWD.indexOf(x.role) !== -1, put = (x, role, pt) => { roles[x.id] = role; q[role] = x; sc.pos[x.id] = jit(rng, pt, 4); };
+    // Ein Team in Unterzahl führt aus (kommt im Spiel nicht vor, siehe canFoul und canOut): gewöhnliche Aufstellung
+    if (rest.length < 4) { sc.pos = {}; sc.mark = {}; laySet(s, sc, rng, T.id); sc.piece = { kind, first: true, at: sc.pos[sc.carrier].slice(), os, wall: null, roles }; return; }
     sc.pos = {}; sc.mark = {}; sc.carrier = T.id; sc.pos[T.id] = p;
     let wall = null;
     if (free) {
@@ -626,7 +655,38 @@
     }
     // Abstand: Kein Gegner steht näher als drei Meter am Ball
     players(s, other(as)).forEach(d => { const v = sc.pos[d.id], k = dist(v, p); if (k < c.pieceDist) sc.pos[d.id] = k < 1 ? [p[0], p[1] - c.pieceDist] : lerp(p, v, c.pieceDist / k); });
+    fillPos(s, sc, rng);
     sc.piece = { kind, first: true, at: p, os, wall, roles };
+  }
+
+  /* --- Überzahl und Unterzahl (2-Minuten-Strafe) ---
+     Das Team mit fünf Spielern stellt sich vor dem Tor auf: die zwei Verteidiger hinten, die Flügel tief an der Bande,
+     der Center im Slot. Der Gegner verteidigt zu viert in der Box: vier Ecken vor dem Tor, die mit dem Ball zur Seite
+     schieben. Wer dem Ball am nächsten steht, rückt heraus (close: wie weit, 0 bis 1). Jeder Angreifer gehört zum
+     nächsten Verteidiger: Einer ist immer frei. Nach jeder Aktion (shiftPP) läuft der ballferne Flügel an den zweiten
+     Pfosten, der Center zur Ballseite, und die Box schiebt nach. */
+  const PPQ = { LD: [108, 262], RD: [252, 262], LW: [64, 130], RW: [296, 130], C: [180, 122] };
+  function setBox(s, sc, rng, close) {
+    const as = atkSide(sc), ds = players(s, other(as)), ball = P(sc, sc.carrier), dx = clamp((ball[0] - 180) * 0.3, -40, 40), up = clamp((ball[1] - 150) * 0.1, -8, 12);
+    const spots = [[152 + dx, 104 + up], [208 + dx, 104 + up], [146 + dx, 172 + up], [214 + dx, 172 + up]], pref = { RD: 0, LD: 1, RW: 2, LW: 3 }, at = {}, used = {};
+    ds.forEach(d => { const k = pref[d.role]; if (k !== undefined && !used[k]) { used[k] = 1; at[d.id] = k; } });      // Verteidiger tief, Flügel hoch, der Center füllt die Lücke
+    ds.forEach(d => { if (at[d.id] === undefined) { let k = 0; while (used[k]) k++; used[k] = 1; at[d.id] = k; } });
+    ds.forEach(d => { sc.pos[d.id] = jit(rng, spots[at[d.id]] || [180 + dx, 138], 3); });
+    let near = ds[0], nd = Infinity; ds.forEach(d => { const v = dist(sc.pos[d.id], ball); if (v < nd) { nd = v; near = d; } });
+    const sp = sc.pos[near.id], t = lerp(sp, ball, close);
+    sc.pos[near.id] = dist(t, ball) < 30 ? lerp(ball, sp, 30 / Math.max(30, dist(sp, ball))) : t;      // er rückt heraus, bleibt aber einen Schritt weg
+    players(s, as).forEach(a => { sc.mark[a.id] = a.id === sc.carrier ? near.id : nearest(s, sc, other(as), P(sc, a.id)).c.id; });
+  }
+  function layPP(s, sc, rng, carrier) {
+    const as = atkSide(sc), A = byRole(s, as), car = onField(s, as, carrier) || A[rng() < 0.5 ? 'LD' : 'RD'];
+    sc.pos = {}; sc.mark = {}; sc.carrier = car.id;
+    players(s, as).forEach(x => { sc.pos[x.id] = jit(rng, PPQ[x.role], 6); });
+    setBox(s, sc, rng, 0.4);
+  }
+  function shiftPP(s, sc, rng) {
+    const as = atkSide(sc), left = P(sc, sc.carrier)[0] < 180, T = { LW: left ? [64, 130] : [126, 96], RW: left ? [234, 96] : [296, 130], C: [180 + (left ? -16 : 16), 120], LD: [left ? 108 : 150, 258], RD: [left ? 210 : 252, 258] };
+    players(s, as).forEach(x => { if (x.id === sc.carrier) return; const p = lerp(P(sc, x.id), T[x.role], 0.7); sc.pos[x.id] = [clamp(p[0] + (rng() - 0.5) * 12, 30, 330), clamp(p[1] + (rng() - 0.5) * 10, 84, 360)]; });
+    setBox(s, sc, rng, sc.close === undefined ? 0.45 : sc.close); sc.close = undefined; sc.freed = null;
   }
 
   /* Stellt eine Chance auf. kind: set (Positionsangriff), rush32, rush21 (Konter) oder solo (Alleingang, führt direkt zum
@@ -635,11 +695,13 @@
   function makeScene(s, rng, type, opt) {
     const o = opt || {}, kind = o.kind || 'set', c = s.cfg;
     const sc = { type, kind, step: 0, max: kind === 'set' ? (type === 'def' ? c.defSteps : c.maxSteps) : c.counterSteps, counter: kind !== 'set', pos: {}, mark: {}, carrier: null, intent: null, press: 0, dribs: {}, last: null, deep: null };
-    const std = kind === 'set' ? o.std : null;
-    if (kind === 'set') { if (o.deep) layBuild(s, sc, rng, o.carrier, !!std && std.kind === 'hitin'); else if (std) layPiece(s, sc, rng, std.kind, std.at, o.carrier); else laySet(s, sc, rng, o.carrier); }
+    const std = kind === 'set' ? o.std : null, pp = !!std && !!std.pp;
+    if (pp) { layPP(s, sc, rng, o.carrier); sc.pp = true; sc.max = type === 'def' ? c.ppStepsAi : c.ppSteps; }
+    else if (kind === 'set') { if (o.deep) layBuild(s, sc, rng, o.carrier, !!std && std.kind === 'hitin'); else if (std) layPiece(s, sc, rng, std.kind, std.at, o.carrier); else laySet(s, sc, rng, o.carrier); }
     else if (o.deep && kind !== 'solo') layTurn(s, sc, rng, o.carrier);
     else layRush(s, sc, rng, kind, o.carrier);
-    if (std && o.deep) sc.piece = { kind: std.kind, first: true, own: true, at: sc.pos[sc.carrier].slice(), os: 0, wall: null, roles: {} };
+    if (pp) { /* Überzahl: siehe layPP */ }
+    else if (std && o.deep) sc.piece = { kind: std.kind, first: true, own: true, at: sc.pos[sc.carrier].slice(), os: 0, wall: null, roles: {} };
     else if (std) sc.max = type === 'def' ? c.pieceStepsAi : c.pieceSteps;
     sc.bar = newBar(rng);
     s.cur = sc;
@@ -668,7 +730,7 @@
     players(s, 'home').forEach(c => { if (c.id === sc.carrier) return; const pi = passInfo(s, sc, sc.carrier, c.id), v = (1 - pi.risk) * shotInfo(s, sc, c.id).q * (1 + 0.5 * Math.abs(pi.lat)) * (isFree(s, sc, c.id) ? 1.3 : 1); cand[c.id] = v; if (v > bestV) { bestV = v; bestTo = c.id; } });
     if (std1(sc) && bestTo) bestTo = sample(cand, rng);      // Standard: nicht immer dieselbe Variante
     w.pass = bestV * 1.1;
-    w.dribble = canDrib(s, sc) ? dribInfo(s, sc, sc.carrier).p * 0.45 : 0;
+    w.dribble = canDrib(s, sc) ? dribInfo(s, sc, sc.carrier).p * 0.45 * (sc.pp ? s.cfg.ppDrib : 1) : 0;      // in Überzahl läuft der Ball, nicht der Mann
     const kind = sample(w, rng);
     sc.intent = kind === 'pass' ? { kind, to: bestTo } : { kind };
   }
@@ -1130,9 +1192,9 @@
     const s = {
       cfg, homeName: setup.homeName || '', teams: { you: team(setup.you), home: team(setup.home) },
       tac: { you: deck(setup.you.tac), home: deck(setup.home.tac) }, fx: { you: fx0(), home: fx0() },
-      period: 0, clock: 0, from: 0, minute: 0, seq: { n: 0, acts: 0, scenes: 0, goal: false, extra: false }, duel: null, throw: null, tactic: { you: TACTICS[setup.tactic] ? setup.tactic : 'bal', home: 'bal' }, chances: { you: 0, home: 0 },
+      period: 0, clock: 0, from: 0, minute: 0, seq: { n: 0, acts: 0, scenes: 0, goal: false, extra: false }, duel: null, throw: null, pbox: null, tactic: { you: TACTICS[setup.tactic] ? setup.tactic : 'bal', home: 'bal' }, chances: { you: 0, home: 0 },
       score: { you: 0, home: 0 }, cur: null, fill: null, shot: null, phase: 'decide', pen: null, outcome: null, results: [],
-      stats: { att: 0, def: 0, shots: 0, goals: 0, faced: 0, onGoal: 0, saved: 0, passes: 0, passOk: 0, dribbles: 0, dribOk: 0, stops: 0, counters: 0, bars: 0, hits: 0, perfects: 0, nears: 0, changes: 0, duels: 0, duelsWon: 0, seqs: 0, blocks: 0, fouls: 0, fouled: 0, pieces: 0 }
+      stats: { att: 0, def: 0, shots: 0, goals: 0, faced: 0, onGoal: 0, saved: 0, passes: 0, passOk: 0, dribbles: 0, dribOk: 0, stops: 0, counters: 0, bars: 0, hits: 0, perfects: 0, nears: 0, changes: 0, duels: 0, duelsWon: 0, seqs: 0, blocks: 0, fouls: 0, fouled: 0, pieces: 0, pens: 0, pensOpp: 0, ppGoals: 0, ppAgainst: 0, shGoals: 0 }
     };
     setVal(s);
     advance(s, rng, null);
@@ -1143,7 +1205,7 @@
   // Linienwechsel: Wer es wünscht, wechselt jetzt. Die Linie von der Bank kommt aufs Feld.
   function applyLines(s, ev) {
     ['you', 'home'].forEach(sd => {
-      const T = s.teams[sd]; if (!T.bench || T.want === T.line) return;
+      const T = s.teams[sd]; if (!T.bench || T.want === T.line || boxed(s, sd)) return;      // wer in Unterzahl spielt, wechselt erst danach
       const b = T.cards; T.cards = T.bench; T.bench = b; T.line = T.want; if (sd === 'you') s.stats.changes++;
       if (ev) ev.push({ t: 'line', side: sd, line: T.line });
     });
@@ -1203,7 +1265,7 @@
      std: Ein Positionsangriff beginnt mit einem Standard { kind: 'hitin' | 'free', at } (siehe layPiece). */
   function startChance(s, rng, side, kind, carrier, quiet, far, std) {
     const type = side === 'you' ? 'att' : 'def', c = s.cfg, fm = s.fx[side], fo = s.fx[other(side)];
-    let play = false; if (fm.play > 0 && kind === 'set') { fm.play--; play = true; kind = 'rush32'; }      // Spielzug: einstudierter Angriff in Überzahl, statt des nächsten Angriffs aus dem Spiel
+    let play = false; if (fm.play > 0 && kind === 'set' && !(std && std.pp)) { fm.play--; play = true; kind = 'rush32'; }      // Spielzug: einstudierter Angriff in Überzahl, statt des nächsten Angriffs aus dem Spiel
     s.duel = null; s.throw = null; s.shot = null; s.seq.scenes++;
     // Wo die Chance beginnt: Konter mit dem Umschalten hinten, ein Teil der Positionsangriffe mit der Auslösung. far legt es fest.
     const deep = play ? false : far !== undefined ? !!far : kind === 'solo' ? false : rng() < (kind !== 'set' ? c.turnProb : side === 'you' ? c.buildProb : c.buildProbAi);
@@ -1217,6 +1279,7 @@
     if (sc.piece && !sc.piece.own && side === 'you') s.stats.pieces++;
     if (side === 'you') { sc.boost = (play ? c.fxPlay : 1) * (fm.empty ? c.fxEmptyAtt : 1) * (fo.press > 0 ? c.fxPressAi : 1); if (fo.press > 0) { fo.press--; sc.pressed = true; } }
     else { sc.dboost = play ? c.fxPlayAi : 1; if (fo.press > 0) { fo.press--; sc.pressing = true; } }
+    if (sc.pp) { if (side === 'you') sc.boost *= c.ppBoost; else sc.dboost *= c.bpBoost; }      // Überzahl: breitere Felder, Unterzahl: schmalere
     sc.fresh = !quiet;                                       // beginnt nach einem Zeitsprung
     if (kind === 'solo') setShot(s, rng, side, sc.carrier, Math.max(0.8, shotInfo(s, sc, sc.carrier).q), 'counter', { px: P(sc, sc.carrier)[0] });
   }
@@ -1229,6 +1292,7 @@
      Drittel eine Sequenz mehr. */
   function advance(s, rng, ev) {
     const c = s.cfg, start = s.period * c.periodMin, end = start + c.periodMin, was = s.seq, empty = s.fx.you.empty || s.fx.home.empty;
+    if (s.pbox) penaltyEnd(s, ev, 'time');                                // Zeitsprung oder Drittelsende: Die Strafe ist abgesessen
     aiCoach(s, ev); applyLines(s, ev);
     s.from = s.clock; s.fill = null; s.duel = null; s.throw = null; s.shot = null;
     if (was.n >= c.seqPer && !(empty && !was.extra)) {
@@ -1272,22 +1336,86 @@
   }
   /* Foul im Zweikampf: Der Verteidiger trifft den Stock oder den Mann statt den Ball. Wie oft, hängt an seiner Fairness
      und an seiner Müdigkeit. Höchstens pieceFouls Freischläge pro Szene: Danach lässt der Schiedsrichter laufen. */
-  const foulP = (c, D) => c.foulP * clamp(1 + (78 - D.fai) * c.foulFai, c.foulMin, c.foulMax) * (1 + c.foulEn * (1 - clamp(D.en === undefined ? 100 : D.en, 0, 100) / 100));
-  const canFoul = (s, sc) => (sc.fouls || 0) < s.cfg.pieceFouls;
+  const unfair = (c, D) => clamp(1 + (78 - D.fai) * c.foulFai, c.foulMin, c.foulMax) * (1 + c.foulEn * (1 - clamp(D.en === undefined ? 100 : D.en, 0, 100) / 100));
+  const foulP = (c, D) => c.foulP * unfair(c, D);
+  // Kein Freischlag, solange eine Strafe angezeigt ist, und keiner für ein Team in Unterzahl (es hat andere Sorgen)
+  const short = (s, sc) => !!s.pbox && s.pbox.side === atkSide(sc);
+  const canFoul = (s, sc) => (sc.fouls || 0) < s.cfg.pieceFouls && !sc.adv && !short(s, sc);
+  const canPen = (s, sc) => !s.pbox && !(sc && sc.adv) && !s.pen;                       // höchstens eine Strafe zur gleichen Zeit
   /* Freischlag nach einem Foul von D (Team side) an X. Vor dem Tor: Standard mit Mauer. Im Aufbau, weit weg vom Tor:
      Das Team rückt in Ruhe auf, die Abwehr steht, es geht als Positionsangriff weiter. */
-  function foul(s, rng, ev, side, D, X) {
-    const sc = s.cur, at = P(sc, X.id).slice(), deep = !!sc.deep;
+  function foul(s, rng, ev, side, D, X, hard) {
+    const sc = s.cur, c = s.cfg, at = P(sc, X.id).slice(), deep = !!sc.deep, pen = !!hard && canPen(s, sc), as = other(side);
     sc.fouls = (sc.fouls || 0) + 1; if (side === 'you') s.stats.fouls++; else s.stats.fouled++;
     if (sc.piece) sc.piece.first = false;
-    ev.push({ t: 'foul', side, by: D.id, on: X.id, at, deep });
-    if (!deep) return piece(s, rng, ev, 'free', at, 'foul', X.id);
+    ev.push({ t: 'foul', side, by: D.id, on: X.id, at, deep, pen });
+    if (pen) penalty(s, ev, side, D.id);                                  // hartes Foul: zwei Minuten
+    if (!deep) {
+      if (pen) { s.pbox.n = 1; ev.push({ t: 'pp', side: as, n: 1, left: s.pbox.left, piece: true }); }
+      piece(s, rng, ev, 'free', at, 'foul', X.id);
+      // Der Freischlag ist der erste Angriff in Überzahl
+      if (pen) { sc.pp = true; sc.max = as === 'you' ? c.ppSteps : c.ppStepsAi; if (as === 'you') sc.boost = (sc.boost || 1) * c.ppBoost; else sc.dboost = (sc.dboost || 1) * c.bpBoost; }
+      return;
+    }
+    if (pen) { closeChance(s, null); return ppAttack(s, rng, ev); }
     sc.carrier = X.id; arrive(s, sc, rng, ev, 'set', { free: true });
     if (side === 'you') aiIntent(s, rng);
   }
+  /* --- Strafen ---
+     2 Minuten: Der Spieler id des Teams side geht auf die Strafbank (s.pbox: { side, card, at: sein Platz in der Linie,
+     left: Sekunden, total, n: Angriffe der Überzahl }). Sein Team spielt zu viert, bis die Zeit um ist oder der Gegner
+     trifft; die Strafe endet spätestens mit dem Drittel. */
+  function penalty(s, ev, side, id) {
+    const T = s.teams[side], i = T.cards.findIndex(x => x.id === id), c = s.cfg; if (i < 0 || !canPen(s, null)) return false;
+    const left = Math.round(clamp(((s.period + 1) * c.periodMin - s.clock) * 60, 20, c.penSec));
+    s.pbox = { side, card: T.cards.splice(i, 1)[0], at: i, left, total: left, n: 0 };
+    if (side === 'you') s.stats.pens++; else s.stats.pensOpp++;
+    setVal(s); ev.push({ t: 'penalty', side, x: id, left });
+    return true;
+  }
+  // Die Strafe ist vorbei: why 'time' (abgesessen) oder 'goal' (Tor in Überzahl). Der Spieler kommt zurück, etwas erholt.
+  function penaltyEnd(s, ev, why) {
+    const b = s.pbox; if (!b) return;
+    s.pbox = null; drain(b.card, -s.cfg.penRest); s.teams[b.side].cards.splice(b.at, 0, b.card); setVal(s);
+    if (ev) ev.push({ t: 'penaltyEnd', side: b.side, x: b.card.id, why });
+  }
+  // Angriff in Überzahl: Das Team mit fünf Spielern stellt sich vor dem Tor auf (layPP)
+  function ppAttack(s, rng, ev) {
+    const b = s.pbox, side = other(b.side); b.n++;
+    ev.push({ t: 'pp', side, n: b.n, left: Math.max(0, b.left) });
+    startChance(s, rng, side, 'set', undefined, true, false, { pp: true });
+  }
+  /* Während einer Strafe wechselt der Ball oder das Spiel ist unterbrochen. Hat die Unterzahl den Ball, befreit sie
+     sich: Die Uhr läuft ppClear Sekunden. Bleibt genug Strafzeit (ppMin), stellt sich die Überzahl neu auf. Sonst ist
+     die Strafe abgesessen, und das Spiel kommt zur Ruhe. */
+  function ppFlow(s, rng, ev, side, how) {
+    const b = s.pbox, c = s.cfg, sc = s.cur, sec = side === b.side ? Math.round(c.ppClear[0] + rng() * (c.ppClear[1] - c.ppClear[0])) : c.ppSetup;
+    closeChance(s, null); s.shot = null;
+    b.left -= sec; tick(s, sec);
+    if (side === b.side) ev.push({ t: 'clear', side, how, sec, left: Math.max(0, b.left) });
+    if (b.left >= c.ppMin) return ppAttack(s, rng, ev);
+    penaltyEnd(s, ev, 'time');
+    ev.push({ t: 'end', why: 'pp', goal: null, calm: true, ball: side }); sc.done = true; s.phase = 'done';
+  }
+  /* Angezeigte Strafe (sc.adv: { side, by }): Der Vorteil lief. Jetzt hat das gefoulte Team den Ball verloren, oder das
+     Spiel ist unterbrochen: Der Spieler geht auf die Strafbank, das gefoulte Team beginnt in Überzahl. Gibt true
+     zurück, wenn gepfiffen wurde. */
+  function stopped(s, rng, ev) {
+    const sc = s.cur, a = sc && sc.adv; if (!a) return false;
+    sc.adv = null;
+    if (!penalty(s, ev, a.side, a.by)) return false;
+    closeChance(s, null); s.shot = null; ppAttack(s, rng, ev);
+    return true;
+  }
+  // Überspielt: Lässt du den Verteidiger D im Dribbling stehen (drib) oder gelingt dir im Konter ein Pass, foult er
+  // manchmal von hinten. Der Vorteil läuft, die Strafe ist angezeigt.
+  function rushFoul(s, rng, ev, sc, D, g, on, drib) {
+    if (!(drib || sc.counter || (sc.deep && sc.deep.kind === 'turn')) || (g !== 'good' && g !== 'perfect') || !canPen(s, sc) || !D || !onField(s, 'home', D.id)) return;
+    if (rng() < (drib ? s.cfg.penBeat : s.cfg.penRush) * unfair(s.cfg, D)) { sc.adv = { side: 'home', by: D.id }; ev.push({ t: 'adv', side: 'home', x: D.id, on }); }
+  }
   /* Ball im Aus: Ein geblockter Schuss fliegt über die Seitenbande, eine Parade lenkt den Ball hinter dem Tor ins Aus.
      Einschlag für das angreifende Team att: an der Bande oder in der Ecke. Zählt wie eine zweite Welle. */
-  const canOut = (s, sc) => (sc.waves || 0) < s.cfg.waveMax;
+  const canOut = (s, sc) => (sc.waves || 0) < s.cfg.waveMax && !short(s, sc);
   function out(s, rng, ev, att, from, how) {
     const sc = s.cur, left = Math.abs(from[0] - 180) < 6 ? rng() < 0.5 : from[0] < 180, at = how === 'save' ? [left ? 36 : 324, 64] : [left ? 30 : 330, clamp(Math.round(from[1] + (rng() - 0.5) * 60), 90, 300)];
     sc.waves = (sc.waves || 0) + 1; s.shot = null;
@@ -1374,6 +1502,8 @@
      gehaltenen Ball mit dem Auswurf, gegen einen aufgerückten Gegner (er war im Positionsangriff) oft mit dem Konter,
      sonst mit der Auslösung hinten. */
   function turnover(s, rng, ev, side, how, by, near) {
+    if (stopped(s, rng, ev)) return;                                      // angezeigte Strafe: Pfiff
+    if (s.pbox) return ppFlow(s, rng, ev, side, how);                     // Strafe läuft: befreien, dann stellt sich die Überzahl neu auf
     const sc = s.cur, c = s.cfg, opp = other(side), high = sc.kind === 'set' && !sc.deep, behind = how === 'behind' || how === 'out';
     closeChance(s, null);
     if (near) { ev.push({ t: 'turn', side, how, x: by || null, kind: 'set', near: true }); return startChance(s, rng, side, 'set', by, true, false); }
@@ -1432,6 +1562,7 @@
      Konter: meist in Überzahl gegen deine Verteidiger, nur selten allein vor dem Tor. near: Der Ball ging im Aufbau in der
      eigenen Hälfte verloren. Dann steht der Gegner schon vor deinem Tor, öfter allein; sonst beginnt sein Konter mit dem Umschalten. */
   function lost(s, rng, ev, by, counter, near) {
+    if (stopped(s, rng, ev)) return;                                      // angezeigte Strafe gegen den Gegner: Pfiff statt Ballverlust
     if (!counter) return turnover(s, rng, ev, 'home', 'won', by, near);
     const kind = sample(near ? { rush21: 0.45, solo: 0.3, rush32: 0.25 } : { rush32: 0.42, rush21: 0.42, solo: 0.16 }, rng);
     ev.push({ t: 'counter', side: 'home', x: by, kind, near: !!near });
@@ -1466,7 +1597,7 @@
       s.stats.passes++; drain(me, c.enPass); drain(card(s, 'you', a.to), c.enRecv);
       ev.push({ t: 'pass', from: X, to: a.to, ok, grade: g, w: ct.w, risk: 1 - ct.p, by: ct.by, long: pi.long, deep: dp.kind, av: passVal(me), dv: stanceVal(D, 'pass'), trait: has(me, 'passer') ? 'passer' : null, dtrait: has(D, 'anti') ? 'anti' : null });
       if (!ok) { sc.pos[ct.by] = lerp(P(sc, X), P(sc, a.to), pi.long ? 0.82 : 0.5); return lost(s, rng, ev, ct.by, g === 'gross' || s.fx.you.empty, own && !pi.long); }
-      s.stats.passOk++; dp.n++;
+      s.stats.passOk++; dp.n++; rushFoul(s, rng, ev, sc, D, g, a.to);
       sc.carrier = a.to; sc.last = { type: 'pass', to: a.to, lat: g === 'near' || pi.long ? 0 : pi.lat };      // nach einem langen Ball wird angenommen, nicht direkt geschossen
       if (a.to === dp.run) {
         const how = g === 'near' ? (turn ? base : 'rush21') : turn || g === 'perfect' ? 'through' : 'rush21';
@@ -1479,11 +1610,11 @@
     if (ct.free) { drain(me, c.enPass); dp.n++; ev.push({ t: 'carry', side: 'you', x: X, deep: dp.kind }); return arrive(s, sc, rng, ev, turn ? base : 'rush32'); }
     s.stats.dribbles++; drain(me, c.enDrib);
     ev.push({ t: 'dribble', x: X, by: ct.by, ok, grade: g, w: ct.w, p: ct.p, deep: dp.kind, av: dribVal(me), dv: stanceVal(D, 'zwei'), trait: has(me, 'dribbler') ? 'dribbler' : null, dtrait: has(D, 'kampf') ? 'kampf' : null });
-    if ((g === 'bad' || g === 'near') && canFoul(s, sc) && rng() < foulP(c, D)) { ev[ev.length - 1].foul = true; return foul(s, rng, ev, 'home', D, me); }      // er kommt nur mit einem Foul an den Ball
+    if ((g === 'bad' || g === 'near') && canFoul(s, sc) && rng() < foulP(c, D)) { ev[ev.length - 1].foul = true; return foul(s, rng, ev, 'home', D, me, turn || rng() < c.penP * unfair(c, D)); }      // er kommt nur mit einem Foul an den Ball; im Konter ist das eine Strafe
     if (!ok) return lost(s, rng, ev, ct.by, g === 'gross' || s.fx.you.empty, own);
     dp.n++; sc.last = { type: 'dribble', x: X };
     if (g === 'near') { if (dp.n >= dp.max) return arrive(s, sc, rng, ev, 'set'); sc.dribs[X] = (sc.dribs[X] || 0) + 1; sc.bar = newBar(rng); return; }
-    s.stats.dribOk++;
+    s.stats.dribOk++; rushFoul(s, rng, ev, sc, D, g, X, true);
     arrive(s, sc, rng, ev, turn ? base : 'rush32', { late: g === 'perfect' });
   }
   /* Abwehr im Aufbau des Gegners: ein Balken gegen seine Aktion. Einen langen Pass fängst du schon mit «Im Feld» ab (er
@@ -1501,12 +1632,16 @@
     sc.press = (sc.press || 0) + gain;
     ev.push({ t: 'defend', action: d.action, target: it.to || null, intent: it, by: D.id, x: X.id, stopped: won, grade: g, gain, w: d.w, av: d.atkV, dv: d.dv, trait: d.trait, long, deep: dp.kind });
     if (sc.piece) sc.piece.first = false;
+    // Zweikampf grob daneben: Der Gegner ist durch, der Vorteil läuft, aber die Strafe ist angezeigt
+    if (d.action === 'press' && g === 'gross' && canPen(s, sc)) { sc.adv = { side: 'you', by: D.id }; s.stats.fouls++; ev.push({ t: 'adv', side: 'you', x: D.id, on: X.id }); }
     if (back) {
+      if (stopped(s, rng, ev)) { s.stats.stops++; return; }
       // Gegenpressing: Ball zurückgeholt, dein Angriff geht vor dem Tor weiter (kein Konter: der Gegner steht noch hinten)
       s.stats.stops++; ev.push({ t: 'turn', side: 'you', how: 'press', x: D.id, kind: 'set' });
       closeChance(s, null); startChance(s, rng, 'you', 'set', D.id, true, false); return;
     }
     if (won) {
+      if (stopped(s, rng, ev)) { s.stats.stops++; return; }
       const kind = sample(long ? { rush32: 0.5, rush21: 0.4, solo: 0.1 } : { rush21: 0.45, solo: 0.3, rush32: 0.25 }, rng);
       s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id, kind, near: !long });
       closeChance(s, null); startChance(s, rng, 'you', kind, D.id, true, long); return;
@@ -1554,7 +1689,8 @@
       s.stats.passes++; drain(me, s.cfg.enPass); drain(card(s, 'you', a.to), s.cfg.enRecv);
       ev.push({ t: 'pass', from: X, to: a.to, ok, grade: g, w: c.w, risk: 1 - c.p, by: c.by, av: passVal(me), dv: stanceVal(D, 'pass'), trait: has(me, 'passer') ? 'passer' : null, dtrait: has(D, 'anti') ? 'anti' : null });
       if (!ok) { sc.pos[c.by] = lerp(P(sc, X), P(sc, a.to), 0.5); return lost(s, rng, ev, c.by, g === 'gross' || s.fx.you.empty); }
-      s.stats.passOk++;
+      s.stats.passOk++; rushFoul(s, rng, ev, sc, D, g, a.to);
+      sc.close = g === 'perfect' ? 0.15 : g === 'near' ? 0.9 : 0.45;      // Überzahl: so weit rückt die Box zum neuen Ballführenden heraus
       // Der Gegenspieler des Empfängers rückt nach: nach einem perfekten Pass kaum, nach einem knappen Pass steht er eng dran
       const m = sc.mark[a.to], lat = passInfo(s, sc, X, a.to).lat; if (m) sc.pos[m] = lerp(P(sc, m), lerp(P(sc, a.to), GOAL, 0.15), g === 'perfect' ? 0.05 : g === 'near' ? 0.92 : 0.2);
       sc.carrier = a.to; shift(s, sc, rng); sc.step++; sc.bar = newBar(rng);
@@ -1563,11 +1699,11 @@
     }
     s.stats.dribbles++; drain(me, s.cfg.enDrib);
     ev.push({ t: 'dribble', x: X, by: c.by, ok, grade: g, w: c.w, p: c.p, av: dribVal(me), dv: stanceVal(D, 'zwei'), trait: has(me, 'dribbler') ? 'dribbler' : null, dtrait: has(D, 'kampf') ? 'kampf' : null });
-    if ((g === 'bad' || g === 'near') && canFoul(s, sc) && rng() < foulP(s.cfg, D)) { ev[ev.length - 1].foul = true; return foul(s, rng, ev, 'home', D, me); }      // er kommt nur mit einem Foul an den Ball
+    if ((g === 'bad' || g === 'near') && canFoul(s, sc) && rng() < foulP(s.cfg, D)) { ev[ev.length - 1].foul = true; return foul(s, rng, ev, 'home', D, me, sc.counter || rng() < s.cfg.penP * unfair(s.cfg, D)); }      // er kommt nur mit einem Foul an den Ball; im Konter oder wenn es hart war: Strafe
     if (!ok) return lost(s, rng, ev, c.by, g === 'gross' || s.fx.you.empty);
     sc.dribs[X] = (sc.dribs[X] || 0) + 1; sc.last = { type: 'dribble', x: X };
     if (g !== 'near') {
-      s.stats.dribOk++;
+      s.stats.dribOk++; rushFoul(s, rng, ev, sc, D, g, X, true);
       /* Vorbei: ein Stück näher ans Tor (perfekt mehr), aber nicht tiefer als bis vor den Slot; von dort geht es nur noch zur
          Mitte. Der Gegenspieler bleibt stehen, der nächste Verteidiger hilft aus und lässt dafür seinen Mann frei. */
       const cf = s.cfg, p = P(sc, X), dG = dist(p, GOAL), fwd = Math.min(g === 'perfect' ? cf.dribStepPerfect : cf.dribStep, Math.max(0, dG - cf.dribStop));
@@ -1597,7 +1733,7 @@
     const blocked = !won && it.kind === 'shoot' && g === 'good' && !s.fx.you.empty;      // im Feld gegen den Schuss: geblockt
     ev.push({ t: 'defend', action: d.action, target: it.to || null, intent: it, by: D.id, x: X.id, stopped: won, blocked, grade: g, gain, w: d.w, av: d.atkV, dv: d.dv, trait: d.trait, wall: !!d.wall });
     if (sc.piece) sc.piece.first = false;
-    if (tackleFoul(s, rng, sc, d, D, g, won)) { ev[ev.length - 1].foul = true; return foul(s, rng, ev, 'you', D, X); }
+    if (tackleFoul(s, rng, sc, d, D, g, won)) { ev[ev.length - 1].foul = true; return foul(s, rng, ev, 'you', D, X, g === 'gross'); }      // grob daneben: zwei Minuten
     if (blocked) {
       // Dein Verteidiger wirft sich in den Schuss: Der Ball springt von ihm weg und liegt frei oder fliegt über die Bande
       const bp = d.wall ? P(sc, D.id) : lerp(P(sc, X.id), GOAL, 0.3); sc.pos[D.id] = bp; s.stats.blocks++;
@@ -1605,12 +1741,14 @@
       return loose(s, rng, ev, 'home', [clamp(Math.round(bp[0] + (rng() - 0.5) * 60), 40, 320), clamp(Math.round(bp[1] + 10 + rng() * 24), 84, 300)]);
     }
     if (won) {
+      if (stopped(s, rng, ev)) { s.stats.stops++; return; }
       const kind = sample({ rush32: 0.5, rush21: 0.4, solo: 0.1 }, rng);
       s.stats.stops++; s.stats.counters++; ev.push({ t: 'counter', side: 'you', x: D.id, kind });
       closeChance(s, null); startChance(s, rng, 'you', kind, D.id, true); return;
     }
     if (it.kind === 'shoot') { const si = shotInfo(s, sc, X.id); setShot(s, rng, 'home', X.id, si.q, 'attack', Object.assign({}, si, { press: sc.press, oneT: oneTimer(sc, X.id), dead: std, wall: d.wall ? sc.piece.os : 0 })); return; }
     const tight = g === 'good' ? 1 : g === 'near' ? 0.5 : 0;      // gestört: Empfänger enger gedeckt, weniger Raumgewinn
+    sc.close = 0.3 + 0.55 * tight;                                        // Unterzahl: so weit rückt deine Box heraus
     if (it.kind === 'pass') { const m = sc.mark[it.to], lat = passInfo(s, sc, X.id, it.to).lat; sc.pos[m] = lerp(P(sc, m), P(sc, it.to), 0.3 + 0.55 * tight); sc.carrier = it.to; sc.last = { type: 'pass', to: it.to, lat: tight >= 1 ? 0 : lat }; }
     else {
       const p = P(sc, X.id), dG = dist(p, GOAL), fwd = Math.min(c.dribStep - 34 * tight, Math.max(0, dG - c.dribStop)), to = fwd > 12 ? lerp(p, GOAL, fwd / dG) : [p[0] + Math.sign(180 - p[0]) * 22, p[1]];
@@ -1654,6 +1792,8 @@
     s.shot = null;
     if (sh.ctx === 'so') { const P_ = s.pen; if (goal) P_[sh.side]++; P_.shots[sh.side]++; P_.results.push({ side: sh.side, goal }); s.phase = 'done'; return; }
     if (goal) { s.score[sh.side]++; s.cur.goal = sh.side; ['you', 'home'].forEach(sd => { if (s.fx[sd].empty) { s.fx[sd].empty = false; ev.push({ t: 'fx', side: sd, id: 'empty', on: false }); } }); }      // nach einem Tor steht der Goalie wieder drin
+    if (goal && s.cur.adv) { ev.push({ t: 'advOff', side: s.cur.adv.side, x: s.cur.adv.by }); s.cur.adv = null; }      // Tor: Die angezeigte Strafe entfällt
+    if (goal && s.pbox) { if (sh.side !== s.pbox.side) { if (sh.side === 'you') s.stats.ppGoals++; else s.stats.ppAgainst++; penaltyEnd(s, ev, 'goal'); } else if (sh.side === 'you') s.stats.shGoals++; }
     // Abpraller: Die Parade hält den Ball nicht fest, ein Angreifer ist zuerst dort und schiesst sofort nach
     const rb = r.result === 'save' ? reboundTo(s, sh.side, r.land) : null;
     if (rb) {
@@ -1722,7 +1862,7 @@
   function act(state, a, rng) {
     const s = copy(state), ev = [];
     let ok = true;
-    if (s.cfg.sec[a.type] && !s.pen && s.phase !== 'end') { s.seq.acts++; tick(s, s.cfg.sec[a.type]); }      // jede Eingabe im Spiel zählt für die Sequenz, die Uhr läuft
+    if (s.cfg.sec[a.type] && !s.pen && s.phase !== 'end') { s.seq.acts++; tick(s, s.cfg.sec[a.type]); if (s.pbox) s.pbox.left -= s.cfg.sec[a.type]; }      // jede Eingabe im Spiel zählt für die Sequenz, die Uhr läuft
     if (a.type === 'tactic') { if (TACTICS[a.value] && s.phase !== 'end') s.tactic.you = a.value; else ok = false; }
     else if (a.type === 'line') { const T = s.teams.you; if (T.bench && (a.value === 0 || a.value === 1) && s.phase !== 'end' && !s.pen) T.want = a.value; else ok = false; }
     else if (a.type === 'card') ok = useCard(s, 'you', a.id, ev);
@@ -1738,5 +1878,5 @@
     return ok ? { state: s, events: ev, ok: true } : { state, events: [], ok: false };
   }
 
-  root.HKMatch = { noShot, layPiece, wallSpots, foulP, piece, foul, out, std1, startChance, pickKind, duelVal, duelWindow, goOn, canDrib, openRun, STYLES, STYLE, favStyle, pickStyle, ruleStyle, styleChance, styleBlock, setStyle, shadows, reboundTo, TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, liveInit, liveTick, liveRun, liveLane, liveShot, spotOf, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
+  root.HKMatch = { penalty, penaltyEnd, ppAttack, layPP, unfair, boxed, byRole, noShot, layPiece, wallSpots, foulP, piece, foul, out, std1, startChance, pickKind, duelVal, duelWindow, goOn, canDrib, openRun, STYLES, STYLE, favStyle, pickStyle, ruleStyle, styleChance, styleBlock, setStyle, shadows, reboundTo, TACTICS, KINDS, CARDS, all, avgEn, rates, attackVal, defenceVal, TRAITS, trait, defChoice, defInfo, contest, zone, grade, shotBar, shotPreview, isFree, oneTimer, liveInit, liveTick, liveRun, liveLane, liveShot, spotOf, dribCourse, courseOf, dribInit, dribTick, dribGrade, dribRun, evalShot, keeperAt, kDist, tired, reach, setShot, inZone, FORM, MARKS, CFG, GOAL, ROLES, ZONES, ZC, zoneOf, newMatch, act, card, shotInfo, passInfo, dribInfo, stanceVal, dribVal, shotVal, passVal, strength, spread, favZone, penOver, atkSide, other, nearest, dist };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -34,11 +34,11 @@ Wirkung der Taktik für einen gedachten mittleren Spieler (150 ms Streuung am Ba
 
 | Karten | Defensiv | Normal | Offensiv |
 |---|---|---|---|
-| 6 schwächer | 26 % | 31 % | 30 % |
-| gleich | 54 % | 53 % | 50 % |
-| 6 stärker | 76 % | 75 % | 73 % |
+| 6 schwächer | 32 % | 30 % | 29 % |
+| gleich | 53 % | 53 % | 52 % |
+| 6 stärker | 76 % | 73 % | 74 % |
 
-Bei 400 Matches schwankt jede Zahl um rund 2.5 Punkte: Die Taktiken liegen nahe beieinander, nur defensiv mit schwächeren Karten fällt ab. Offensiv bringt mehr Tore auf beiden Seiten (bei gleichen Karten 1.50:1.65 statt 1.40:1.49): gut, wenn du ein Tor brauchst. Der gedachte Spieler wählt seit den Standards klüger als in früheren Fassungen (damals passte er nach einer Faustregel), darum liegen alle Zahlen höher und sind mit früheren Tabellen nicht vergleichbar.
+Bei 400 Matches schwankt jede Zahl um rund 2.5 Punkte: Die Taktiken liegen nahe beieinander. Offensiv bringt mehr Tore auf beiden Seiten (bei gleichen Karten 1.59:1.68 statt 1.45:1.54): gut, wenn du ein Tor brauchst. Der gedachte Spieler wählt seit den Standards klüger als in früheren Fassungen (damals passte er nach einer Faustregel), darum liegen alle Zahlen höher und sind mit früheren Tabellen nicht vergleichbar.
 
 **Sequenzen: Der Ball bleibt im Spiel.** Früher bestand ein Match aus rund zwölf einzelnen Chancen. Dazwischen lief ein erzähltes Spiel, das nichts entschied, und nach jeder Chance sprang die Uhr. Jetzt folgt jede Lage aus der vorherigen, und erst wenn das Spiel zur Ruhe kommt, springt die Uhr.
 
@@ -60,7 +60,7 @@ Bei 400 Matches schwankt jede Zahl um rund 2.5 Punkte: Die Taktiken liegen nahe 
 - **Länge:** Ein Match hat im Mittel rund 13.5 Szenen statt 11 und rund 50 Eingaben statt 35 (davon etwa 9 kurze Tipper bei Bully und freiem Ball), dauert aber gleich lang, weil das Zuschauen dazwischen wegfällt: Der Testspieler im Browser brauchte ohne Vorspulen im Mittel 585 Sekunden pro Match, vorher 624 (je zwei Matches, also grob).
 - **Balance (gerechnet mit dem früheren, einfacheren gedachten Spieler):** Er gewinnt mit gleichen Karten 40 % (vorher 43 %), mit 6 Punkten schwächeren 23 % (27 %), mit 6 Punkten stärkeren 67 % (66 %). Ein sehr genauer Spieler (80 ms Streuung, zielt immer auf die beste Stelle) gewinnt jetzt öfter: 84, 94 und 99 % statt 73, 90 und 96 %, weil Können an mehr Stellen zählt. Tore pro Match für den mittleren Spieler: 0.98:1.39 (vorher 0.82:1.13). Wer nie die Linie wechselt, gewinnt mit gleichen Karten nur 29 %.
 - **Tests:** `test/field.test.js` prüft Bully, freien Ball, zweite Welle, Auswurf, Block, Gegenpressing, Ruhe, Zeitsprung und Drittelsende und spielt 80 ganze Matches, in denen jeder Übergang vorkommen muss. `test/match.js` kennt im Browser Bully, freien Ball und Auswurf und macht von jeder Ansage ein Bild.
-- **Noch nicht drin:** 2-Minuten-Strafen (der nächste Schritt); Druckphasen; fliegende Wechsel; beim Bully fällt der Ball in der 3D-Halle nicht sichtbar, nur das Signal zeigt es. Nicht auf einem echten Telefon gemessen: ob die Zeitfenster für Bully und freien Ball zur Reaktionszeit auf dem Gerät passen.
+- **Noch nicht drin:** Druckphasen; fliegende Wechsel; beim Bully fällt der Ball in der 3D-Halle nicht sichtbar, nur das Signal zeigt es. Nicht auf einem echten Telefon gemessen: ob die Zeitfenster für Bully und freien Ball zur Reaktionszeit auf dem Gerät passen.
 
 **Standards: Einschlag und Freischlag.** Nach einem Unterbruch gab es bisher nur das Bully. Jetzt kommen die zwei häufigsten Standards des Unihockeys dazu, mit ihren Regeln: Die Gegner halten drei Meter Abstand (gestrichelter Kreis um den Ball), und der Ball muss gespielt werden. Wer ausführt, darf nicht selbst loslaufen, und ein direkter Schuss darf kein Zugschuss sein.
 
@@ -82,7 +82,28 @@ Bei 400 Matches schwankt jede Zahl um rund 2.5 Punkte: Die Taktiken liegen nahe 
 - **Häufigkeit:** Für den gedachten mittleren Spieler gibt es pro Match gut zwei Standards vor einem Tor: 0.8 eigene (0.6 nach einem Zeitsprung, der Rest nach Fouls und Bällen im Aus) und 1.5 des Gegners (0.6 nach einem Zeitsprung, 0.5 nach Paraden und Blocks ins Aus, 0.3 nach eigenen Fouls). Der Gegner hat mehr, weil er öfter schiesst und dribbelt als dieser Spieler. Dazu kommen 0.6 Einschläge des Gegners hinten nach eigenen Schüssen über das Tor. Wer selbst oft dribbelt, holt mehr Freischläge heraus.
 - **Balance und Länge:** Die Standards ersetzen andere Lagen (den freien Ball, den Positionsangriff nach dem Zeitsprung), sie kommen nicht obendrauf. Derselbe gedachte Spieler gewinnt mit gleichen Karten 53 % (vorher 52 %), mit 6 Punkten schwächeren 31 % (29 %), mit 6 Punkten stärkeren 75 % (70 %); bei 400 bis 500 Matches je Zahl sind Unterschiede bis etwa 3 Punkte Zufall. Der sehr genaue Spieler gewinnt 96 % (97 %). Tore pro Match 1.40:1.49 (1.34:1.43), Eingaben 52 (49). Wer nie die Linie wechselt, gewinnt mit gleichen Karten 34 %.
 - **Tests:** `test/field.test.js` prüft Aufstellung, Mauer und Abstand, die Regeln (kein Dribbling, kein Zugschuss, kein Schuss aus der Ecke), Fouls auf beiden Seiten, den Ball im Aus und die Standards nach dem Zeitsprung, und spielt 120 ganze Matches, in denen jeder Standard vorkommen muss. `test/match.js` prüft im Browser das Raster der Varianten und macht Bilder.
-- **Noch nicht drin:** Ein Foul kostet noch nichts ausser dem Freischlag, es gibt keine 2-Minuten-Strafe (der nächste Schritt). Der Schusswinkel zählt nur in der Ecke, sonst wie bisher über die Lage. Der Schiedsrichter kennt den Vorteil nur im Aufbau.
+- **Noch nicht drin:** Der Schusswinkel zählt nur in der Ecke, sonst wie bisher über die Lage.
+
+**Strafen: Überzahl und Unterzahl.** Ein hartes Foul gibt zwei Minuten. Der Spieler sitzt auf der Strafbank, sein Team spielt zu viert, bis die Zeit um ist oder der Gegner trifft. Auf der Anzeigetafel steht «Überzahl 1:32» oder «Unterzahl 1:32».
+
+| Auslöser | Was passiert |
+|---|---|
+| Dein Zweikampf gegen ein Dribbling ist grob daneben, vor dem Tor | Foul und zwei Minuten. Der Freischlag ist der erste Angriff des Gegners in Überzahl. |
+| Dasselbe im Aufbau oder Umschalten des Gegners | Der Gegner ist durch, der Vorteil läuft: Die Strafe ist nur angezeigt. Sobald du den Ball hast oder das Spiel unterbrochen ist, wird sie ausgesprochen. Trifft der Gegner vorher, entfällt sie. |
+| Der Gegner foult dein Dribbling (es bleibt hängen, siehe «Standards») | Im Konter immer zwei Minuten, sonst in 35 % der Fälle (mal seine Unfairness), sonst nur der Freischlag. |
+| Du lässt den Verteidiger im Dribbling stehen | Er hält dich in 40 % der Fälle (mal Unfairness) von hinten fest: Strafe angezeigt, dein Angriff läuft weiter. |
+| Dir gelingt im Konter ein Pass | Der Verteidiger kommt in 30 % der Fälle (mal Unfairness) zu spät: Strafe angezeigt. |
+
+- **Unfairness:** derselbe Faktor wie beim Foul, aus Fairness und Energie der Karte (0.4 bei Fairness 95, 1 bei 78, 1.6 bei 62, müde bis zur Hälfte mehr). Ein unfairer, müder Verteidiger ist damit ein echtes Risiko, auch beim Gegner.
+- **Überzahl:** Das Team mit fünf Spielern stellt sich vor dem Tor auf: die zwei Verteidiger hinten, die Flügel tief an der Bande, der Center im Slot. Der Gegner verteidigt zu viert in der Box: vier Ecken vor dem Tor, die mit dem Ball zur Seite schieben; wer dem Ball am nächsten steht, rückt heraus. Jeder Angreifer gehört zum nächsten Verteidiger, also ist meist einer frei (in 48 von 60 gestellten Aufstellungen). Nach jedem Pass läuft der ballferne Flügel an den zweiten Pfosten. Du hast vier Aktionen pro Angriff, und deine Felder sind 10 % breiter.
+- **Unterzahl:** Der Gegner hat drei Aktionen pro Angriff und lässt den Ball laufen (er dribbelt nur noch in jedem zehnten Fall). Du verteidigst wie immer mit dem Timing. Gewinnst du den Ball mit «Perfekt», konterst du zu viert.
+- **Befreiung und Dauer:** Hat die Unterzahl den Ball (Parade mit Festhalten, Schuss daneben, Ballgewinn, freier Ball geholt), schlägt sie ihn weit weg: 35 bis 50 Sekunden vergehen. Bleiben danach noch mindestens 25 Sekunden, stellt sich die Überzahl neu auf, sonst ist die Strafe abgesessen und das Spiel kommt zur Ruhe. Das gibt im Mittel zwei Angriffe pro Strafe. Ein Tor in Überzahl beendet die Strafe sofort. Kurz vor Drittelsende dauert sie nur bis zur Sirene.
+- **In Unterzahl fehlt eine Rolle:** Ein Mitspieler übernimmt sie mit. Konter, Auslösung und freier Ball laufen wie sonst, nur zu viert. Die Linie wechselt ein Team erst nach der Strafe. Es gibt nie zwei Strafen gleichzeitig, und ein Team in Unterzahl bekommt keinen Freischlag und keinen Einschlag vor dem Tor.
+- **Häufigkeit und Wirkung:** für den gedachten mittleren Spieler bei gleichen Karten je 0.33 Strafen pro Match für und gegen ihn, also in gut jedem zweiten Match eine. Von den angezeigten Strafen gegen den Gegner entfällt ein Drittel, weil der Konter mit einem Tor endet. Eine Überzahl bringt ihm in 33 % der Fälle ein Tor, dem Gegner in 39 %. Der sehr genaue Spieler bekommt fast keine Strafe, weil er nie grob daneben tippt. Wer oft dribbelt, holt mehr Strafen heraus: Der Testspieler der Engine, der in jedem dritten Zug dribbelt, kommt auf 1.1 pro Match.
+- **Balance und Länge:** Derselbe gedachte Spieler gewinnt mit gleichen Karten 53 % (vorher 53 %), mit 6 Punkten schwächeren 30 % (31 %), mit 6 Punkten stärkeren 73 % (75 %), der sehr genaue 96 % (96 %); bei 400 Matches je Zahl sind Unterschiede bis etwa 3 Punkte Zufall. Eingaben pro Match 54 (52). Wer nie die Linie wechselt, gewinnt mit gleichen Karten 37 %.
+- **Bild:** Stempel «Strafe angezeigt», «2 Minuten», «Überzahl» oder «Unterzahl», «Befreit» und «Wieder komplett». Die Figur auf der Strafbank verschwindet vom Feld und kommt an der Bande zurück. Im Resultat stehen Strafen und Tore in Überzahl.
+- **Tests:** `test/field.test.js` prüft Strafbank und Rückkehr, die Aufstellung fünf gegen vier, das Schieben der Box, Befreiung und Ablauf der Zeit, das Tor in Überzahl, den Konter in Unterzahl, das harte Foul, die angezeigte Strafe (ausgesprochen und entfallen) und dass jede Aufstellung auch zu viert aufgeht; in 120 ganzen Matches muss jeder dieser Fälle vorkommen. `test/match.js` prüft im Browser die Anzeige und die Zahl der Figuren.
+- **Vereinfacht:** Nach einem Tor in Unterzahl verfällt der Rest der Strafe mit dem nächsten Zeitsprung. Es gibt keinen Strafstoss, keine Strafe für beide Teams zugleich und keine 5 Minuten. Nach der Strafe endet die Sequenz immer.
 
 **Linien und Taktikkarten.** Wie in einem Manager-Spiel zählt jetzt der ganze Kader, und wie in Clash Royale nimmst du ein kleines Deck mit ins Match:
 

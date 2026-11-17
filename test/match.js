@@ -49,6 +49,15 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
           return 'wait';
         });
         seen[st] = (seen[st] || 0) + 1;
+        // Strafe: Anzeige auf der Tafel, vier Figuren beim Team in Unterzahl, Bilder von Überzahl, Unterzahl und angezeigter Strafe
+        if (st === 'att' || st === 'bar-def') {
+          const pb = await p.evaluate(() => { const g = window.HKMatchTest.state(), b = g.pbox, l = document.getElementById('penline'), cnt = sd => [...document.querySelectorAll('#pls .pl[data-side="' + sd + '"]')].filter(e => e.style.display !== 'none').length; return { side: b ? b.side : null, adv: !!(g.cur && g.cur.adv), line: l ? l.textContent : '', you: cnt('you'), home: cnt('home'), cards: [g.teams.you.cards.length, g.teams.home.cards.length] }; });
+          if (pb.side) { seen.pp = 1; seen['pp-' + pb.side] = 1; await snap(pb.side === 'you' ? '05-unterzahl' : '05-ueberzahl');
+            if (!/^(Überzahl|Unterzahl) \d:\d\d$/.test(pb.line)) errors.push('Strafe: Anzeige auf der Tafel fehlt: ' + pb.line);
+            if (pb[pb.side] !== 4 || pb[pb.side === 'you' ? 'home' : 'you'] !== 5) errors.push('Strafe: falsche Zahl Figuren auf dem Feld: ' + JSON.stringify(pb)); }
+          else { if (pb.adv) { seen.adv = 1; await snap('05-strafe-angezeigt'); if (pb.line !== 'Strafe angezeigt') errors.push('angezeigte Strafe steht nicht auf der Tafel: ' + pb.line); }
+            if (pb.you !== 5 || pb.home !== 5) errors.push('ohne Strafe stehen nicht fünf gegen fünf Figuren auf dem Feld: ' + JSON.stringify(pb)); }
+        }
         if (!seen.live3 && g % 20 === 0 && await p.evaluate(() => document.getElementById('stage').classList.contains('live3d'))) seen.live3 = 1;
         if (process.env.DEBUG && (g % 400 === 0 || st !== seen._last)) { seen._last = st; console.log(g, st, await p.evaluate(() => [document.getElementById('tag').textContent, document.getElementById('sc-time').textContent, document.getElementById('say').textContent.slice(0, 60), document.getElementById('hint').hidden ? '' : document.getElementById('hint-text').textContent].join(' / '))); }
         if (st === 'end') { if (process.env.NOSKIP) console.log('Dauer ' + Math.round((Date.now() - tStart) / 1000) + ' s, ' + n + ' Eingaben bisher'); await snap('09-resultat', true); res.push(await p.textContent('#res-title') + ' ' + await p.textContent('#res-score') + ' ' + await p.textContent('#reward')); if (!/\+\d/.test(await p.textContent('#reward'))) errors.push('keine Münzen'); break; }
@@ -232,9 +241,10 @@ const OUT = path.join(__dirname, 'shots', 'match'); fs.mkdirSync(OUT, { recursiv
       }
     }
     // Den Auswurf gibt es nur, wenn der Goalie festhält: In der langsam gerechneten 3D-Halle reagiert der Testspieler dafür zu spät
-    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp', 'duel', 'loose'].concat(run.gl ? ['3d'] : ['throw', 'std']).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
+    // Den Auswurf verlangt nur der Lauf von oben: Wo die 3D-Halle in Software rechnet, fängt der Testspieler zu selten einen Schuss
+    const missing = ['att', 'deep', 'drib', 'bar-att', 'bar-def', 'aim', 'react', 'end', 'line', 'card', 'sty', 'opp', 'duel', 'loose'].concat(run.gl ? ['3d'] : run.reduce ? ['throw', 'std'] : ['std']).filter(k => !seen[k]); if (run.gl && !seen['3d']) errors.push('keine 3D-Szene gesehen'); if (run.gl && !seen.live3) errors.push('das Match lief nicht in 3D');
     if (run.reduce && seen.live3) errors.push('bei reduzierter Bewegung lief das Match in 3D'); if ((seen.missTap || 0) > 2 && !seen.tap3) errors.push('Tippen auf eine Figur wählt den Pass nicht: ' + seen.missTap + ' Versuche'); if (missing.length && N >= 2) errors.push('nie gesehen: ' + missing.join(', '));
-    console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
+    console.log(run.width + ' px' + (run.reduce ? ', reduziert' : '') + (run.gl ? ', 3D' : '') + ': ' + res.join(' | ') + ', ' + n + ' Eingaben' + ', Strafen: ' + (seen.pp ? [seen['pp-home'] ? 'Überzahl' : '', seen['pp-you'] ? 'Unterzahl' : ''].filter(Boolean).join(' und ') : 'keine') + (seen.adv ? ' (angezeigt gesehen)' : '') + (errors.length ? '\n  FEHLER: ' + errors.slice(0, 6).join(' | ') : ', keine Fehler'));
     if (errors.length || res.length < N) fail = 1;
     await ctx.close();
   }
